@@ -215,6 +215,8 @@ export const prefabSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(80),
   root: gameObjectSchema,
+  /** Additional objects captured with the prefab; parentId links them to the root or each other. */
+  objects: z.array(gameObjectSchema).default([]),
   params: z.record(z.string(), z.unknown()).default({}),
 });
 

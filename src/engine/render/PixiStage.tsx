@@ -646,21 +646,80 @@ export function EngineViewport() {
   }
 
   function createPrefab(objectId: string | null) {
-    if (!scene || !objectId) return;
-    const source = scene.objects.find((candidate) => candidate.id === objectId);
-    if (!source) return;
-    const root = structuredClone(source);
-    root.id = newObjectId();
-    delete root.parentId;
-    const prefab: Prefab = {
-      id: newPrefabId(),
-      name: `${source.name} prefab`,
-      root,
-      params: {},
+    if (!scene) return;
+    const selected = selection
+      .map((id) => scene.objects.find((candidate) => candidate.id === id))
+      .filter((object): object is GameObject => Boolean(object));
+    const fallback = objectId ? scene.objects.find((candidate) => candidate.id === objectId) : undefined;
+    const seeds = selected.length > 0 ? selected : fallback ? [fallback] : [];
+    if (seeds.length === 0) return;
+
+    const collect = (rootIds: string[]) => {
+      const ids = new Set(rootIds);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const object of scene.objects) {
+          if (!ids.has(object.id) && object.parentId && ids.has(object.parentId)) {
+            ids.add(object.id);
+            changed = true;
+          }
+        }
+      }
+      return [...ids]
+        .map((id) => scene.objects.find((object) => object.id === id))
+        .filter((object): object is GameObject => Boolean(object));
     };
+
+    const sources = collect(seeds.map((seed) => seed.id));
+    const idMap = new Map<string, string>();
+    const clones = sources.map((source) => {
+      const clone = structuredClone(source);
+      clone.id = newObjectId();
+      idMap.set(source.id, clone.id);
+      return clone;
+    });
+    clones.forEach((clone, index) => {
+      const original = sources[index]!;
+      const parent = original.parentId ? idMap.get(original.parentId) : undefined;
+      if (parent) clone.parentId = parent;
+      else delete clone.parentId;
+    });
+
+    let root: GameObject;
+    let objects: GameObject[];
+    let name: string;
+    if (seeds.length === 1) {
+      root = clones[0]!;
+      objects = clones.slice(1);
+      name = `${seeds[0]!.name} prefab`;
+    } else {
+      let sumX = 0;
+      let sumY = 0;
+      for (const seed of seeds) {
+        sumX += seed.transform.x;
+        sumY += seed.transform.y;
+      }
+      root = {
+        id: newObjectId(),
+        name: "Prefab group",
+        layerId: seeds[0]!.layerId,
+        transform: makeTransform(sumX / seeds.length, sumY / seeds.length),
+        behaviors: [],
+        properties: {},
+        tags: ["group"],
+      };
+      objects = clones.map((clone) => ({ ...clone, parentId: root.id }));
+      name = `${seeds.length} object prefab`;
+    }
+
+    const prefab: Prefab = { id: newPrefabId(), name, root, objects, params: {} };
     const result = dispatch("prefab.create", { prefab });
-    if (result.ok) toast.push("Prefab created", prefab.name);
-    else toast.push("Prefab failed", result.error);
+    if (result.ok) {
+      toast.push("Prefab created", `${name} · ${objects.length + 1} objects.`);
+    } else {
+      toast.push("Prefab failed", result.error);
+    }
   }
 
   function contextAction(action: "duplicate" | "delete" | "forward" | "backward" | "group" | "prefab" | "ask") {
@@ -805,8 +864,8 @@ export function EngineViewport() {
             <button role="menuitem" onClick={() => contextAction("group")} disabled={selection.length === 0}>
               <Layers size={12} /> Group selection{selection.length > 1 ? ` (${selection.length})` : ""}
             </button>
-            <button role="menuitem" onClick={() => contextAction("prefab")} disabled={selection.length !== 1 || !menu.objectId}>
-              <Box size={12} /> Create prefab
+            <button role="menuitem" onClick={() => contextAction("prefab")} disabled={selection.length === 0 || !menu.objectId}>
+              <Box size={12} /> Create prefab{selection.length > 1 ? ` (${selection.length})` : ""}
             </button>
             <button role="menuitem" onClick={() => contextAction("ask")} disabled={!menu.objectId}>
               <Sparkles size={12} /> Ask agent about selection

@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Play,
   Rocket,
+  Share2,
   Settings2,
   Star,
   Trash2,
@@ -121,6 +122,16 @@ export function ProjectOverviewPage() {
     }
   }
 
+  async function removeUnavailableProject() {
+    try {
+      await deleteActiveProject();
+      navigate("/");
+      toast.push("Project deleted", "The damaged project was removed from this browser.");
+    } catch (error) {
+      toast.push("Delete failed", error instanceof Error ? error.message : "Try again.");
+    }
+  }
+
   async function removeProject() {
     if (!current) return;
     if (!window.confirm(`Delete “${current.name}” permanently?\n\nThis removes the project and its saved document from this browser. This cannot be undone.`)) return;
@@ -178,7 +189,7 @@ export function ProjectOverviewPage() {
               <p>{storageError ?? "That project is no longer in local storage."}</p>
               <div className="empty-actions">
                 <Button variant="secondary" onClick={() => navigate("/")}>Back to projects</Button>
-                <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => void removeProject()}>
+                <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => void removeUnavailableProject()}>
                   Delete damaged project
                 </Button>
               </div>
@@ -219,8 +230,22 @@ export function ProjectOverviewPage() {
               >
                 Open scene
               </Button>
-              <Button variant="secondary" onClick={() => toast.push("Play", "Manual Play arrives in Slice 4.")}>
+              <Button
+                variant="secondary"
+                disabled
+                title="Manual Play arrives in Slice 4"
+                aria-label="Play (available in Slice 4)"
+              >
                 Play
+              </Button>
+              <Button
+                variant="ghost"
+                disabled
+                icon={<Share2 size={14} />}
+                title="Share links arrive in Slice 8"
+                aria-label="Share (available in Slice 8)"
+              >
+                Share
               </Button>
               <Menu
                 align="end"

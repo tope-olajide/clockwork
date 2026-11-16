@@ -122,3 +122,15 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - **Create prefab:** the canvas context menu creates a prefab rooted at the selected object (single selection) and stores it in the document in one revision.
 - **Bug fixed this pass:** the canvas context menu closed on its own `pointerdown` because the window-level dismiss listener ran before the item click, so no menu action could be used. The listener now ignores pointer-downs inside the menu.
 - **Still open:** >20 MB import rejection is implemented but not exercised; corrupted-document recovery has not been re-run in the same clean pass; the overview `Play`/`Share` state is a toast rather than a disabled control; duplicate-id non-sharing has not been asserted in this pass.
+
+## Slice 1 gap closure + multi-object prefabs
+
+- Date: 2026-11-16
+- `pnpm typecheck` / `pnpm build`: pass.
+- Browser evidence: headless Chrome 1440×900, cold profile, production preview. **13/13 checks pass; no console errors.**
+- **Disabled Play/Share:** the project overview now renders `Play` disabled with “Manual Play arrives in Slice 4” and a new `Share` button disabled with “Share links arrive in Slice 8” (both carry explanatory titles/aria labels).
+- **Duplicate ids:** duplicating Neon Runner produced a new project id and 15 new, unique, disjoint object ids; adding an object to the duplicate left the original at 15 objects while the copy reached 16, proving no shared mutable objects.
+- **>20 MB import:** selecting a 21 MB `.clockwork.json` showed “That file is larger than 20 MB.” and kept `Create project` disabled.
+- **Corrupted recovery:** replacing a stored document with an invalid schema payload produced the recovery panel with `Delete damaged project`. **Bug fixed:** that button called `removeProject()`, which returned early because `current` is null on the recovery screen, so deletion did nothing. It now deletes by active project id and returns to the dashboard (verified: dashboard shows only the remaining project).
+- **Multi-object prefabs:** `prefabSchema` now stores `objects: GameObject[]` alongside `root`. Creating a prefab from a multi-selection builds a `Prefab group` root and clones the selection (plus descendants) as children with `parentId` pointing at the root; all prefab ids are freshly generated and disjoint from scene objects. Verified from the canvas menu (`Create prefab (2)`): one prefab with a root and two children.
+- **Still open:** the settings-panel-specific rename/start-scene/export/import variants were not separately automated (the same underlying actions were verified from the dashboard/overview), redo was not re-run in this pass, and the gate has not yet been consolidated into one single cold-profile run. Prefab instantiation, overrides and detach remain Slice 5.
