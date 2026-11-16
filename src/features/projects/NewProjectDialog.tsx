@@ -1,14 +1,21 @@
 import { FileUp, Layers, LayoutTemplate, PenLine, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Modal, Select } from "../../components/ui";
-import type { TemplateOrigin } from "./mockProjects";
+import type { TemplateId } from "../../engine/model/templates";
 
 export type CreationMode = "blank" | "template" | "brief" | "import";
 
 export interface CreatedProject {
   mode: CreationMode;
   name: string;
-  template: TemplateOrigin;
+  template: TemplateId;
+  file?: File;
+  settings?: {
+    width: number;
+    height: number;
+    pixelArt: boolean;
+    gravity: number;
+  };
 }
 
 const modes: Array<{
@@ -32,11 +39,31 @@ const modes: Array<{
   { key: "import", label: "Import", description: "Open an existing .clockwork.json project.", icon: FileUp },
 ];
 
-const templates: Array<{ key: TemplateOrigin; name: string; description: string }> = [
+const templates: Array<{ key: TemplateId; name: string; description: string }> = [
   { key: "platformer", name: "Platformer", description: "Player, jump, platforms, coins, goal." },
   { key: "topdown", name: "Top-down", description: "Eight-way movement and camera follow." },
   { key: "puzzle", name: "Puzzle", description: "Grid, collectibles, and a win rule." },
 ];
+
+const resolutionOptions = [
+  { value: "1280x720", label: "1280 × 720" },
+  { value: "1920x1080", label: "1920 × 1080" },
+  { value: "custom", label: "Custom…" },
+];
+
+const gravityOptions = [
+  { value: "standard", label: "Standard" },
+  { value: "light", label: "Light" },
+  { value: "heavy", label: "Heavy" },
+  { value: "none", label: "None" },
+];
+
+const gravityValues: Record<string, number> = {
+  standard: 980,
+  light: 500,
+  heavy: 1800,
+  none: 0,
+};
 
 export function NewProjectDialog({
   open,
@@ -49,9 +76,11 @@ export function NewProjectDialog({
 }) {
   const [mode, setMode] = useState<CreationMode>("template");
   const [name, setName] = useState("Untitled project");
-  const [template, setTemplate] = useState<TemplateOrigin>("platformer");
+  const [template, setTemplate] = useState<TemplateId>("platformer");
   const [brief, setBrief] = useState("");
   const [resolution, setResolution] = useState("1280x720");
+  const [customWidth, setCustomWidth] = useState("1280");
+  const [customHeight, setCustomHeight] = useState("720");
   const [pixelArt, setPixelArt] = useState(false);
   const [gravity, setGravity] = useState("standard");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -63,8 +92,13 @@ export function NewProjectDialog({
     if (mode === "import") return Boolean(importFile);
     if (mode === "brief") return false;
     if (!name.trim()) return false;
+    if (mode === "template" || mode === "blank") {
+      const width = resolution === "custom" ? Number(customWidth) : Number(resolution.split("x")[0]);
+      const height = resolution === "custom" ? Number(customHeight) : Number(resolution.split("x")[1]);
+      return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
+    }
     return true;
-  }, [brief, importFile, mode, name]);
+  }, [customHeight, customWidth, importFile, mode, name, resolution]);
 
   function reset() {
     setMode("template");
@@ -72,6 +106,8 @@ export function NewProjectDialog({
     setTemplate("platformer");
     setBrief("");
     setResolution("1280x720");
+    setCustomWidth("1280");
+    setCustomHeight("720");
     setPixelArt(false);
     setGravity("standard");
     setImportFile(null);
@@ -80,12 +116,22 @@ export function NewProjectDialog({
 
   function submit() {
     if (!canCreate) return;
-    const finalTemplate: TemplateOrigin =
-      mode === "template" ? template : mode === "import" ? "blank" : mode === "brief" ? "platformer" : "blank";
+    const width = resolution === "custom" ? Number(customWidth) : Number(resolution.split("x")[0]);
+    const height = resolution === "custom" ? Number(customHeight) : Number(resolution.split("x")[1]);
     onCreate({
       mode,
-      name: importFile ? importFile.name.replace(/\.clockwork\.json$/i, "") : name.trim(),
-      template: finalTemplate,
+      name: importFile ? importFile.name.replace(/\.clockwork\.json$/i, "").replace(/\.json$/i, "") : name.trim(),
+      template: mode === "blank" ? "blank" : template,
+      file: importFile ?? undefined,
+      settings:
+        mode === "import"
+          ? undefined
+          : {
+              width: Math.round(width),
+              height: Math.round(height),
+              pixelArt,
+              gravity: gravityValues[gravity] ?? 980,
+            },
     });
     onOpenChange(false);
     reset();
@@ -97,8 +143,11 @@ export function NewProjectDialog({
       setImportError(null);
       return;
     }
-    if (!file.name.endsWith(".clockwork.json")) {
-      setImportError("That is not a .clockwork.json file. Choose a Clockwork project export.");
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      setImportError("That is not a Clockwork project export. Choose a .clockwork.json file.");
+      setImportFile(null);
+    } else if (file.size > 20 * 1024 * 1024) {
+      setImportError("That file is larger than 20 MB.");
       setImportFile(null);
     } else {
       setImportError(null);
@@ -132,7 +181,9 @@ export function NewProjectDialog({
               className="mode-card"
               aria-pressed={mode === item.key}
               aria-disabled={item.disabled || undefined}
-              onClick={() => setMode(item.key)}
+              onClick={() => {
+                if (!item.disabled) setMode(item.key);
+              }}
             >
               <span className="mode-title">
                 <Icon size={15} />
@@ -219,7 +270,7 @@ export function NewProjectDialog({
           </div>
         )}
 
-        {(mode === "blank" || mode === "template" || mode === "brief") && (
+        {(mode === "blank" || mode === "template") && (
           <details className="disclosure">
             <summary>More settings</summary>
             <div className="disclosure-body">
@@ -228,25 +279,28 @@ export function NewProjectDialog({
                 <Select
                   value={resolution}
                   onValueChange={setResolution}
-                  options={[
-                    { value: "1280x720", label: "1280 × 720" },
-                    { value: "1920x1080", label: "1920 × 1080" },
-                    { value: "custom", label: "Custom…" },
-                  ]}
+                  options={resolutionOptions}
                   ariaLabel="Design resolution"
                 />
               </label>
+              {resolution === "custom" && (
+                <div className="field-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                  <label className="field-row">
+                    <span>Width</span>
+                    <input className="input input-mono" type="number" min={64} value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} aria-label="Custom width" />
+                  </label>
+                  <label className="field-row">
+                    <span>Height</span>
+                    <input className="input input-mono" type="number" min={64} value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} aria-label="Custom height" />
+                  </label>
+                </div>
+              )}
               <label className="field">
                 <span className="field-label">Gravity</span>
                 <Select
                   value={gravity}
                   onValueChange={setGravity}
-                  options={[
-                    { value: "standard", label: "Standard" },
-                    { value: "light", label: "Light" },
-                    { value: "heavy", label: "Heavy" },
-                    { value: "none", label: "None" },
-                  ]}
+                  options={gravityOptions}
                   ariaLabel="Gravity preset"
                 />
               </label>

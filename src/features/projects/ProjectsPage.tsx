@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Boxes,
@@ -18,12 +18,28 @@ import {
 } from "../../components/ui";
 import { TopBar } from "../../shell/TopBar";
 import { CommandPalette, buildStubCommands } from "../../shell/CommandPalette";
-import { MOCK_PROJECTS, TEMPLATE_LABELS, type ProjectSummary } from "./mockProjects";
+import { runCommand } from "../../engine/commands/registry";
+import { createProjectFromTemplate } from "../../engine/model/templates";
+import type { ProjectDocument, TemplateOrigin } from "../../engine/model/schema";
+import {
+  deleteProjectRecord,
+  listProjectRecords,
+  readProjectDocument,
+  saveProjectDocument,
+  StorageError,
+} from "../../engine/persistence/indexeddb";
+import { downloadProject, readProjectFile } from "../../engine/persistence/transfer";
+import { duplicateProjectRecord, ensureDemoProject } from "../../engine/store/engine-store";
+import {
+  TEMPLATE_LABELS,
+  toProjectSummary,
+  type ProjectSummary,
+} from "./project-view";
 import { NewProjectDialog, type CreatedProject } from "./NewProjectDialog";
 
 type Sort = "recent" | "name";
 type StatusFilter = "active" | "archived" | "all";
-type OriginFilter = "all" | "platformer" | "topdown" | "puzzle" | "blank";
+type OriginFilter = "all" | TemplateOrigin;
 
 interface SavedFilters {
   sort: Sort;
@@ -43,10 +59,7 @@ function loadFilters(): SavedFilters {
       status:
         parsed.status === "archived" || parsed.status === "all" ? parsed.status : "active",
       origin:
-        parsed.origin === "platformer" ||
-        parsed.origin === "topdown" ||
-        parsed.origin === "puzzle" ||
-        parsed.origin === "blank"
+        parsed.origin && (parsed.origin === "all" || parsed.origin in TEMPLATE_LABELS)
           ? parsed.origin
           : "all",
     };
@@ -63,21 +76,47 @@ export function ProjectsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
-  const [projects, setProjects] = useState<ProjectSummary[]>(MOCK_PROJECTS);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<SavedFilters>(loadFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const previewState = new URLSearchParams(location.search).get("state");
-  const loading = previewState === "loading";
-  const error = previewState === "error";
   const forcedEmpty = previewState === "empty";
+  const forcedLoading = previewState === "loading";
+  const forcedError = previewState === "error";
+
+  const loadProjects = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (!forcedEmpty) await ensureDemoProject();
+      const records = await listProjectRecords();
+      setProjects(records.map(toProjectSummary));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "The local project index is unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  }, [forcedEmpty]);
 
   useEffect(() => {
     window.localStorage.setItem(FILTER_KEY, JSON.stringify(filters));
   }, [filters]);
+
+  useEffect(() => {
+    if (forcedLoading || forcedError) {
+      setLoading(forcedLoading);
+      if (forcedError) setError("The local project index is unavailable. Retry, or import a project file to keep working.");
+      return;
+    }
+    void loadProjects();
+  }, [forcedError, forcedLoading, loadProjects]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -102,7 +141,7 @@ export function ProjectsPage() {
     return next.sort((a, b) => {
       if (filters.sort === "name") return a.name.localeCompare(b.name);
       if (a.archived !== b.archived) return a.archived ? 1 : -1;
-      return 0;
+      return b.updatedAt.localeCompare(a.updatedAt);
     });
   }, [filters, projects, search]);
 
@@ -110,37 +149,120 @@ export function ProjectsPage() {
   const isEmpty = forcedEmpty || projects.length === 0;
   const isNoResults = !isEmpty && filtered.length === 0;
 
-  function createProject(created: CreatedProject) {
-    const id = `prj_${Date.now().toString(36)}`;
-    const project: ProjectSummary = {
-      id,
-      name: created.name || "Untitled project",
-      template: created.template,
-      sceneCount: 1,
-      editedLabel: "Edited just now",
-      archived: false,
-      cover: created.template === "puzzle" ? "puzzle" : created.template === "blank" ? "blank" : "dusk",
-      lastSceneId: "scn_scene",
-    };
-    setProjects((current) => [project, ...current]);
-    navigate(`/project/${id}/scene/${project.lastSceneId}`);
-    toast.push("Project created", `${project.name} is ready in the editor.`);
+  async function createProject(created: CreatedProject) {
+    setBusy(true);
+    try {
+      let document: ProjectDocument;
+      if (created.mode === "import") {
+        if (!created.file) throw new Error("Choose a project file to import.");
+        const parsed = await readProjectFile(created.file);
+        document = parsed.document;
+        document.updatedAt = new Date().toISOString();
+      } else {
+        document = createProjectFromTemplate(created.template, created.name || "Untitled project");
+        if (created.settings) {
+          document.settings = {
+            ...document.settings,
+            width: created.settings.width,
+            height: created.settings.height,
+            pixelArt: created.settings.pixelArt,
+            gravity: { x: 0, y: created.settings.gravity },
+          };
+        }
+      }
+      await saveProjectDocument(document);
+      navigate(`/project/${document.id}/scene/${document.startSceneId}`);
+      toast.push("Project created", `${document.name} is ready in the editor.`);
+    } catch (createError) {
+      toast.push(
+        created.mode === "import" ? "Import failed" : "Project could not be created",
+        createError instanceof Error ? createError.message : "The project could not be saved.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function openProject(project: ProjectSummary) {
+  async function openProject(project: ProjectSummary) {
     if (project.archived) {
       toast.push("Archived project", "Unarchive it before editing. Opening the read-only overview.");
       navigate(`/project/${project.id}`);
       return;
     }
-    navigate(`/project/${project.id}/scene/${project.lastSceneId}`);
+    try {
+      const document = await readProjectDocument(project.id);
+      if (!document) throw new StorageError("That project is no longer in local storage.");
+      navigate(`/project/${document.id}/scene/${document.startSceneId}`);
+    } catch (openError) {
+      toast.push("Project could not open", openError instanceof Error ? openError.message : "Try again.");
+    }
   }
 
-  function toggleArchive(project: ProjectSummary) {
-    setProjects((current) =>
-      current.map((item) => (item.id === project.id ? { ...item, archived: !item.archived } : item)),
+  async function toggleArchive(project: ProjectSummary) {
+    try {
+      const document = await readProjectDocument(project.id);
+      if (!document) throw new StorageError("That project is no longer in local storage.");
+      const next = runCommand(document, {
+        type: "project.setArchived",
+        args: { archived: !project.archived },
+      }).document;
+      await saveProjectDocument(next);
+      await loadProjects();
+      toast.push(project.archived ? "Project restored" : "Project archived", project.name);
+    } catch (archiveError) {
+      toast.push("Archive failed", archiveError instanceof Error ? archiveError.message : "Try again.");
+    }
+  }
+
+  async function renameProject(project: ProjectSummary) {
+    const name = window.prompt("Rename project", project.name)?.trim();
+    if (!name || name === project.name) return;
+    try {
+      const document = await readProjectDocument(project.id);
+      if (!document) throw new StorageError("That project is no longer in local storage.");
+      const next = runCommand(document, { type: "project.rename", args: { name } }).document;
+      await saveProjectDocument(next);
+      await loadProjects();
+      toast.push("Project renamed", name);
+    } catch (renameError) {
+      toast.push("Rename failed", renameError instanceof Error ? renameError.message : "Try again.");
+    }
+  }
+
+  async function duplicateProject(project: ProjectSummary) {
+    try {
+      const record = await duplicateProjectRecord(project.id);
+      if (!record) throw new StorageError("That project is no longer in local storage.");
+      await loadProjects();
+      toast.push("Project duplicated", `${project.name} copy is ready.`);
+    } catch (duplicateError) {
+      toast.push("Duplicate failed", duplicateError instanceof Error ? duplicateError.message : "Try again.");
+    }
+  }
+
+  async function exportProject(project: ProjectSummary) {
+    try {
+      const document = await readProjectDocument(project.id);
+      if (!document) throw new StorageError("That project is no longer in local storage.");
+      downloadProject(document);
+      toast.push("Project exported", "The .clockwork.json file is downloading.");
+    } catch (exportError) {
+      toast.push("Export failed", exportError instanceof Error ? exportError.message : "Try again.");
+    }
+  }
+
+  async function deleteProject(project: ProjectSummary) {
+    const confirmed = window.confirm(
+      `Delete “${project.name}” permanently?\n\nIts scenes, project settings, and saved revisions in this browser will be removed. This cannot be undone.`,
     );
-    toast.push(project.archived ? "Project unarchived" : "Project archived", project.name);
+    if (!confirmed) return;
+    try {
+      await deleteProjectRecord(project.id);
+      await loadProjects();
+      toast.push("Project deleted", project.name);
+    } catch (deleteError) {
+      toast.push("Delete failed", deleteError instanceof Error ? deleteError.message : "Try again.");
+    }
   }
 
   const commands = buildStubCommands({
@@ -188,7 +310,7 @@ export function ProjectsPage() {
               {activeFilterCount(filters) > 0 && <span className="chip coral">{activeFilterCount(filters)}</span>}
               <ChevronDown size={13} />
             </Button>
-            <Button variant="primary" icon={<Plus size={14} />} onClick={() => setDialogOpen(true)}>
+            <Button variant="primary" icon={<Plus size={14} />} onClick={() => setDialogOpen(true)} disabled={busy}>
               New project
             </Button>
           </div>
@@ -235,6 +357,7 @@ export function ProjectsPage() {
                     { value: "topdown", label: "Top-down" },
                     { value: "puzzle", label: "Puzzle" },
                     { value: "blank", label: "Blank" },
+                    { value: "import", label: "Imported" },
                   ]}
                   ariaLabel="Filter by template"
                 />
@@ -259,9 +382,9 @@ export function ProjectsPage() {
             <div className="empty-state" role="alert">
               <Boxes size={22} />
               <strong>Projects could not load</strong>
-              <p>The local project index is unavailable. Retry, or import a project file to keep working.</p>
+              <p>{error}</p>
               <div className="empty-actions">
-                <Button variant="secondary" onClick={() => navigate("/")}>Retry</Button>
+                <Button variant="secondary" onClick={() => void loadProjects()}>Retry</Button>
                 <Button variant="ghost" onClick={() => setDialogOpen(true)} icon={<FileDown size={14} />}>
                   Import project
                 </Button>
@@ -301,7 +424,7 @@ export function ProjectsPage() {
                 <article className={`project-card${project.archived ? " archived-card" : ""}`} key={project.id}>
                   <button
                     className={`project-cover cover-${project.cover}`}
-                    onClick={() => openProject(project)}
+                    onClick={() => void openProject(project)}
                     aria-label={`Open ${project.name}`}
                   >
                     {project.archived && <span className="chip archived card-archived-chip">Archived</span>}
@@ -318,21 +441,21 @@ export function ProjectsPage() {
                           </button>
                         }
                       >
-                        <MenuItem onSelect={() => openProject(project)}>Open</MenuItem>
-                        <MenuItem onSelect={() => toast.push("Rename", "Rename arrives with the project store in Slice 1.")}>
+                        <MenuItem onSelect={() => void openProject(project)}>Open</MenuItem>
+                        <MenuItem onSelect={() => void renameProject(project)}>
                           Rename
                         </MenuItem>
-                        <MenuItem onSelect={() => toast.push("Duplicate", "Duplicate arrives with the project store in Slice 1.")}>
+                        <MenuItem onSelect={() => void duplicateProject(project)}>
                           Duplicate
                         </MenuItem>
-                        <MenuItem onSelect={() => toast.push("Export", "Export arrives in Slice 8.")}>
+                        <MenuItem onSelect={() => void exportProject(project)}>
                           Export
                         </MenuItem>
                         <MenuSeparator />
-                        <MenuItem onSelect={() => toggleArchive(project)}>
+                        <MenuItem onSelect={() => void toggleArchive(project)}>
                           {project.archived ? "Unarchive" : "Archive"}
                         </MenuItem>
-                        <MenuItem danger onSelect={() => toast.push("Delete", "Delete arrives with the project store in Slice 1.")}>
+                        <MenuItem danger onSelect={() => void deleteProject(project)}>
                           Delete
                         </MenuItem>
                       </Menu>
@@ -340,7 +463,7 @@ export function ProjectsPage() {
                     <div className="project-meta">
                       <span>{project.editedLabel}</span>
                       <span className="dot" />
-                      <span>{project.sceneCount} scenes</span>
+                      <span>{project.sceneCount} {project.sceneCount === 1 ? "scene" : "scenes"}</span>
                       <span className="dot" />
                       <span className="template-chip">{TEMPLATE_LABELS[project.template]}</span>
                     </div>
@@ -367,7 +490,7 @@ export function ProjectsPage() {
         </div>
       </main>
 
-      <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} />
+      <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={(project) => void createProject(project)} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={commands} />
     </div>
   );

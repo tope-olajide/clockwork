@@ -1,18 +1,16 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Play } from "lucide-react";
-import { MOCK_PROJECTS } from "../projects/mockProjects";
 
 export function PlayPlaceholderPage() {
-  const { projectId = "prj_neonrunner" } = useParams();
-  const project = MOCK_PROJECTS.find((item) => item.id === projectId) ?? MOCK_PROJECTS[0]!;
+  const { projectId = "" } = useParams();
 
   return (
     <div className="player-page">
       <header className="player-bar">
-        <Link to={`/project/${project.id}/scene/${project.lastSceneId}`} className="button button-ghost button-sm">
-          <ArrowLeft size={13} /> Back to editor
+        <Link to={`/project/${projectId}`} className="button button-ghost button-sm">
+          <ArrowLeft size={13} /> Back to project
         </Link>
-        <span className="project-meta">{project.name} · Track</span>
+        <span className="project-meta">{projectId}</span>
         <span className="chip violet">Player</span>
       </header>
       <main className="player-stage">
@@ -23,8 +21,8 @@ export function PlayPlaceholderPage() {
             This route is reserved for the shared player and exported builds. It will open without the
             editor, and manual Play will never require a model or Kane.
           </p>
-          <Link className="button button-secondary" to={`/project/${project.id}/scene/${project.lastSceneId}`}>
-            Return to Track
+          <Link className="button button-secondary" to={`/project/${projectId}`}>
+            Return to project
           </Link>
         </div>
       </main>

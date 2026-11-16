@@ -2,17 +2,16 @@
 
 This file records anything that could reduce confidence or score: incomplete features, failing checks, deferred verification, deliberate scope cuts, and environment requirements. Keep it honest and current. Do not hide a failure here to make the product look finished.
 
-**Last updated:** 2026-11-16 (Slice 0)
+**Last updated:** 2026-11-16 (Slice 1 implementation commit, acceptance partially evidenced)
 **Branch:** `feat/game-engine`
 
 ## Current status
 
-- **Slice 0 is implemented as a static shell.** The repository now contains the Vite/React app, design system, projects dashboard, creation dialog, routing, and editor shell. There is no engine document, Pixi canvas, persistence, or agent yet.
-- **Only Slice 0 shell features are complete.** The product features in later slices are not in `features.md`.
-- **No automated tests, UI tests, or Kane CLI runs have been executed yet.** Slice 0 was checked with typecheck/build plus headless Chrome screenshots at 1024, 1366, and 1920. The K1–K4 engine-QA suite is deferred to the separate verification branch by design.
-- **Slice 0 data is intentionally static.** Projects are mock records in memory; creating a project adds an in-memory card and navigates to the static editor. A refresh loses it. The command palette actions are stubs. The canvas is CSS art, not a renderer.
-- **The real Kane CLI AI Play loop has not been run.** Slice 10 defines a deterministic fixture plus two real loops: the seeded `Neon Runner` fail → fix → pass, and an independent negative control (unreachable goal) fail → fix → pass. The engine-QA K1–K4 evidence belongs to the verification branch.
-- **The `reference/` directory is still untracked and must be removed before the implementation branch is finalized.** The app does not import or depend on it.
+- **Slice 1 implemented and committed in working tree state for this step (typecheck/build pass).** Engine model, Zod schemas/migration, command bus + validation + patch history, IndexedDB persistence/autosave, `.clockwork.json` transfer, templates (blank/platformer/top-down/puzzle), and real dashboard/editor/overview/settings surfaces are wired up. Runtime/debug verification confirmed: dashboard + demo seed, `From brief` disabled with Slice 7 reason, creation from Blank and all three templates with expected document shapes, persist/reload for created projects, scene add with +1 revision / undo +1 revert / redo +1 reapply, layer add +1 revision, import-mode creation via valid transfer with identical document state, scene deletion from overview, and corrupted-document recovery UI.
+- **Slice 1 acceptance not fully evidenced end-to-end in one clean pass.** Still to fully demonstrate/log as a single checklist run: every required rename/add/delete scene/layer/object mutation with one revision and one undo per mutation, complete dashboard search + all filters + archived read-only behavior, duplicate/delete/archive actions exercised end-to-end, and UI `export → delete → re-import identical` flow including file download (transfer/import identity was verified; headless download capture and some menu-driven flows were not fully automated in one pass).
+- **Fixes applied during Slice 1:** enabled Immer `enablePatches()` in command runner; made undo/redo apply patches immutably and bump revision via `produce(...)` (fixing undo/redo no-op on frozen state); preserved URL search params on scene-route redirects (keeps `?debug=1`).
+- **Renderer/runtime/agent features not implemented yet.** Editor scene view is a debug/document renderer (not Pixi runtime); Play/AI/agent surfaces remain placeholders for later slices.
+- **No automated tests, UI tests, or Kane CLI runs executed.**
 
 ## Product limitations by design (v1)
 
@@ -39,7 +38,7 @@ This file records anything that could reduce confidence or score: incomplete fea
 - The agent ↔ Kane handshake must produce real NDJSON and evidence: engine QA in the verification branch, and the two real AI Play loops in Slice 10. A fixture pass is not enough.
 - The project must run without a model/key/Kane for the editor and manual Play paths; only AI features may be unavailable.
 - The AI Play demo must show a real failure (`COINS: 2`) and a real same-seed pass (`COINS: 3`), not a scripted success card.
-- The visual target must be checked at 1366×768, not only on a large monitor. Slice 0 screenshots covered 1024, 1366, 1601, and 1920; drawer behavior was exercised with headless Chrome.
+- The visual target must be checked at 1366×768, not only on a large monitor.
 - Any failing `pnpm typecheck`, `pnpm build`, console error, or unchecked acceptance item must be recorded here with the date and slice.
 
 ## Reporting rules

@@ -4,7 +4,7 @@ Only features that are **100% implemented, manually verified, and passing the cu
 
 ## Status
 
-The Slice 0 static shell is implemented and verified at 1024×768, 1366×768, 1440×900, 1601×900, and 1920×1080. No product feature is complete yet: the project data, canvas, and command palette actions are static placeholders, and engine work begins in Slice 1.
+Slice 0 (static shell) committed and verified. Slice 1 (engine model, command bus, persistence, project lifecycle) is implemented in code and passes `pnpm typecheck`/`pnpm build`, with substantial verification (all template creates, persist/reload, Brief disabled, scene add/undo/redo revision semantics, import-mode/transfer identity, corrupted recovery). Because the full Slice 1 acceptance gate was not evidenced end-to-end in one clean run for every required mutation and dashboard flow permutation, no Slice 1 product feature is listed below yet.
 
 <!--
 When a feature is fully complete, add it under the right area using this shape:
