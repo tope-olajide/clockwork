@@ -75,6 +75,8 @@ export function EditorPage() {
   const setActiveLayer = useEngineStore((state) => state.setActiveLayer);
   const setSelection = useEngineStore((state) => state.setSelection);
   const deleteActiveProject = useEngineStore((state) => state.deleteActiveProject);
+  const snapGrid = useEngineStore((state) => state.snapGrid);
+  const setSnapGrid = useEngineStore((state) => state.setSnapGrid);
 
   const current = document?.id === projectId ? document : null;
   const scene =
@@ -497,12 +499,11 @@ export function EditorPage() {
               }
             >
               <MenuLabel>Snap</MenuLabel>
-              <MenuItem shortcut="8 px">Grid 8</MenuItem>
-              <MenuItem shortcut="16 px">Grid 16</MenuItem>
-              <MenuItem shortcut="32 px">Grid 32</MenuItem>
+              <MenuItem onSelect={() => setSnapGrid(8)} shortcut={snapGrid === 8 ? "On" : undefined}>Grid 8</MenuItem>
+              <MenuItem onSelect={() => setSnapGrid(16)} shortcut={snapGrid === 16 ? "On" : undefined}>Grid 16</MenuItem>
+              <MenuItem onSelect={() => setSnapGrid(32)} shortcut={snapGrid === 32 ? "On" : undefined}>Grid 32</MenuItem>
               <MenuSeparator />
-              <MenuItem>Snap to objects</MenuItem>
-              <MenuItem>Snap to guides</MenuItem>
+              <MenuItem onSelect={() => setSnapGrid(0)} shortcut={snapGrid === 0 ? "On" : undefined}>Snap off</MenuItem>
             </Menu>
             <Menu
               trigger={

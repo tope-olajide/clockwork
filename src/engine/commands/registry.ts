@@ -294,8 +294,12 @@ const commands: CommandDefinition[] = [
       const [layer] = ordered.splice(index, 1);
       if (!layer) throw new CommandError("NOT_FOUND", "That layer does not exist.");
       ordered.splice(Math.min(args.toIndex, ordered.length), 0, layer);
+      // Assign the new order in array sequence; sorting by the stale order values
+      // here would put the layer straight back where it started.
+      ordered.forEach((candidate, order) => {
+        candidate.order = order;
+      });
       scene.layers = ordered;
-      reindexLayers(scene);
     },
   ),
   definition(
@@ -451,6 +455,21 @@ const commands: CommandDefinition[] = [
       else if (args.parentId !== undefined) {
         objectOf(scene, args.parentId);
         object.parentId = args.parentId;
+      }
+    },
+  ),
+  definition(
+    "objects.applyTransforms",
+    z.object({
+      sceneId,
+      transforms: z.array(z.object({ objectId, transform: transformPatchSchema })),
+    }),
+    (args) => (args.transforms.length === 1 ? "Transform object" : `Transform ${args.transforms.length} objects`),
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      for (const item of args.transforms) {
+        const object = objectOf(scene, item.objectId);
+        object.transform = { ...object.transform, ...item.transform };
       }
     },
   ),

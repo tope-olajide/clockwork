@@ -58,3 +58,30 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Features completed: none added to `features.md` (Slice 1 gate not fully evidenced as complete in one clean run).
 - New known issues: updated in `docs/known-issues.md` with specific remaining verification gaps and notes.
 - Known limitations: undo history session-scoped; editor scene view is debug/document renderer (Pixi/runtime later slices); asset binary storage beyond schema/transfer shape is minimal in this slice.
+
+## Slice 2 — Viewport, scene graph, selection, transforms
+
+- Date: 2026-11-16
+- Commit: (this commit)
+- `pnpm typecheck`: pass (`tsc -b`, exit 0).
+- `pnpm build`: pass (Vite 7.3.8, 965.96 kB JS / 298.92 kB gzip, 53.53 kB CSS / 13.00 kB gzip; PixiJS 8.23.0 added). Chunk-size warning only.
+- Browser evidence (headless Chrome 1440×900, production preview, fresh profile, CDP-driven): **17/17 checks pass**
+  - Pixi canvas mounts and sizes to the viewport (1052×559 at 1440 window); no console errors during render.
+  - Platformer demo renders layered background, ridges, ground, ledges, player, coins, hazard, checkpoint, relay and UI text with layer order/opacity/parallax.
+  - Rulers render world ticks/labels that map correctly to world coordinates.
+  - `?debug=1` overlay reports FPS, object count, layer count, camera and zoom.
+  - Layers dock lists all 4 layers; hierarchy lists 15 objects; clicking a hierarchy row selects the object and switches the inspector to the Object tab.
+  - Dragging an object on canvas = **one revision, one undo entry**; `⌘Z` restores it (0 undo / 1 redo).
+  - Wheel zoom changes zoom (41% → 59%) without creating history or a revision.
+  - Layer drag-reorder changes the stack (UI/Play/Far/Sky → Play/UI/Far/Sky).
+  - Fit control produces a valid zoom label.
+- Engine fixes found by this verification:
+  - `layer.reorder` assigned orders after sorting by stale values, restoring the original order; now assigns sequential order from the moved array.
+  - Drag/scale/rotate commit read React state for the preview map; pointer-up now commits from the gesture object so fast gestures are not lost.
+  - Pointer capture is guarded for synthetic/pen pointers.
+- Not yet evidenced / not implemented in this slice (see `docs/known-issues.md`): scale/rotate handles and marquee exercised manually only; snapping guide visuals not automated; 2,000-object ≥55 fps not measured (headless software WebGL); dock/panel persistence across reload; hierarchy virtualization above 500 rows; inspector multi-select shared fields; context-menu Group/Create prefab; `Esc` selects parent; sprite textures are placeholders until Slice 3.
+- Viewports checked: 1440×900 headless. 1366×768 not re-checked in this pass.
+- Acceptance: **partially evidenced** (core render/selection/transform/layer-order flows verified; remaining interaction permutations and performance target open).
+- Features completed: none added to `features.md` (Slice 2 gate not fully evidenced).
+- New known issues: recorded in `docs/known-issues.md`.
+- Known limitations: WebGL required for the viewport (falls back to an editable document without it); sprite/tilemap art is placeholder geometry until the asset pipeline (Slice 3).

@@ -44,7 +44,9 @@ interface EngineStore {
   lastSavedAt: string | null;
   history: HistoryEntry[];
   future: HistoryEntry[];
+  snapGrid: 0 | 8 | 16 | 32;
 
+  setSnapGrid: (size: 0 | 8 | 16 | 32) => void;
   loadProject: (projectId: string) => Promise<boolean>;
   createFromTemplate: (template: Exclude<TemplateOrigin, "brief" | "import">, name: string) => Promise<ProjectDocument>;
   importProject: (document: ProjectDocument) => Promise<ProjectDocument>;
@@ -112,6 +114,9 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
   lastSavedAt: null,
   history: [],
   future: [],
+  snapGrid: 8,
+
+  setSnapGrid: (size) => set({ snapGrid: size }),
 
   loadProject: async (projectId) => {
     set({ isLoading: true, storageError: null, activeProjectId: projectId });

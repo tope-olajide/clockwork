@@ -4,9 +4,11 @@ Only features that are **100% implemented, manually verified, and passing the cu
 
 ## Status
 
-Slice 0 (static shell) committed and verified. Slice 1 (engine model, command bus, persistence, project lifecycle) is implemented and committed (`10b839e`), including the undo/redo revision fix (history entries store `prevRevision`; undo restores it, redo restores `prevRevision + 1`). It passes `pnpm typecheck` and `pnpm build`, and core flows are verified (all templates, persist/reload, Brief disabled, add scene/layer with revision + undo/redo, import/transfer identity, corrupted recovery).
+Slice 0 (static shell) committed and verified. Slice 1 (engine model, command bus, persistence, project lifecycle) is implemented and committed (`10b839e`), including the undo/redo revision fix (`748786a`; history entries store `prevRevision`; undo restores it, redo restores `prevRevision + 1`). It passes `pnpm typecheck` and `pnpm build`, and core flows are verified (all templates, persist/reload, Brief disabled, add scene/layer with revision + undo/redo, import/transfer identity, corrupted recovery).
 
-The Slice 1 acceptance gate is still **not fully evidenced** in one clean end-to-end pass (search/filters, archived read-only, duplicate/archive/delete menu flows, export → delete → re-import). Per the file's rule, no Slice 1 product feature is listed below until those checks are logged.
+Slice 2 (PixiJS viewport, scene graph, selection, transforms) is implemented on top: the editor scene view is now a real Pixi stage with camera pan/zoom/fit, rulers, layer order/opacity/parallax, canvas selection, marquee, drag move, scale/rotate gizmos, grid snapping, context menu, hierarchy multi-select/rename/drag-reparent and layer drag-reorder. Headless browser verification passed 17/17 checks, including “one drag = one revision and one undo entry” and “pan/zoom creates no history”. This also fixed two Slice 1 engine bugs: undo/redo revision semantics and `layer.reorder` restoring the original order.
+
+The Slice 1 and Slice 2 acceptance gates are still **not fully evidenced** in one clean end-to-end pass (Slice 1: search/filters, archived read-only, duplicate/archive/delete menu flows, export → delete → re-import; Slice 2: scale/rotate and snapping visuals, 2,000-object fps target, dock persistence, virtualization, inspector multi-select). Per the file's rule, no product feature is listed below until those checks are logged.
 
 <!--
 When a feature is fully complete, add it under the right area using this shape:

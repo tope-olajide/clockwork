@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Box,
   Bot,
@@ -33,6 +33,7 @@ import type {
   Scene,
 } from "../../engine/model/schema";
 import { useEngineStore } from "../../engine/store/engine-store";
+import { EngineViewport } from "../../engine/render/PixiStage";
 
 export type WorkspaceTab = "scene" | "content" | "logic" | "presentation";
 export type PresentationTab = "look" | "animation" | "audio" | "ui";
@@ -109,6 +110,11 @@ export function EngineLeftDock() {
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [layerName, setLayerName] = useState("");
+  const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
+  const [draggingObjectId, setDraggingObjectId] = useState<string | null>(null);
+  const dragRef = useRef<{ layerId: string | null; objectId: string | null }>({ layerId: null, objectId: null });
+  const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const activeLayer = scene?.layers.find((layer) => layer.id === activeLayerId) ?? scene?.layers[0] ?? null;
 
@@ -181,6 +187,42 @@ export function EngineLeftDock() {
     run("layer.update", { sceneId: scene!.id, layerId: activeLayer.id, patch: { name: layerName.trim() } });
   }
 
+  function reorderLayer(draggedId: string, targetDisplayIndex: number) {
+    if (readOnly || !scene) return;
+    const ascending = [...scene.layers].sort((a, b) => a.order - b.order);
+    const from = ascending.findIndex((layer) => layer.id === draggedId);
+    if (from < 0) return;
+    const targetIndex = ascending.length - 1 - targetDisplayIndex;
+    if (targetIndex === from) return;
+    run("layer.reorder", { sceneId: scene.id, layerId: draggedId, toIndex: Math.max(0, targetIndex) });
+  }
+
+  function toggleSelect(id: string, additive: boolean) {
+    if (!additive) {
+      setSelection([id]);
+      return;
+    }
+    const current = useEngineStore.getState().selection;
+    setSelection(current.includes(id) ? current.filter((candidate) => candidate !== id) : [...current, id]);
+  }
+
+  function commitObjectRename(object: GameObject) {
+    const name = editingName.trim();
+    setEditingObjectId(null);
+    if (readOnly || !name || name === object.name) return;
+    run("object.rename", { sceneId: scene!.id, objectId: object.id, name });
+  }
+
+  function reparentObject(objectId: string, target: { layerId?: string; parentId?: string | null }) {
+    if (readOnly || !scene || objectId === target.parentId) return;
+    run("object.reparent", {
+      sceneId: scene.id,
+      objectId,
+      layerId: target.layerId ?? scene.objects.find((object) => object.id === objectId)?.layerId,
+      parentId: target.parentId ?? undefined,
+    });
+  }
+
   return (
     <>
       <section className="dock-section layers-section">
@@ -197,10 +239,30 @@ export function EngineLeftDock() {
             return (
               <div
                 key={layer.id}
-                className={`layer-row${layer.id === activeLayer?.id ? " active" : ""}${!layer.visible ? " dim" : ""}`}
+                className={`layer-row${layer.id === activeLayer?.id ? " active" : ""}${!layer.visible ? " dim" : ""}${draggingLayerId === layer.id ? " dragging" : ""}`}
                 onClick={() => setActiveLayer(layer.id)}
                 role="button"
                 tabIndex={0}
+                draggable={!readOnly}
+                onDragStart={(event) => {
+                  dragRef.current = { layerId: layer.id, objectId: null };
+                  setDraggingLayerId(layer.id);
+                  event.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => {
+                  dragRef.current = { layerId: null, objectId: null };
+                  setDraggingLayerId(null);
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const drag = dragRef.current;
+                  if (drag.layerId) reorderLayer(drag.layerId, layers.findIndex((candidate) => candidate.id === layer.id));
+                  else if (drag.objectId) reparentObject(drag.objectId, { layerId: layer.id });
+                  dragRef.current = { layerId: null, objectId: null };
+                  setDraggingLayerId(null);
+                  setDraggingObjectId(null);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") setActiveLayer(layer.id);
                 }}
@@ -347,20 +409,62 @@ export function EngineLeftDock() {
             return (
               <div
                 key={object.id}
-                className={`object-row${selection.includes(object.id) ? " selected" : ""}`}
+                className={`object-row${selection.includes(object.id) ? " selected" : ""}${draggingObjectId === object.id ? " dragging" : ""}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelection([object.id])}
+                draggable={!readOnly && editingObjectId !== object.id}
+                onDragStart={(event) => {
+                  dragRef.current = { layerId: null, objectId: object.id };
+                  setDraggingObjectId(object.id);
+                  event.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => {
+                  dragRef.current = { layerId: null, objectId: null };
+                  setDraggingObjectId(null);
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const drag = dragRef.current;
+                  if (drag.objectId && drag.objectId !== object.id) {
+                    reparentObject(drag.objectId, { layerId: object.layerId, parentId: object.id });
+                  }
+                  dragRef.current = { layerId: null, objectId: null };
+                  setDraggingObjectId(null);
+                }}
+                onClick={(event) => toggleSelect(object.id, event.shiftKey || event.metaKey || event.ctrlKey)}
+                onDoubleClick={() => {
+                  if (readOnly) return;
+                  setEditingObjectId(object.id);
+                  setEditingName(object.name);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setSelection([object.id]);
+                    toggleSelect(object.id, event.shiftKey);
                   }
                 }}
                 aria-pressed={selection.includes(object.id)}
               >
                 <Icon size={12} className="row-icon" />
-                <span className="object-name">{object.name}</span>
+                {editingObjectId === object.id ? (
+                  <input
+                    className="input object-rename-input"
+                    autoFocus
+                    value={editingName}
+                    aria-label={`Rename ${object.name}`}
+                    onChange={(event) => setEditingName(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    onBlur={() => commitObjectRename(object)}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                      if (event.key === "Enter") event.currentTarget.blur();
+                      if (event.key === "Escape") setEditingObjectId(null);
+                    }}
+                  />
+                ) : (
+                  <span className="object-name">{object.name}</span>
+                )}
                 <span className="row-meta">{layer?.name ?? "No layer"} · {object.visual?.kind ?? "empty"}</span>
                 <span className="row-actions">
                   <TinyButton
@@ -643,109 +747,7 @@ function ObjectInspector({
   );
 }
 
-export function EngineViewport() {
-  const { document, scene } = useActiveScene();
-  const selection = useEngineStore((state) => state.selection);
-  const setSelection = useEngineStore((state) => state.setSelection);
-  const toast = useToast();
-
-  if (!document || !scene) {
-    return <div className="workspace-placeholder"><h2>No scene</h2><p>Open a scene to see it here.</p></div>;
-  }
-
-  const visibleLayers = new Map(scene.layers.filter((layer) => layer.visible).map((layer) => [layer.id, layer]));
-  const objects = scene.objects.filter((object) => visibleLayers.has(object.layerId));
-  const ticks = Array.from({ length: 21 }, (_, index) => index * 5);
-
-  return (
-    <div className="viewport">
-      <div className="viewport-ruler" aria-hidden="true">
-        {ticks.map((tick) => (
-          <span key={tick} style={{ display: "contents" }}>
-            <span className={`ruler-tick${tick % 25 === 0 ? " major" : ""}`} style={{ left: `${tick}%` }} />
-            {tick % 25 === 0 && <span className="ruler-label" style={{ left: `${tick}%` }}>{tick === 0 ? "0" : `${Math.round((scene.size.w * tick) / 100)}`}</span>}
-          </span>
-        ))}
-      </div>
-      <div className="viewport-canvas-wrap">
-        <div className="zoom-cluster" aria-label="Zoom controls">
-          <button className="icon-button" aria-label="Fit scene" title="Fit scene" onClick={() => toast.push("Fit", "Viewport controls arrive with the renderer in Slice 2.")}>⌂</button>
-          <span className="zoom-value">Fit</span>
-          <button className="icon-button" aria-label="Reset zoom" title="Reset zoom" onClick={() => toast.push("Zoom", "Viewport controls arrive with the renderer in Slice 2.")}>1:1</button>
-        </div>
-        <div className="viewport-canvas">
-          <div className="world-frame" style={{ background: scene.background.color }}>
-            {objects.map((object) => {
-              const layer = visibleLayers.get(object.layerId);
-              const dims =
-                object.body
-                  ? { w: object.body.width, h: object.body.height }
-                  : object.visual?.kind === "rect"
-                    ? { w: object.visual.width, h: object.visual.height }
-                    : object.visual?.kind === "sprite"
-                      ? { w: object.visual.width ?? 32, h: object.visual.height ?? 32 }
-                      : { w: 24, h: 24 };
-              const selected = selection.includes(object.id);
-              if (object.visual?.kind === "text") {
-                return (
-                  <button
-                    key={object.id}
-                    className={`world-object world-object-text${selected ? " selected" : ""}`}
-                    style={{
-                      left: `${(object.transform.x / scene.size.w) * 100}%`,
-                      top: `${(object.transform.y / scene.size.h) * 100}%`,
-                      width: `${(dims.w / scene.size.w) * 100}%`,
-                      color: object.visual.style.color,
-                      fontSize: `${Math.max(8, object.visual.style.size * 0.45)}px`,
-                      opacity: layer?.opacity ?? 1,
-                      textAlign: object.visual.style.align,
-                    }}
-                    onClick={() => setSelection([object.id])}
-                  >
-                    {object.visual.text}
-                  </button>
-                );
-              }
-              const color =
-                object.visual?.kind === "rect"
-                  ? object.visual.color
-                  : object.visual?.kind === "sprite"
-                    ? object.visual.tint ?? "#a9b4ff"
-                    : "#8a94ad";
-              return (
-                <button
-                  key={object.id}
-                  className={`world-object${selected ? " selected" : ""}`}
-                  title={`${object.name} · ${Math.round(object.transform.x)}, ${Math.round(object.transform.y)}`}
-                  aria-label={`Select ${object.name}`}
-                  style={{
-                    left: `${(object.transform.x / scene.size.w) * 100}%`,
-                    top: `${(object.transform.y / scene.size.h) * 100}%`,
-                    width: `${(dims.w / scene.size.w) * 100}%`,
-                    height: `${(dims.h / scene.size.h) * 100}%`,
-                    background: color,
-                    borderColor: object.visual?.kind === "rect" ? object.visual.stroke ?? color : color,
-                    transform: `translate(-50%, -50%) rotate(${object.transform.rotation}deg) scale(${object.transform.scaleX}, ${object.transform.scaleY})`,
-                    opacity: layer?.opacity ?? 1,
-                  }}
-                  onClick={() => setSelection([object.id])}
-                />
-              );
-            })}
-            {objects.length === 0 && (
-              <div className="world-empty">This scene is empty. Add an object from the hierarchy dock.</div>
-            )}
-            <div className="world-label">{scene.name.toUpperCase()} · {scene.size.w} × {scene.size.h}</div>
-          </div>
-        </div>
-      </div>
-      <div className="viewport-hint">
-        <span>{document.archivedAt ? "Archived project · read-only" : "Click an object to select it · debug renderer"}</span>
-        <span className="right">{scene.size.w} × {scene.size.h}</span>
-      </div>
-    </div>
-  );
-}
+// The scene viewport lives in engine/render/PixiStage (Slice 2).
 
 export function EngineWorkspace({
   tab,
