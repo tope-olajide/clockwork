@@ -8,7 +8,9 @@ Slice 0 (static shell) committed and verified. Slice 1 (engine model, command bu
 
 Slice 2 (PixiJS viewport, scene graph, selection, transforms) is implemented on top: the editor scene view is now a real Pixi stage with camera pan/zoom/fit, rulers, layer order/opacity/parallax, canvas selection, marquee, drag move, scale/rotate gizmos, grid snapping, context menu, hierarchy multi-select/rename/drag-reparent and layer drag-reorder. Headless browser verification passed 17/17 checks, including “one drag = one revision and one undo entry” and “pan/zoom creates no history”. This also fixed two Slice 1 engine bugs: undo/redo revision semantics and `layer.reorder` restoring the original order.
 
-The Slice 1 and Slice 2 acceptance gates are still **not fully evidenced** in one clean end-to-end pass (Slice 1: search/filters, archived read-only, duplicate/archive/delete menu flows, export → delete → re-import; Slice 2: scale/rotate and snapping visuals, 2,000-object fps target, dock persistence, virtualization, inspector multi-select). Per the file's rule, no product feature is listed below until those checks are logged.
+Verified in a 32/32-check headless browser pass: Slice 1 search, all filters, archived read-only, duplicate/delete, and export → delete → re-import (documents identical); Slice 2 scale/rotate gizmos, 8 px snapping, dock/panel persistence across reload, and hierarchy virtualization above 500 rows. The gizmo-handle hit-test bug on short objects was fixed in that pass.
+
+The Slice 1 and Slice 2 gates are still **not fully evidenced** in one clean end-to-end pass (Slice 1: UI rename/start-scene, add/delete scene and layer/object with per-mutation assertions, malformed-import rejection, save-state transition, corrupted recovery in the same run; Slice 2: marquee automation, guide visuals, cursor-anchored zoom proof, 2,000-object fps target, inspector multi-select). Per the file's rule, no product feature is listed below until those checks are logged.
 
 <!--
 When a feature is fully complete, add it under the right area using this shape:

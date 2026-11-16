@@ -369,11 +369,20 @@ export function EngineViewport() {
       if (only) {
         const rect = screenRectOf(only);
         if (rect) {
+          // Edge handles overlap the middle of short objects; a drag that starts
+          // inside the object must move it, not resize it from a handle.
+          const insideObject =
+            local.x > rect.x + 2 &&
+            local.x < rect.x + rect.w - 2 &&
+            local.y > rect.y + 2 &&
+            local.y < rect.y + rect.h - 2;
           const points = handlePoints(rect);
-          for (const [name, point] of Object.entries(points) as Array<[HandleName, { x: number; y: number }]>) {
-            if (Math.abs(point.x - local.x) <= HANDLE_SIZE && Math.abs(point.y - local.y) <= HANDLE_SIZE) {
-              beginScale(name, only.id, only);
-              return;
+          if (!insideObject) {
+            for (const [name, point] of Object.entries(points) as Array<[HandleName, { x: number; y: number }]>) {
+              if (Math.abs(point.x - local.x) <= HANDLE_SIZE && Math.abs(point.y - local.y) <= HANDLE_SIZE) {
+                beginScale(name, only.id, only);
+                return;
+              }
             }
           }
           const rotatePoint = { x: rect.x + rect.w / 2, y: rect.y - ROTATE_OFFSET };

@@ -115,12 +115,24 @@ export function EngineLeftDock() {
   const dragRef = useRef<{ layerId: string | null; objectId: string | null }>({ layerId: null, objectId: null });
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const hierarchyListRef = useRef<HTMLDivElement | null>(null);
+  const [hierarchyScroll, setHierarchyScroll] = useState(0);
+  const [hierarchyHeight, setHierarchyHeight] = useState(320);
 
   const activeLayer = scene?.layers.find((layer) => layer.id === activeLayerId) ?? scene?.layers[0] ?? null;
 
   useEffect(() => {
     setLayerName(activeLayer?.name ?? "");
   }, [activeLayer?.id, activeLayer?.name]);
+
+  useEffect(() => {
+    const element = hierarchyListRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setHierarchyHeight(element.clientHeight));
+    observer.observe(element);
+    setHierarchyHeight(element.clientHeight);
+    return () => observer.disconnect();
+  }, [scene?.id]);
 
   function run(type: string, args: unknown) {
     const result = dispatch(type, args);
@@ -140,6 +152,18 @@ export function EngineLeftDock() {
     `${object.name} ${object.tags.join(" ")} ${object.id}`.toLowerCase().includes(search.toLowerCase()),
   );
   const selectedOutside = selection[0] && !filtered.some((object) => object.id === selection[0]);
+
+  const HIERARCHY_ROW_HEIGHT = 28;
+  const VIRTUALIZE_ABOVE = 500;
+  const hierarchyRows = [...filtered].reverse();
+  const virtualized = hierarchyRows.length > VIRTUALIZE_ABOVE;
+  const visibleStart = virtualized
+    ? Math.max(0, Math.floor(hierarchyScroll / HIERARCHY_ROW_HEIGHT) - 6)
+    : 0;
+  const visibleEnd = virtualized
+    ? Math.min(hierarchyRows.length, visibleStart + Math.ceil(Math.max(hierarchyHeight, 160) / HIERARCHY_ROW_HEIGHT) + 12)
+    : hierarchyRows.length;
+  const visibleRows = hierarchyRows.slice(visibleStart, visibleEnd);
 
   function addLayer() {
     if (readOnly) return;
@@ -402,8 +426,15 @@ export function EngineLeftDock() {
           {search ? `${filtered.length} of ${scene.objects.length}` : `${scene.layers.length} layers · ${scene.objects.length} objects`}
           {selectedOutside && <span> · 1 selected outside filter</span>}
         </div>
-        <div className="dock-list">
-          {[...filtered].reverse().map((object) => {
+        <div
+          className={`dock-list${virtualized ? " virtualized" : ""}`}
+          ref={hierarchyListRef}
+          onScroll={(event) => {
+            if (virtualized) setHierarchyScroll(event.currentTarget.scrollTop);
+          }}
+        >
+          {virtualized && visibleStart > 0 && <div style={{ height: visibleStart * HIERARCHY_ROW_HEIGHT }} aria-hidden="true" />}
+          {visibleRows.map((object) => {
             const Icon = objectIcon(object);
             const layer = scene.layers.find((candidate) => candidate.id === object.layerId);
             return (
@@ -477,6 +508,9 @@ export function EngineLeftDock() {
               </div>
             );
           })}
+          {virtualized && visibleEnd < hierarchyRows.length && (
+            <div style={{ height: (hierarchyRows.length - visibleEnd) * HIERARCHY_ROW_HEIGHT }} aria-hidden="true" />
+          )}
           {filtered.length === 0 && (
             <div className="panel-helper" style={{ padding: "8px 10px" }}>
               {scene.objects.length === 0 ? "No objects yet. Use + to add one." : `No objects match “${search}”.`}

@@ -49,6 +49,29 @@ const WORKSPACE_TABS: Array<{ key: WorkspaceTab; label: string }> = [
 
 const PRESENTATION_TABS: PresentationTab[] = ["look", "animation", "audio", "ui"];
 
+const EDITOR_UI_KEY = "clockwork:editor-ui";
+
+interface EditorUiPrefs {
+  inspectorOpen: boolean;
+  tool: "select" | "hand";
+  inspectorTab: InspectorTab;
+}
+
+function loadEditorUi(): EditorUiPrefs {
+  try {
+    const raw = window.localStorage.getItem(EDITOR_UI_KEY);
+    if (!raw) throw new Error("no prefs");
+    const parsed = JSON.parse(raw) as Partial<EditorUiPrefs>;
+    return {
+      inspectorOpen: Boolean(parsed.inspectorOpen),
+      tool: parsed.tool === "hand" ? "hand" : "select",
+      inspectorTab: parsed.inspectorTab === "object" ? "object" : "scene",
+    };
+  } catch {
+    return { inspectorOpen: false, tool: "select", inspectorTab: "scene" };
+  }
+}
+
 export function EditorPage() {
   const { projectId = "", sceneId = "" } = useParams();
   const navigate = useNavigate();
@@ -96,12 +119,20 @@ export function EditorPage() {
     : "look";
   const debug = searchParams.get("debug") === "1";
 
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("scene");
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [prefs] = useState(loadEditorUi);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>(prefs.inspectorTab);
+  const [inspectorOpen, setInspectorOpen] = useState(prefs.inspectorOpen);
   const [hierarchyDrawer, setHierarchyDrawer] = useState(false);
   const [inspectorDrawer, setInspectorDrawer] = useState(false);
-  const [tool, setTool] = useState<"select" | "hand">("select");
+  const [tool, setTool] = useState<"select" | "hand">(prefs.tool);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      EDITOR_UI_KEY,
+      JSON.stringify({ inspectorOpen, tool, inspectorTab } satisfies EditorUiPrefs),
+    );
+  }, [inspectorOpen, tool, inspectorTab]);
 
   useEffect(() => {
     if (activeProjectId !== projectId) void loadProject(projectId);

@@ -3006,3 +3006,14 @@ a {
   padding: 0 4px;
   font-size: 11px;
 }
+
+/* Hierarchy virtualization keeps rows on a fixed pitch above 500 entries. */
+.dock-list.virtualized .object-row {
+  height: 28px;
+  box-sizing: border-box;
+}
+
+.dock-list.virtualized {
+  overflow-y: auto;
+  contain: content;
+}

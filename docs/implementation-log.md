@@ -85,3 +85,23 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Features completed: none added to `features.md` (Slice 2 gate not fully evidenced).
 - New known issues: recorded in `docs/known-issues.md`.
 - Known limitations: WebGL required for the viewport (falls back to an editable document without it); sprite/tilemap art is placeholder geometry until the asset pipeline (Slice 3).
+
+## Acceptance verification — Slice 1 dashboard flows + Slice 2 transforms/persistence
+
+- Date: 2026-11-16
+- `pnpm typecheck`: pass (`tsc -b`, exit 0).
+- `pnpm build`: pass (Vite 7.3.8, production bundle; chunk-size warning only).
+- Browser evidence: headless Chrome 1440×900, production preview on a cold profile, CDP-driven, JavaScript dialogs auto-accepted. **32/32 checks pass.**
+- **Slice 1 — creation/search/filters/archive:** created Platformer, Top-down and Puzzle projects through `New project`; the dashboard listed all four projects including the demo. Search narrowed to one card, the count badge followed the filter, and a non-matching query showed the no-results state.
+- **Slice 1 — filters:** archiving Beta through the card menu made it disappear from Active, appear alone under Archived with an Archived chip, and remain present under All. Template=Platformer kept only platformers; Name sort ordered the cards alphabetically.
+- **Slice 1 — archived read-only:** opening Beta showed the archived read-only overview, `Open scene` kept the read-only banner, and `+ Add` was disabled in the editor. `Restore project` worked.
+- **Slice 1 — duplicate/delete:** Duplicate created `Gamma copy` with the expected extra card; Delete (confirmation auto-accepted) removed it.
+- **Slice 1 — export → delete → re-import:** Export downloaded `alpha.clockwork.json` with `format: "clockwork-project"`, `version: 1`; deleting Alpha removed the card; re-importing the downloaded file through `New project → Import` recreated the project. Deep comparison of the exported document against the stored re-imported document (ignoring `updatedAt`) was **identical**, including ids, revision, scenes, layers, objects and variables.
+- **Slice 2 — snapping:** dragging Ledge A by 13 screen px committed `x=648` (a multiple of 8 with the default Snap 8), with exactly one undo entry.
+- **Slice 2 — scale/rotate:** dragging the south-east handle changed scale to 1.362; dragging the rotation ring changed rotation to 65.35°.
+- **Slice 2 — dock/panel persistence:** closing the inspector with Escape changed no revision (`Saved · r3` before and after). After reload, the Hand tool, the `?tab=logic` workspace and the closed inspector were all restored from `localStorage`/URL.
+- **Slice 2 — hierarchy virtualization:** a synthetic 600-object scene rendered only 20 `.object-row` elements inside a `.dock-list.virtualized` container; after scrolling 4000 px it still rendered 20 rows while reporting 600 objects.
+- **Bug fixed this pass:** gizmo handles are no longer hit-tested when the pointer is inside the selected object. On short objects the north/south handles overlapped the centre, so a centre drag resized instead of moved (observed as scale 0.108 and a 14 px move instead of 31.6 px).
+- **Console:** no console errors during the whole run.
+- **Still open for a full gate:** Slice 1 still lacks automated evidence for project rename/start-scene change, add/delete scene and layer/object through the UI with per-mutation revision+undo assertions, malformed-import rejection, the dirty→saving→saved transition, and corrupted-document recovery in the same clean pass. Slice 2 still lacks automated evidence for marquee selection, guide visuals, cursor-anchored zoom, the 2,000-object fps target (not measured; headless software WebGL), and the 1366×768 inspector auto-open check.
+- Acceptance: search/filters/archive/export-import (Slice 1) and scale/rotate/snapping/reload persistence/virtualization (Slice 2) are now verified. Broader gates remain open; no feature was added to `features.md`.
