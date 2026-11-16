@@ -25,7 +25,7 @@ import {
   Tooltip,
   useToast,
 } from "../../components/ui";
-import { makeBehavior, makeBody, makeLayer, makeObject } from "../../engine/model/factory";
+import { makeBehavior, makeBody, makeLayer, makeObject, makeTransform, newObjectId } from "../../engine/model/factory";
 import type {
   BehaviorType,
   GameObject,
@@ -531,10 +531,12 @@ export function EngineInspector({
 }) {
   const { document, scene } = useActiveScene();
   const selection = useEngineStore((state) => state.selection);
+  const setSelection = useEngineStore((state) => state.setSelection);
   const dispatch = useEngineStore((state) => state.dispatch);
   const toast = useToast();
   const readOnly = Boolean(document?.archivedAt);
   const selected = scene?.objects.find((object) => object.id === selection[0]) ?? null;
+  const selectedObjects = scene?.objects.filter((object) => selection.includes(object.id)) ?? [];
 
   if (!document || !scene) {
     return <div className="panel-helper" style={{ padding: 14 }}>No scene is open.</div>;
@@ -562,7 +564,45 @@ export function EngineInspector({
         </div>
       </div>
       <div className="inspector-scroll">
-        {tab === "scene" || !selected ? (
+        {selectedObjects.length > 1 ? (
+          <MultiInspector
+            key={`${selection.join(",")}-${document.revision}`}
+            objects={selectedObjects}
+            readOnly={readOnly}
+            onApply={(patch) =>
+              run("objects.applyTransforms", {
+                sceneId: scene.id,
+                transforms: selectedObjects.map((object) => ({ objectId: object.id, transform: patch })),
+              })
+            }
+            onGroup={() => {
+              let sumX = 0;
+              let sumY = 0;
+              selectedObjects.forEach((object) => {
+                sumX += object.transform.x;
+                sumY += object.transform.y;
+              });
+              const group = {
+                id: newObjectId(),
+                name: "Group",
+                layerId: selectedObjects[0]!.layerId,
+                transform: makeTransform(sumX / selectedObjects.length, sumY / selectedObjects.length),
+                behaviors: [],
+                properties: {},
+                tags: ["group"],
+              };
+              if (
+                run("objects.group", {
+                  sceneId: scene.id,
+                  group,
+                  objectIds: selectedObjects.map((object) => object.id),
+                })
+              ) {
+                setSelection([group.id]);
+              }
+            }}
+          />
+        ) : tab === "scene" || !selected ? (
           <SceneInspector scene={scene} readOnly={readOnly} onSave={(patch) => run("scene.update", { sceneId: scene.id, patch })} />
         ) : (
           <ObjectInspector
@@ -577,6 +617,86 @@ export function EngineInspector({
         )}
       </div>
     </div>
+  );
+}
+
+function commonNumberText(values: number[]): string {
+  if (values.length === 0) return "";
+  const first = values[0]!;
+  return values.every((value) => Math.abs(value - first) < 0.0001) ? String(first) : "";
+}
+
+function MultiInspector({
+  objects,
+  readOnly,
+  onApply,
+  onGroup,
+}: {
+  objects: GameObject[];
+  readOnly: boolean;
+  onApply: (patch: { x?: number; y?: number; rotation?: number; scaleX?: number; scaleY?: number }) => boolean;
+  onGroup: () => void;
+}) {
+  const [x, setX] = useState(() => commonNumberText(objects.map((object) => object.transform.x)));
+  const [y, setY] = useState(() => commonNumberText(objects.map((object) => object.transform.y)));
+  const [rotation, setRotation] = useState(() => commonNumberText(objects.map((object) => object.transform.rotation)));
+  const [scaleX, setScaleX] = useState(() => commonNumberText(objects.map((object) => object.transform.scaleX)));
+  const [scaleY, setScaleY] = useState(() => commonNumberText(objects.map((object) => object.transform.scaleY)));
+  const layers = [...new Set(objects.map((object) => object.layerId))];
+
+  function apply() {
+    if (readOnly) return;
+    const patch: { x?: number; y?: number; rotation?: number; scaleX?: number; scaleY?: number } = {};
+    const parse = (value: string) => (value.trim() === "" ? undefined : Number(value));
+    const nextX = parse(x);
+    const nextY = parse(y);
+    const nextRotation = parse(rotation);
+    const nextScaleX = parse(scaleX);
+    const nextScaleY = parse(scaleY);
+    if (nextX !== undefined && Number.isFinite(nextX)) patch.x = nextX;
+    if (nextY !== undefined && Number.isFinite(nextY)) patch.y = nextY;
+    if (nextRotation !== undefined && Number.isFinite(nextRotation)) patch.rotation = nextRotation;
+    if (nextScaleX !== undefined && Number.isFinite(nextScaleX) && nextScaleX !== 0) patch.scaleX = nextScaleX;
+    if (nextScaleY !== undefined && Number.isFinite(nextScaleY) && nextScaleY !== 0) patch.scaleY = nextScaleY;
+    if (Object.keys(patch).length === 0) return;
+    onApply(patch);
+  }
+
+  return (
+    <>
+      <section className="inspector-section">
+          <div className="inspector-section-title">Shared transform</div>
+          <div className="field-grid">
+            <label className="field-row"><span>X</span><NumberInput value={x} placeholder="mixed" onChange={(event) => setX(event.target.value)} aria-label="Selection X" disabled={readOnly} /></label>
+            <label className="field-row"><span>Y</span><NumberInput value={y} placeholder="mixed" onChange={(event) => setY(event.target.value)} aria-label="Selection Y" disabled={readOnly} /></label>
+            <label className="field-row"><span>Rotation</span><NumberInput value={rotation} placeholder="mixed" onChange={(event) => setRotation(event.target.value)} aria-label="Selection rotation" disabled={readOnly} /></label>
+            <label className="field-row"><span>Scale X</span><NumberInput value={scaleX} placeholder="mixed" onChange={(event) => setScaleX(event.target.value)} aria-label="Selection scale X" disabled={readOnly} /></label>
+            <label className="field-row"><span>Scale Y</span><NumberInput value={scaleY} placeholder="mixed" onChange={(event) => setScaleY(event.target.value)} aria-label="Selection scale Y" disabled={readOnly} /></label>
+          </div>
+          <p className="panel-helper">Blank fields keep each object&apos;s own value. Applying is one revision and one undo entry.</p>
+          <Button variant="primary" className="inspector-save" onClick={apply} disabled={readOnly}>
+            Apply to {objects.length} objects
+          </Button>
+          <div className="layer-editor-actions" style={{ marginTop: 8 }}>
+            <Button variant="secondary" size="sm" onClick={onGroup} disabled={readOnly}>
+              Group selection
+            </Button>
+          </div>
+        </section>
+      <section className="inspector-section">
+        <div className="inspector-section-title">Selection</div>
+        <div className="details-list">
+          <div className="detail-row"><span>Objects</span><span className="value">{objects.length}</span></div>
+          <div className="detail-row"><span>Layers</span><span className="value">{layers.length}</span></div>
+        </div>
+        <div className="details-list" style={{ marginTop: 8 }}>
+          {objects.slice(0, 8).map((object) => (
+            <div className="detail-row" key={object.id}><span>{object.name}</span><span className="value input-mono">{object.visual?.kind ?? "empty"}</span></div>
+          ))}
+          {objects.length > 8 && <div className="detail-row"><span>…</span><span className="value">{objects.length - 8} more</span></div>}
+        </div>
+      </section>
+    </>
   );
 }
 

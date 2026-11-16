@@ -12,6 +12,7 @@ import {
   bodySchema,
   gameObjectSchema,
   layerSchema,
+  prefabSchema,
   projectSettingsSchema,
   sceneSchema,
   transformSchema,
@@ -471,6 +472,27 @@ const commands: CommandDefinition[] = [
         const object = objectOf(scene, item.objectId);
         object.transform = { ...object.transform, ...item.transform };
       }
+    },
+  ),
+  definition(
+    "objects.group",
+    z.object({ sceneId, group: gameObjectSchema, objectIds: z.array(objectId).min(1) }),
+    (args) => (args.objectIds.length === 1 ? "Group object" : `Group ${args.objectIds.length} objects`),
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      layerOf(scene, args.group.layerId);
+      scene.objects.push(args.group);
+      for (const id of args.objectIds) {
+        objectOf(scene, id).parentId = args.group.id;
+      }
+    },
+  ),
+  definition(
+    "prefab.create",
+    z.object({ prefab: prefabSchema }),
+    () => "Create prefab",
+    (document, args) => {
+      document.prefabs.push(args.prefab);
     },
   ),
   definition(

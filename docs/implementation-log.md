@@ -105,3 +105,20 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - **Console:** no console errors during the whole run.
 - **Still open for a full gate:** Slice 1 still lacks automated evidence for project rename/start-scene change, add/delete scene and layer/object through the UI with per-mutation revision+undo assertions, malformed-import rejection, the dirty→saving→saved transition, and corrupted-document recovery in the same clean pass. Slice 2 still lacks automated evidence for marquee selection, guide visuals, cursor-anchored zoom, the 2,000-object fps target (not measured; headless software WebGL), and the 1366×768 inspector auto-open check.
 - Acceptance: search/filters/archive/export-import (Slice 1) and scale/rotate/snapping/reload persistence/virtualization (Slice 2) are now verified. Broader gates remain open; no feature was added to `features.md`.
+
+## Slice 1 gate completion + multi-select/Group/prefab
+
+- Date: 2026-11-16
+- `pnpm typecheck` / `pnpm build`: pass.
+- Browser evidence: headless Chrome 1440×900, cold profile, production preview, CDP-driven, dialogs handled. **Slice 1 gate: 26/26; extras: 10/10.**
+- **Save state:** the save pill was observed as `Unsaved · r1 → Saving… · r1 → Saved · r1` via a MutationObserver during an add-object command.
+- **Per-mutation revision/undo:** add object, add layer, add scene, rename object (double-click), delete object and delete layer each produced exactly one revision and one undo entry, and undo restored the prior revision, history and object/layer/scene counts. Scene delete from the overview produced exactly one revision and left an undo entry.
+- **Rename:** dashboard `Rename` (prompt) updated the card to `Gate Renamed` and survived reload.
+- **Start scene:** setting the second scene as start updated the overview stat and row marker, survived reload, and deleting that scene fell the start scene back to `Dusk Run`.
+- **Malformed import:** importing `{format:"not-clockwork",version:99}` showed `Import failed — This is not a Clockwork project file.` and created no project card.
+- **No regressions / console:** no console errors across both runs.
+- **Multi-select inspector:** selecting Player + Relay shows the shared-transform panel with mixed-value fields; setting X=500 and applying moved both objects in exactly one revision and one undo entry, and undo restored both.
+- **Group:** Group selection works from the inspector and from the canvas context menu. It creates a group parent in one revision with the selected objects as children; undo removes it. The canvas items read `Group selection (2)` for multi-select.
+- **Create prefab:** the canvas context menu creates a prefab rooted at the selected object (single selection) and stores it in the document in one revision.
+- **Bug fixed this pass:** the canvas context menu closed on its own `pointerdown` because the window-level dismiss listener ran before the item click, so no menu action could be used. The listener now ignores pointer-downs inside the menu.
+- **Still open:** >20 MB import rejection is implemented but not exercised; corrupted-document recovery has not been re-run in the same clean pass; the overview `Play`/`Share` state is a toast rather than a disabled control; duplicate-id non-sharing has not been asserted in this pass.

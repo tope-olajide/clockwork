@@ -1,8 +1,9 @@
 import { Application, Graphics } from "pixi.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, CornerDownRight, Sparkles, Trash2 } from "lucide-react";
+import { Box, Copy, CornerDownRight, Layers, Sparkles, Trash2 } from "lucide-react";
 import { useToast } from "../../components/ui";
-import type { GameObject, Scene } from "../model/schema";
+import { makeTransform, newObjectId, newPrefabId } from "../model/factory";
+import type { GameObject, Prefab, Scene } from "../model/schema";
 import { useEngineStore } from "../store/engine-store";
 import {
   fitCamera,
@@ -88,6 +89,7 @@ export function EngineViewport() {
   const readOnly = Boolean(document?.archivedAt);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
   const rendererRef = useRef<SceneRenderer | null>(null);
   const overlayRef = useRef<Graphics | null>(null);
@@ -269,12 +271,16 @@ export function EngineViewport() {
 
   useEffect(() => {
     if (!menu) return;
-    const close = () => setMenu(null);
+    const close = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenu(null);
+    };
+    const onBlur = () => setMenu(null);
     window.addEventListener("pointerdown", close);
-    window.addEventListener("blur", close);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("pointerdown", close);
-      window.removeEventListener("blur", close);
+      window.removeEventListener("blur", onBlur);
     };
   }, [menu]);
 
@@ -608,7 +614,56 @@ export function EngineViewport() {
     setMenu({ x: local.x, y: local.y, objectId: hit?.id ?? null });
   }
 
-  function contextAction(action: "duplicate" | "delete" | "forward" | "backward" | "ask") {
+  function groupSelection() {
+    if (!scene || selection.length === 0) return;
+    const objects = selection
+      .map((id) => scene.objects.find((candidate) => candidate.id === id))
+      .filter((object): object is GameObject => Boolean(object));
+    if (objects.length === 0) return;
+    let sumX = 0;
+    let sumY = 0;
+    for (const object of objects) {
+      const bounds = rendererRef.current?.getBounds(object.id);
+      sumX += bounds ? (bounds.left + bounds.right) / 2 : object.transform.x;
+      sumY += bounds ? (bounds.top + bounds.bottom) / 2 : object.transform.y;
+    }
+    const group: GameObject = {
+      id: newObjectId(),
+      name: "Group",
+      layerId: objects[0]!.layerId,
+      transform: makeTransform(sumX / objects.length, sumY / objects.length),
+      behaviors: [],
+      properties: {},
+      tags: ["group"],
+    };
+    const result = dispatch("objects.group", { sceneId: scene.id, group, objectIds: objects.map((object) => object.id) });
+    if (result.ok) {
+      setSelection([group.id]);
+      toast.push("Grouped", `${objects.length} object${objects.length === 1 ? "" : "s"} into ${group.name}.`);
+    } else {
+      toast.push("Group failed", result.error);
+    }
+  }
+
+  function createPrefab(objectId: string | null) {
+    if (!scene || !objectId) return;
+    const source = scene.objects.find((candidate) => candidate.id === objectId);
+    if (!source) return;
+    const root = structuredClone(source);
+    root.id = newObjectId();
+    delete root.parentId;
+    const prefab: Prefab = {
+      id: newPrefabId(),
+      name: `${source.name} prefab`,
+      root,
+      params: {},
+    };
+    const result = dispatch("prefab.create", { prefab });
+    if (result.ok) toast.push("Prefab created", prefab.name);
+    else toast.push("Prefab failed", result.error);
+  }
+
+  function contextAction(action: "duplicate" | "delete" | "forward" | "backward" | "group" | "prefab" | "ask") {
     if (!scene) return;
     const objectId = menu?.objectId;
     setMenu(null);
@@ -622,6 +677,10 @@ export function EngineViewport() {
       const result = dispatch("object.delete", { sceneId: scene.id, objectId });
       if (result.ok) setSelection([]);
       else toast.push("Delete failed", result.error);
+    } else if (action === "group") {
+      groupSelection();
+    } else if (action === "prefab") {
+      createPrefab(objectId);
     } else if (action === "forward" || action === "backward") {
       const object = scene.objects.find((candidate) => candidate.id === objectId);
       if (!object) return;
@@ -732,7 +791,7 @@ export function EngineViewport() {
         />
 
         {menu && (
-          <div className="canvas-menu" style={{ left: menu.x + 8, top: menu.y + 8 }} role="menu">
+          <div className="canvas-menu" ref={menuRef} style={{ left: menu.x + 8, top: menu.y + 8 }} role="menu">
             <button role="menuitem" onClick={() => contextAction("duplicate")} disabled={!menu.objectId}>
               <Copy size={12} /> Duplicate
             </button>
@@ -741,6 +800,13 @@ export function EngineViewport() {
             </button>
             <button role="menuitem" onClick={() => contextAction("backward")} disabled={!menu.objectId}>
               <CornerDownRight size={12} style={{ transform: "scaleY(-1)" }} /> Send backward
+            </button>
+            <div className="canvas-menu-sep" />
+            <button role="menuitem" onClick={() => contextAction("group")} disabled={selection.length === 0}>
+              <Layers size={12} /> Group selection{selection.length > 1 ? ` (${selection.length})` : ""}
+            </button>
+            <button role="menuitem" onClick={() => contextAction("prefab")} disabled={selection.length !== 1 || !menu.objectId}>
+              <Box size={12} /> Create prefab
             </button>
             <button role="menuitem" onClick={() => contextAction("ask")} disabled={!menu.objectId}>
               <Sparkles size={12} /> Ask agent about selection
