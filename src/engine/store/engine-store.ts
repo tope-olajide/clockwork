@@ -20,6 +20,7 @@ export interface HistoryEntry {
   inversePatches: Patch[];
   timestamp: number;
   transactionId?: string;
+  prevRevision: number;
 }
 
 export interface DispatchOptions {
@@ -245,6 +246,7 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
         inversePatches: result.inversePatches,
         timestamp: Date.now(),
         transactionId: options.transactionId,
+        prevRevision: current.revision,
       };
       let history = get().history;
       const last = history[history.length - 1];
@@ -294,7 +296,7 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
     try {
       const reverted = applyPatches(current, entry.inversePatches) as ProjectDocument;
       const next = produce(reverted, (draft) => {
-        draft.revision = current.revision + 1;
+        draft.revision = entry.prevRevision;
         draft.updatedAt = new Date().toISOString();
       });
       validateDocument(next);
@@ -326,7 +328,7 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
     try {
       const reapplied = applyPatches(current, entry.patches) as ProjectDocument;
       const next = produce(reapplied, (draft) => {
-        draft.revision = current.revision + 1;
+        draft.revision = entry.prevRevision + 1;
         draft.updatedAt = new Date().toISOString();
       });
       validateDocument(next);

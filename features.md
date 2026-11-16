@@ -4,7 +4,9 @@ Only features that are **100% implemented, manually verified, and passing the cu
 
 ## Status
 
-Slice 0 (static shell) committed and verified. Slice 1 (engine model, command bus, persistence, project lifecycle) is implemented in code and passes `pnpm typecheck`/`pnpm build`, with substantial verification (all template creates, persist/reload, Brief disabled, scene add/undo/redo revision semantics, import-mode/transfer identity, corrupted recovery). Because the full Slice 1 acceptance gate was not evidenced end-to-end in one clean run for every required mutation and dashboard flow permutation, no Slice 1 product feature is listed below yet.
+Slice 0 (static shell) committed and verified. Slice 1 (engine model, command bus, persistence, project lifecycle) is implemented and committed (`10b839e`), including the undo/redo revision fix (history entries store `prevRevision`; undo restores it, redo restores `prevRevision + 1`). It passes `pnpm typecheck` and `pnpm build`, and core flows are verified (all templates, persist/reload, Brief disabled, add scene/layer with revision + undo/redo, import/transfer identity, corrupted recovery).
+
+The Slice 1 acceptance gate is still **not fully evidenced** in one clean end-to-end pass (search/filters, archived read-only, duplicate/archive/delete menu flows, export → delete → re-import). Per the file's rule, no Slice 1 product feature is listed below until those checks are logged.
 
 <!--
 When a feature is fully complete, add it under the right area using this shape:
