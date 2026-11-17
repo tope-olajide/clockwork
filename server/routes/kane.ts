@@ -191,8 +191,11 @@ kaneRoutes.post("/ai-play", async (c) => {
     snapshotId,
     attempt: Math.max(1, Math.min(2, Number(body.attempt) || 1)),
     headless: env.kaneHeadless,
-    timeoutSeconds: Math.min(env.kaneTimeoutSeconds, 50),
-    maxSteps: Math.min(env.kaneMaxSteps, 6),
+    // Kane spends ~30s on startup plus ~10-15s per step before the closing
+    // assertion. A 50s cap killed runs that were already on track (a known-good
+    // full run took 68s), so the cap leaves room for startup plus the objective.
+    timeoutSeconds: Math.min(env.kaneTimeoutSeconds, 140),
+    maxSteps: Math.min(env.kaneMaxSteps, 8),
     bugDetection: "off",
     evidenceRoot: env.kaneEvidenceDir,
   });

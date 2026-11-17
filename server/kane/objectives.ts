@@ -89,10 +89,11 @@ export function buildAiPlayObjective(input: ObjectiveInput): string {
   const coinTotal = coinCount(document, input.sceneId);
   const coinsLabel = hudLabel(document, "coins", "COINS");
   const winName = winVariable(document);
+  // Phrased as a fixed-input verification, not a goal to chase. A goal-shaped
+  // objective makes Kane restart and retry a broken scene until the step cap,
+  // instead of letting the closing assertion report the failure.
   const goal = input.goal?.trim()
-    || (coinTotal > 0
-      ? `Collect all ${coinTotal} ${coinsLabel.toLowerCase()} and reach the end of the scene.`
-      : `Reach the end of the scene.`);
+    || `Run the scene once from its start state. Do not press RESTART or retry.`;
   const player = scene?.objects.find((object) => object.tags.includes("player"));
   const targets = scene?.objects.filter((object) =>
     object.tags.includes("coin") || object.tags.includes("goal"),
@@ -108,8 +109,8 @@ export function buildAiPlayObjective(input: ObjectiveInput): string {
     : `Click "MOVE RIGHT" once. Click "JUMP" only when the player is on the ground, up to 6 times.`;
 
   const outcome = coinTotal > 0
-    ? `Assert STATUS is "WON", ${coinsLabel} is "${coinTotal}" and LAST ERROR is "none".`
-    : `Assert STATUS is "WON", ${winName} is "true" and LAST ERROR is "none".`;
+    ? `Assert the AI state panel shows STATUS "WON", ${coinsLabel} "${coinTotal}" and LAST ERROR "none".`
+    : `Assert the AI state panel shows STATUS "WON", ${winName} "true" and LAST ERROR "none".`;
   return [
     `${goal} ${movement} Wait 3 seconds.`,
     outcome,

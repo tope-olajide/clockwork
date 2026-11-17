@@ -57,21 +57,31 @@ The structural fix is the one the Kane skill documents for repeated verification
 
 The runner's saved-test stream handling is verified against the documented NDJSON contract with the `fake-kane` fixture (pass and fail): the verdict comes from `test_md_done`, `test_md_step_start/end` become the visible steps, inner per-step `run_end` events are not treated as the file verdict, `final_state` comes from the last inner `run_end`, and the evidence pack comes from the `coverage.pack` path. No real-Kane timing claim is made for the replay path yet: it has not been driven against a live scene, and the recordings only exist after one authored run.
 
-### Full Neon Runner AI Play (speed pass)
+### Full Neon Runner AI Play (real two-attempt loop, 151.6 s)
 
-- The demo and objective were tightened to reduce Kane steps/credits: `Core A` is seeded inside `Ground` near spawn, `Core B/C/Relay` form a short straight run, and the objective is reduced to move + 3 s wait + one final WON/COINS/LAST ERROR assertion (no STOP/win polling). AI Play requests are capped to 50 s / 6 steps.
-- `server/kane/runner.ts` now preserves `run_end.status === "passed"` / `reason: "Objective completed"` instead of misclassifying a successful run as cancelled/failed from exit code.
-- Real attempt 2 run `15aeddda-be39-492a-b9c9-d741bc5446d3` (snapshot `HjvoNybqcTpGRQ`, 2026-11-17): `run_end.status: "passed"`, `result_code: 100`, `reason: "Objective completed"`, 68.3 s, 6 steps, final state `STATUS: "WON"`, `coins: "3"`, `last_error: "none"`.
-  - Raw: `.data/ai-play/15aeddda-be39-492a-b9c9-d741bc5446d3/raw.ndjson`
-  - Evidence: `.data/ai-play/15aeddda-be39-492a-b9c9-d741bc5446d3/evidence.evidence`
-  - Note: this run was recorded as `cancelled` in `result.json` before the classification fix; the NDJSON terminal event is the source of truth.
-- A full two-attempt UI fail→repair→pass loop under 180 s was **not re-verified** after the final speed changes because subsequent real Kane runs in this environment exited without `run_end` (cancelled/early exit) under low-memory/Chrome pressure. Treat the full-demo loop as improved but not freshly proven in this pass.
+Driven through the product UI (`?demoReset=1` → Neon Runner → AI Play), 2026-11-17, Kane CLI 0.10.5, 1366×768.
+
+| Attempt | `run_end.status` | Duration | Evidence |
+|---|---|---|---|
+| 1 (seeded embedded coin) | **failed** | 85.0 s | `.data/ai-play/87f6f320-fa0c-411c-8661-6d0c1a936c9e/evidence.evidence` |
+| 2 (same seed, after fix) | **passed** | 66.6 s | `.data/ai-play/646cff5f-7231-475d-8fa0-3297905d2956/evidence.evidence` |
+
+- Attempt 1 run `87f6f320-fa0c-411c-8661-6d0c1a936c9e` (snapshot `06y2VyFMIz7ZRg`): `run_end.status: "failed"`, `reason: "Final verification failed: the AI state panel shows STATUS \"WON\", COINS \"3\" and LAST ERROR \"none\""`. Kane's own summary: the character was still playing near a hazard with only two coins.
+- Fix: deterministic `repairAiPlayFailure` returned `Move Core A out of Ground` and applied one undoable `object.update`.
+- Attempt 2 run `646cff5f-7231-475d-8fa0-3297905d2956` (snapshot `OShWhY1HNpQo3A`): `run_end.status: "passed"`, `reason: "Objective completed"`, 66.6 s, final state `STATUS: "WON"`, `coins: "3"`, `last_error: "none"`. Panel shows `KANE VERIFIED` and both evidence links.
+
+Cost and time notes from this pass:
+
+- The earlier 50 s / 6-step clamp was killing runs that were on track (both attempts died at ~55 s mid-assertion, reported as a 0 s "cancelled"). The AI Play ceiling is now 140 s / 8 steps, and a timeout is reported as `Kane run timed out after Ns without a run_end; the verdict is unknown.` with the real elapsed duration rather than as a user cancel.
+- The objective's first clause was goal-shaped ("Collect all 3 coins and reach the end of the scene"). On the broken scene that made Kane restart and retry until the cap, never reaching the assertion. It is now a fixed-input verification: "Run the scene once from its start state. Do not press RESTART or retry." plus move/wait/assert. That change is what produced the clean 85 s failure.
+- Kane's fixed startup (bifurcation) is ~27–30 s of each run; per-step time is ~10–15 s. A 5–6 step pass now lands at 66–85 s, which is why the two-attempt loop fits in 151.6 s but a 50 s cap could never pass.
 
 ### Engine QA K1–K4
 
 | Objective | Verdict | Notes |
 |---|---|---|
 | K1 editor smoke | **passed** | real run above |
+| K5 AI Play closed loop | **passed** | full Neon Runner fail → fix → pass, 151.6 s (above) |
 | K2 agent double jump | not run | agent/model path not driven with Kane in this pass |
 | K3 agent repair | not run | same |
 | K4 agent ↔ Kane handshake | not run | same |
@@ -93,14 +103,16 @@ sh scripts/kane/run-objective.sh scripts/kane/objectives/k1-editor-smoke.txt htt
 # Real AI Play fail → repair → pass on the reduced fixture
 node --import tsx scripts/kane/ai-play-smoke.ts
 
-# Full demo path (slow; not currently a pass gate)
+# Full demo two-attempt loop (real, 151.6 s)
 # http://localhost:5173/?demoReset=1 → Neon Runner → AI Play
+# needs KANE_ENABLED=1 KANE_AI_PLAY_ENABLED=1 KANE_TIMEOUT_SECONDS=140 KANE_MAX_STEPS=8
 ```
 
 ## Limitations
 
-- The full Neon Runner AI Play fail→repair→pass loop has not been freshly re-verified end-to-end under 180 s after the latest speed changes. One real attempt reached `run_end.status: "passed"` in 68.3 s (see above), but later runs in this environment were unstable (no `run_end`, early exit / Chrome pressure).
+- The full Neon Runner AI Play loop is verified as fail → fix → pass in 151.6 s (85.0 s + 66.6 s), excluding snapshot creation and UI overhead. It is close to the 180 s budget: at Kane's ~30 s fixed startup, a slower attempt can exceed it. The saved-test replay path is the intended margin.
 - K2–K5 were not executed against real Kane in this pass. Their objectives remain in `scripts/kane/objectives/`.
 - The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
-- The reduced-fixture AI Play smoke is the strongest verified closed-loop proof; the full demo is a speed-optimized path, not a newly recorded green two-attempt run.
+- The independent negative control (unreachable goal rather than the seeded coin) has not been run.
+- The full Neon Runner loop uses the deterministic embedded-coin repair, not a model-driven diagnosis. The agent path is exercised by the reduced-fixture smoke and the fixture stream, not by an LLM turn on the demo.
 - Evidence packs and run NDJSON stay untracked under `.data/` and `.testmuai/` as intended.

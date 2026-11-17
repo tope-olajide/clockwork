@@ -95,6 +95,7 @@ function toResult(input: {
   exitCode: number | null;
   timedOut: boolean;
   cancelled: boolean;
+  elapsedMs?: number;
   localEvidence?: string;
   evidenceUrl?: string;
 }): AiPlayResult {
@@ -132,15 +133,17 @@ function toResult(input: {
     status,
     resultCode,
     reasonCode: typeof input.event.reason === "string" ? input.event.reason : undefined,
-    summary: typeof input.event.summary === "string" && input.event.summary.trim()
-      ? input.event.summary
-      : status === "failed"
-        ? (input.timedOut ? "Kane run timed out." : "Kane could not reach the goal.")
-        : status === "cancelled"
-          ? "Kane run cancelled."
-          : status === "error"
-            ? "Kane could not start or finish the run."
-            : "Kane passed the objective.",
+    summary: input.timedOut
+      ? `Kane run timed out after ${Math.round((input.elapsedMs ?? 0) / 1000)}s without a run_end; the verdict is unknown.`
+      : typeof input.event.summary === "string" && input.event.summary.trim()
+        ? input.event.summary
+        : status === "failed"
+          ? "Kane could not reach the goal."
+          : status === "cancelled"
+            ? "Kane run cancelled."
+            : status === "error"
+              ? "Kane could not start or finish the run."
+              : "Kane passed the objective.",
     objective: input.objective,
     finalState,
     steps: input.steps,
@@ -148,7 +151,7 @@ function toResult(input: {
     evidencePath: input.localEvidence ?? (sessionDir ? evidencePack(sessionDir) : undefined),
     evidenceUrl: input.evidenceUrl,
     testUrl: typeof input.event.test_url === "string" ? input.event.test_url : undefined,
-    durationMs: Number.isFinite(durationSeconds) ? Math.round(durationSeconds * 1000) : 0,
+    durationMs: Number.isFinite(durationSeconds) ? Math.round(durationSeconds * 1000) : (input.elapsedMs ?? 0),
     exitCode: input.exitCode ?? undefined,
     createdAt: new Date().toISOString(),
   };
@@ -207,6 +210,7 @@ export function startKaneRun(options: KaneRunOptions): {
   let waiters: Array<(value: IteratorResult<KaneEvent>) => void> = [];
   let done = false;
   let cancelled = false;
+  const runStartedAt = Date.now();
   let timedOut = false;
   let child: ChildProcessWithoutNullStreams | null = null;
   let terminalEvent: Record<string, unknown> | null = null;
@@ -402,6 +406,7 @@ export function startKaneRun(options: KaneRunOptions): {
         exitCode: code,
         timedOut,
         cancelled,
+        elapsedMs: Date.now() - runStartedAt,
         localEvidence,
         evidenceUrl: localEvidence ? `/api/kane/runs/${encodeURIComponent(runId)}/evidence` : undefined,
       });

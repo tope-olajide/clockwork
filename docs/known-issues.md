@@ -97,7 +97,7 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 - The end-to-end path must be demonstrated from a cold browser profile, not a warm dev session.
 - The agent ↔ Kane handshake must produce real NDJSON and evidence: engine QA in the verification branch, and the two real AI Play loops in Slice 10. A fixture pass is not enough.
 - The project must run without a model/key/Kane for the editor and manual Play paths; only AI features may be unavailable.
-- The full Neon Runner AI Play demo must show a real failure (`COINS: 2`) and a real same-seed pass (`COINS: 3`). The reduced one-coin fixture has a real Kane fail → repair → pass, but the full demo remains unverified because its per-step agent latency exceeds practical time/credit limits.
+- The full Neon Runner AI Play demo now shows a real failure and a real same-seed pass: attempt 1 `run_end.status: "failed"` in 85.0 s (two coins, still playing), deterministic fix, attempt 2 `"passed"` in 66.6 s with `STATUS: "WON"`, `COINS: "3"`, `LAST ERROR: "none"` (151.6 s total). Evidence is in `docs/kane-proof.md`. The independent negative control is still unverified.
 - The visual target must be checked at 1366×768, not only on a large monitor.
 - Any failing `pnpm typecheck`, `pnpm build`, console error, or unchecked acceptance item must be recorded here with the date and slice.
 
