@@ -97,15 +97,21 @@ function toResult(input: {
   evidenceUrl?: string;
 }): AiPlayResult {
   const rawStatus = input.event.status;
+  const reason = typeof input.event.reason === "string" ? input.event.reason : "";
+  const finalStatus = input.event.final_state && typeof input.event.final_state === "object"
+    ? String((input.event.final_state as Record<string, unknown>).status ?? "")
+    : "";
   const status = input.cancelled || input.timedOut
     ? "cancelled"
     : rawStatus === "passed" || rawStatus === "failed"
       ? rawStatus
-      : input.exitCode === 0
+      : reason === "Objective completed" || finalStatus === "WON"
         ? "passed"
-        : input.exitCode === 1
-          ? "failed"
-          : "error";
+        : input.exitCode === 0
+          ? "passed"
+          : input.exitCode === 1
+            ? "failed"
+            : "error";
 
   const finalState = (input.event.final_state && typeof input.event.final_state === "object")
     ? Object.fromEntries(Object.entries(input.event.final_state as Record<string, unknown>).map(([key, value]) => [key, String(value)])) satisfies KaneFinalState

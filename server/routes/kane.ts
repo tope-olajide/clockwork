@@ -188,8 +188,8 @@ kaneRoutes.post("/ai-play", async (c) => {
     snapshotId,
     attempt: Math.max(1, Math.min(2, Number(body.attempt) || 1)),
     headless: env.kaneHeadless,
-    timeoutSeconds: env.kaneTimeoutSeconds,
-    maxSteps: env.kaneMaxSteps,
+    timeoutSeconds: Math.min(env.kaneTimeoutSeconds, 50),
+    maxSteps: Math.min(env.kaneMaxSteps, 6),
     bugDetection: "off",
     evidenceRoot: env.kaneEvidenceDir,
   });

@@ -89,16 +89,13 @@ export function buildAiPlayObjective(input: ObjectiveInput): string {
   const coinTotal = coinCount(document, input.sceneId);
   const coinsLabel = hudLabel(document, "coins", "COINS");
   const winName = winVariable(document);
-  const finish = coinTotal > 0
-    ? `Assert ${coinsLabel.toLowerCase()} is "${coinTotal}".`
-    : `Assert ${winName} is "true".`;
   const goal = input.goal?.trim()
     || (coinTotal > 0
       ? `Collect all ${coinTotal} ${coinsLabel.toLowerCase()} and reach the end of the scene.`
       : `Reach the end of the scene.`);
   const player = scene?.objects.find((object) => object.tags.includes("player"));
   const targets = scene?.objects.filter((object) =>
-    object.tags.includes("coin") || object.tags.includes("goal") || object.tags.includes("checkpoint"),
+    object.tags.includes("coin") || object.tags.includes("goal"),
   ) ?? [];
   // Small test scenes need one movement, not a jump loop; each jump can cost
   // 15–25 seconds of Kane agent time.
@@ -110,15 +107,12 @@ export function buildAiPlayObjective(input: ObjectiveInput): string {
     ? `Click "MOVE RIGHT" once.`
     : `Click "MOVE RIGHT" once. Click "JUMP" only when the player is on the ground, up to 6 times.`;
 
+  const outcome = coinTotal > 0
+    ? `Assert STATUS is "WON", ${coinsLabel} is "${coinTotal}" and LAST ERROR is "none".`
+    : `Assert STATUS is "WON", ${winName} is "true" and LAST ERROR is "none".`;
   return [
-    `You are playing ${document.name}${scene ? ` in scene "${scene.name}"` : ""}. ${goal}`,
-    `Wait for STATUS: PLAYING.`,
-    movement,
-    `Wait 8 seconds for the game to settle. Do not wait for WON or LOST.`,
-    `Click "STOP", store STATUS as status, then assert status is "WON".`,
-    finish,
-    `Store "LAST ERROR" as last_error, then assert last_error is "none".`,
-    `The AI HUD labels shown on screen are the source of truth.`,
+    `${goal} ${movement} Wait 3 seconds.`,
+    outcome,
   ].join("\n");
 }
 

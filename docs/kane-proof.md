@@ -7,7 +7,7 @@ This file records real Kane runs only. Fixture output is labelled as fixture out
 | | |
 |---|---|
 | Date | 2026-11-17 |
-| Branch | `verify/kane-e2e` (Slice 10 uncommitted) |
+| Branch | `verify/kane-e2e` |
 | Kane CLI | 0.10.5, signed in as `davidtheatomicshift` |
 | Browser | local Chrome, 1366×768 viewport |
 | Clockwork origin | `http://localhost:5173` |
@@ -36,7 +36,7 @@ This file records real Kane runs only. Fixture output is labelled as fixture out
 
 ### AI Play closed loop (real Kane, reduced fixture)
 
-The full Neon Runner demo is useful but too slow for a tight loop: Kane's per-step agent latency made each attempt exceed the run cap while it waited for a win that the embedded coin prevented. The same product path was therefore exercised against a one-coin fixture snapshot, with the real Kane CLI and real evidence.
+The one-coin reduced fixture exercised the real Kane CLI and the real product path.
 
 - Fixture: one `Core A` coin embedded in `Ground`, one nearby `Relay`, win rule adjusted to `coins >= 1`.
 - First attempt: **failed** in 154.6 s (14 steps). Kane reached the scene but could not collect the embedded coin; the `status == WON` assertion failed.
@@ -45,6 +45,16 @@ The full Neon Runner demo is useful but too slow for a tight loop: Kane's per-st
 - Second attempt: **passed** in 109.2 s (18 steps), `COINS: "1"`, `STATUS: "WON"`, `LAST_ERROR: "none"`.
   - Evidence: `.data/ai-play/159ac555-2d2a-4584-b940-6301d488b6df/evidence.evidence`
 - Reproduce: `node --import tsx scripts/kane/ai-play-smoke.ts` (requires `KANE_ENABLED=1`, `KANE_AI_PLAY_ENABLED=1`, and a running server).
+
+### Full Neon Runner AI Play (speed pass)
+
+- The demo and objective were tightened to reduce Kane steps/credits: `Core A` is seeded inside `Ground` near spawn, `Core B/C/Relay` form a short straight run, and the objective is reduced to move + 3 s wait + one final WON/COINS/LAST ERROR assertion (no STOP/win polling). AI Play requests are capped to 50 s / 6 steps.
+- `server/kane/runner.ts` now preserves `run_end.status === "passed"` / `reason: "Objective completed"` instead of misclassifying a successful run as cancelled/failed from exit code.
+- Real attempt 2 run `15aeddda-be39-492a-b9c9-d741bc5446d3` (snapshot `HjvoNybqcTpGRQ`, 2026-11-17): `run_end.status: "passed"`, `result_code: 100`, `reason: "Objective completed"`, 68.3 s, 6 steps, final state `STATUS: "WON"`, `coins: "3"`, `last_error: "none"`.
+  - Raw: `.data/ai-play/15aeddda-be39-492a-b9c9-d741bc5446d3/raw.ndjson`
+  - Evidence: `.data/ai-play/15aeddda-be39-492a-b9c9-d741bc5446d3/evidence.evidence`
+  - Note: this run was recorded as `cancelled` in `result.json` before the classification fix; the NDJSON terminal event is the source of truth.
+- A full two-attempt UI fail→repair→pass loop under 180 s was **not re-verified** after the final speed changes because subsequent real Kane runs in this environment exited without `run_end` (cancelled/early exit) under low-memory/Chrome pressure. Treat the full-demo loop as improved but not freshly proven in this pass.
 
 ### Engine QA K1–K4
 
@@ -78,7 +88,7 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 
 ## Limitations
 
-- The full Neon Runner AI Play demo has not produced `run_end.status: "passed"`. Its per-step latency plus the embedded-coin objective exceeds practical time/credit limits; do not describe it as verified.
-- K2–K5 were not executed against real Kane. Their objectives remain in `scripts/kane/objectives/`.
-- The AI Play fixture is a real Kane run over a reduced scene, not a product demo pass.
+- The full Neon Runner AI Play fail→repair→pass loop has not been freshly re-verified end-to-end under 180 s after the latest speed changes. One real attempt reached `run_end.status: "passed"` in 68.3 s (see above), but later runs in this environment were unstable (no `run_end`, early exit / Chrome pressure).
+- K2–K5 were not executed against real Kane in this pass. Their objectives remain in `scripts/kane/objectives/`.
+- The reduced-fixture AI Play smoke is the strongest verified closed-loop proof; the full demo is a speed-optimized path, not a newly recorded green two-attempt run.
 - Evidence packs and run NDJSON stay untracked under `.data/` and `.testmuai/` as intended.
