@@ -105,7 +105,7 @@ Completed in Slice 3 · verified at 1366×768 (cold-profile run).
 
 ### Sprite slicing and animation
 
-Grid slicing supports 4×2 sheets (verified frame size 341×384 on a 1366×768 import) and manual frame entry with an overlay; the animation editor previews frames at the requested FPS and saves named clips with loop settings.
+Grid slicing supports 4×2 sheets (verified frame size 341×384 on a 1366×768 import) and manual frame entry with an overlay; the animation editor previews frames at the requested FPS (verified at 5 fps), and clip records store name, fps, frame list and loop.
 Completed in Slice 3 · verified at 1366×768 (cold-profile run).
 
 ### Tilemap painting
