@@ -272,30 +272,28 @@ export function ProjectOverviewPage() {
               </div>
             )}
 
-            {section ? (
-              sectionKey === "project" ? (
-                <ProjectSettingsPanel
-                  document={current}
-                  readOnly={readOnly}
-                  onRename={rename}
-                  onRun={run}
-                  onSave={saveNow}
-                  onDelete={removeProject}
-                  onExport={exportProject}
-                  onImport={importIntoProject}
-                />
-              ) : (
-                <div className="empty-state" style={{ minHeight: 300 }}>
-                  <Settings2 size={22} />
-                  <strong>{section.title}</strong>
-                  <p>{section.body}</p>
-                  <div className="empty-actions">
-                    <Button variant="secondary" onClick={() => navigate(`/project/${current.id}`)}>
-                      Back to overview
-                    </Button>
-                  </div>
+            {sectionKey === "project" ? (
+              <ProjectSettingsPanel
+                document={current}
+                readOnly={readOnly}
+                onRename={rename}
+                onRun={run}
+                onSave={saveNow}
+                onDelete={removeProject}
+                onExport={exportProject}
+                onImport={importIntoProject}
+              />
+            ) : section ? (
+              <div className="empty-state" style={{ minHeight: 300 }}>
+                <Settings2 size={22} />
+                <strong>{section.title}</strong>
+                <p>{section.body}</p>
+                <div className="empty-actions">
+                  <Button variant="secondary" onClick={() => navigate(`/project/${current.id}`)}>
+                    Back to overview
+                  </Button>
                 </div>
-              )
+              </div>
             ) : (
               <>
                 <div className="overview-stats">
