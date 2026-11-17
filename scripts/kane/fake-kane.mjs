@@ -25,6 +25,22 @@ writeFileSync(join(session, "evidence", "fixture.evidence"), "fake evidence pack
 const emit = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+if (args[0] === "testmd") {
+  const summary = { overall_status: result, duration_s: 1.1, steps: { total: 2, passed: result === "passed" ? 2 : 1, failed: result === "passed" ? 0 : 1, skipped: 0, replay_decisions: 2, author_decisions: 0 } };
+  emit({ type: "stream_start", cli_version: "fixture", surface: "testmd", pid: process.pid, v: 1, ts: new Date().toISOString() });
+  emit({ type: "test_md_step_start", step_index: 1, heading: "Wait for the AI Play HUD" });
+  await sleep(50);
+  emit({ type: "test_md_step_end", step_index: 1, status: "passed", duration_s: 0.2 });
+  emit({ type: "test_md_step_start", step_index: 2, heading: "Move right through the level" });
+  await sleep(50);
+  emit({ type: "run_end", status: result, duration: 0.4, final_state: finalState });
+  emit({ type: "test_md_step_end", step_index: 2, status: result, duration_s: 0.4 });
+  emit({ type: "test_md_summary", ...summary });
+  emit({ type: "coverage", status: "written", pack: join(session, "evidence", "fixture.evidence") });
+  emit({ type: "test_md_done", overall_status: result, duration_s: 1.1, session_id: "fixture-session" });
+  process.exit(exitCode);
+}
+
 emit({ type: "stream_start", cli_version: "fixture", surface: "run", pid: process.pid, v: 1, ts: new Date().toISOString() });
 emit({ step: 1, status: "running", remark: "Opened the snapshot player" });
 await sleep(80);

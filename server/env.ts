@@ -31,6 +31,7 @@ const envSchema = z.object({
   KANE_MAX_STEPS: z.coerce.number().int().positive().max(100).default(40),
   KANE_HEADLESS: z.string().optional(),
   KANE_AI_PLAY_EVIDENCE_DIR: z.string().optional(),
+  KANE_AI_PLAY_TEST: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -57,4 +58,5 @@ export const env = {
   kaneMaxSteps: parsed.data.KANE_MAX_STEPS,
   kaneHeadless: parsed.data.KANE_HEADLESS === "1" || parsed.data.KANE_HEADLESS === "true",
   kaneEvidenceDir: parsed.data.KANE_AI_PLAY_EVIDENCE_DIR || ".data/ai-play",
+  kaneAiPlayTest: parsed.data.KANE_AI_PLAY_TEST || undefined,
 };

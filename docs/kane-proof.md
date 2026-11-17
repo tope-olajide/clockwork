@@ -46,6 +46,17 @@ The one-coin reduced fixture exercised the real Kane CLI and the real product pa
   - Evidence: `.data/ai-play/159ac555-2d2a-4584-b940-6301d488b6df/evidence.evidence`
 - Reproduce: `node --import tsx scripts/kane/ai-play-smoke.ts` (requires `KANE_ENABLED=1`, `KANE_AI_PLAY_ENABLED=1`, and a running server).
 
+### Why runs were slow and expensive
+
+Kane's one-shot `run` pays the **authoring** cost every time: it plans the objective and authors each step before touching the page. For a game objective (no DOM affordances to reason over) that planning dominates, at roughly 15–25 s per agent step. Two further costs were self-inflicted:
+
+- `--final-validation on` appended the synthesized `cp_final` checkpoint to every run — one extra authoring step, on top of the objective's own terminal assertion. It is now `off` (the documented default), because the objective already ends in an explicit assertion.
+- Generated-code export/validation ran for every attempt even though no code is kept. Runs now pass `--skip-code-validation`.
+
+The structural fix is the one the Kane skill documents for repeated verification: **saved tests replay**. `kane-cli testmd run <file>` authors each step on the first run and then replays the recordings, "mostly avoiding the authoring cost", on every later run. AI Play now supports that path via `KANE_AI_PLAY_TEST=scripts/kane/tests/ai-play-demo_test.md`; the snapshot URL is supplied with `--url`, so replay works across per-attempt snapshots without re-authoring. `--no-adaptive-heal` keeps a replay failure fast instead of silently re-authoring steps.
+
+The runner's saved-test stream handling is verified against the documented NDJSON contract with the `fake-kane` fixture (pass and fail): the verdict comes from `test_md_done`, `test_md_step_start/end` become the visible steps, inner per-step `run_end` events are not treated as the file verdict, `final_state` comes from the last inner `run_end`, and the evidence pack comes from the `coverage.pack` path. No real-Kane timing claim is made for the replay path yet: it has not been driven against a live scene, and the recordings only exist after one authored run.
+
 ### Full Neon Runner AI Play (speed pass)
 
 - The demo and objective were tightened to reduce Kane steps/credits: `Core A` is seeded inside `Ground` near spawn, `Core B/C/Relay` form a short straight run, and the objective is reduced to move + 3 s wait + one final WON/COINS/LAST ERROR assertion (no STOP/win polling). AI Play requests are capped to 50 s / 6 steps.
@@ -90,5 +101,6 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 
 - The full Neon Runner AI Play fail→repair→pass loop has not been freshly re-verified end-to-end under 180 s after the latest speed changes. One real attempt reached `run_end.status: "passed"` in 68.3 s (see above), but later runs in this environment were unstable (no `run_end`, early exit / Chrome pressure).
 - K2–K5 were not executed against real Kane in this pass. Their objectives remain in `scripts/kane/objectives/`.
+- The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
 - The reduced-fixture AI Play smoke is the strongest verified closed-loop proof; the full demo is a speed-optimized path, not a newly recorded green two-attempt run.
 - Evidence packs and run NDJSON stay untracked under `.data/` and `.testmuai/` as intended.

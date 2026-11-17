@@ -183,6 +183,9 @@ kaneRoutes.post("/ai-play", async (c) => {
   const seed = Number(body.seed) || 1234;
   const run = startKaneRun({
     objective,
+    // When a saved `_test.md` is configured, Kane replays its recordings
+    // instead of re-authoring a plan on every attempt.
+    savedTest: env.kaneAiPlayTest,
     url: `${origin}/s/${encodeURIComponent(snapshotId)}?ai=1&seed=${seed}`,
     projectId,
     snapshotId,

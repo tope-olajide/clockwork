@@ -3,10 +3,12 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 
 import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AiPlayResult, KaneEvent, KaneFinalState, KaneStep } from "../../shared/protocol/kane";
-import { parseNdjsonLine, stepFromEvent } from "./ndjson";
+import { parseNdjsonLine, stepFromEvent, testMdStepFromEvent } from "./ndjson";
 
 export interface KaneRunOptions {
   objective: string;
+  /** Path to a saved `_test.md`; when set the run replays its recordings. */
+  savedTest?: string;
   url: string;
   projectId?: string;
   snapshotId?: string;
@@ -167,19 +169,35 @@ export function startKaneRun(options: KaneRunOptions): {
   const cli = resolveCli();
   const timeoutSeconds = Math.max(30, Math.min(900, options.timeoutSeconds ?? 180));
   const maxSteps = Math.max(1, Math.min(100, options.maxSteps ?? 40));
-  const args = [
-    ...cli.args,
-    "run",
-    options.objective,
-    "--url", options.url,
-    "--agent",
-    "--mode", "testing",
-    "--max-steps", String(maxSteps),
-    "--timeout", String(timeoutSeconds),
-    "--assertion-mode", "dom",
-    "--final-validation", "on",
-    "--bug-detection", options.bugDetection ?? "off",
-  ];
+  const savedTest = options.savedTest?.trim() || undefined;
+  const args = savedTest
+    ? [
+      ...cli.args,
+      "testmd", "run", savedTest,
+      "--url", options.url,
+      "--agent",
+      "--max-steps", String(maxSteps),
+      "--timeout", String(timeoutSeconds),
+      // A replay failure must fail fast: adaptive healing re-authors steps and
+      // burns the authoring cost this path exists to avoid.
+      "--no-adaptive-heal",
+    ]
+    : [
+      ...cli.args,
+      "run",
+      options.objective,
+      "--url", options.url,
+      "--agent",
+      "--mode", "testing",
+      "--max-steps", String(maxSteps),
+      "--timeout", String(timeoutSeconds),
+      "--assertion-mode", "dom",
+      // The objective ends in an explicit assertion; the synthesized cp_final
+      // checkpoint would add another agent step to every run.
+      "--final-validation", "off",
+      "--skip-code-validation",
+      "--bug-detection", options.bugDetection ?? "off",
+    ];
   if (options.headless) args.push("--headless");
 
   const runDir = join(process.cwd(), options.evidenceRoot ?? ".data/ai-play", runId);
@@ -192,6 +210,12 @@ export function startKaneRun(options: KaneRunOptions): {
   let timedOut = false;
   let child: ChildProcessWithoutNullStreams | null = null;
   let terminalEvent: Record<string, unknown> | null = null;
+  let savedTestSurface = false;
+  let savedTestSession: string | undefined;
+  let savedTestPack: string | undefined;
+  let savedTestSummary: Record<string, unknown> | null = null;
+  const savedTestHeadings = new Map<number, string>();
+  let lastInnerFinalState: Record<string, unknown> | undefined;
   const steps: KaneStep[] = [];
   const rawLines: string[] = [];
 
@@ -208,7 +232,7 @@ export function startKaneRun(options: KaneRunOptions): {
     while (waiters.length) waiters.shift()!({ value: undefined, done: true });
   }
 
-  push({ type: "stream_start", runId, command: [cli.command, ...cli.args, "run"].join(" ") });
+  push({ type: "stream_start", runId, command: [cli.command, ...args].join(" ") });
 
   const pending = new Promise<void>((resolve) => {
     const started = Date.now();
@@ -250,11 +274,57 @@ export function startKaneRun(options: KaneRunOptions): {
         const parsed = parseNdjsonLine(line);
         if (!parsed) continue;
         const event = parsed.raw as Record<string, unknown>;
+        if (!savedTestSurface && event.type === "stream_start" && event.surface === "testmd") {
+          savedTestSurface = true;
+        }
         if (event.type === "run_end") {
+          // In a saved-test stream `run_end` closes one step, not the file.
+          if (savedTestSurface) {
+            if (event.final_state && typeof event.final_state === "object") {
+              lastInnerFinalState = event.final_state as Record<string, unknown>;
+            }
+            continue;
+          }
           terminalEvent = event;
           continue;
         }
-        const step = stepFromEvent(event);
+        if (event.type === "test_md_summary") {
+          savedTestSummary = event;
+          continue;
+        }
+        if (event.type === "coverage" && typeof event.pack === "string") {
+          savedTestPack = event.pack;
+          continue;
+        }
+        if (event.type === "test_md_done") {
+          const counts = (savedTestSummary?.steps ?? {}) as Record<string, unknown>;
+          const passed = Number(counts.passed ?? 0);
+          const total = Number(counts.total ?? 0);
+          terminalEvent = {
+            type: "run_end",
+            status: event.overall_status === "passed" ? "passed" : "failed",
+            summary: total > 0
+              ? `Saved test ${String(event.overall_status)}: ${passed}/${total} steps passed (${Number(counts.replay_decisions ?? 0)} replayed, ${Number(counts.author_decisions ?? 0)} authored).`
+              : undefined,
+            duration: event.duration_s,
+            final_state: lastInnerFinalState ?? {},
+            session_id: event.session_id,
+          };
+          savedTestSession = typeof event.session_id === "string" ? event.session_id : undefined;
+          continue;
+        }
+        const mdStep = savedTestSurface ? testMdStepFromEvent(event) : null;
+        if (mdStep) {
+          // `test_md_step_end` may omit the heading; keep the one from its start.
+          if (event.type === "test_md_step_start" && event.heading) {
+            savedTestHeadings.set(Number(mdStep.step), String(event.heading));
+          }
+          const withHeading = { ...mdStep, remark: savedTestHeadings.get(Number(mdStep.step)) ?? mdStep.remark };
+          steps.push(withHeading);
+          push({ type: "step", ...withHeading });
+          continue;
+        }
+        const step = savedTestSurface ? null : stepFromEvent(event);
         if (step) {
           steps.push(step);
           push({ type: "step", ...step });
@@ -305,8 +375,12 @@ export function startKaneRun(options: KaneRunOptions): {
         push({ type: "error", code: "timeout", message: "Kane run was cancelled or timed out." });
       }
 
-      const sessionDir = typeof terminalEvent?.session_dir === "string" ? terminalEvent.session_dir : undefined;
-      const sourceEvidence = evidencePack(sessionDir);
+      const sessionDir = typeof terminalEvent?.session_dir === "string"
+        ? terminalEvent.session_dir
+        : savedTestSession
+          ? join(process.env.USERPROFILE ?? process.env.HOME ?? "", ".testmuai", "kaneai", "sessions", savedTestSession)
+          : undefined;
+      const sourceEvidence = savedTestPack ?? evidencePack(sessionDir);
       let localEvidence: string | undefined;
       if (sourceEvidence) {
         localEvidence = join(runDir, "evidence.evidence");
