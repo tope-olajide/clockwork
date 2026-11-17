@@ -2343,7 +2343,7 @@ The manual Play button is always first-class and never depends on Kane or a mode
 - [x] Raw NDJSON, final state, and evidence paths are logged server-side; keys, prompts, and secrets are not. — **proven**: `.data/ai-play/<runId>/raw.ndjson`, `result.json`, `evidence-path.txt` and `evidence.evidence` exist for every run; no key or prompt material is written there.
 - [x] `pnpm typecheck && pnpm build` pass. — **proven** (2026-11-17): `tsc -b tsconfig.json tsconfig.node.json` and `vite build` (23.55 s) pass.
 
-Tally: 6 proven, 4 unverified, 2 broken.
+Tally: 6 proven, 5 unverified, 1 broken.
 
 **Do not:** add Playwright, commit evidence packs, let AI Play run against the editor URL with IndexedDB state, or auto-apply destructive changes without confirmation. The full K1–K4 suite belongs to the verification branch; the two real AI Play loops (seeded and independent) are product acceptance and gate this slice.
 
