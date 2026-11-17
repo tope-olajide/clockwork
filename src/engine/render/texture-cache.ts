@@ -1,4 +1,4 @@
-import { Assets, Texture } from "pixi.js";
+import { Texture } from "pixi.js";
 
 const textures = new Map<string, Texture>();
 const urls = new Map<string, string>();
@@ -21,7 +21,12 @@ export async function ensureTexture(assetId: string, url: string): Promise<Textu
   urls.set(assetId, url);
   const promise = (async () => {
     try {
-      const texture = await Assets.load<Texture>(url);
+      // Imported assets are stored as blob URLs, which carry no file extension
+      // for Pixi's asset parser to detect. Decode the bitmap directly instead.
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      const texture = Texture.from(image);
       textures.set(assetId, texture);
       return texture;
     } catch {

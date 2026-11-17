@@ -20,6 +20,7 @@ import { TopBar } from "../../shell/TopBar";
 import { CommandPalette, buildStubCommands } from "../../shell/CommandPalette";
 import { runCommand } from "../../engine/commands/registry";
 import { createProjectFromTemplate } from "../../engine/model/templates";
+import { applyStarterVisuals, seedStarterAssets } from "../../engine/assets/starter-seed";
 import type { ProjectDocument, TemplateOrigin } from "../../engine/model/schema";
 import {
   deleteProjectRecord,
@@ -169,6 +170,8 @@ export function ProjectsPage() {
             gravity: { x: 0, y: created.settings.gravity },
           };
         }
+        document = applyStarterVisuals(document);
+        document = await seedStarterAssets(document);
       }
       await saveProjectDocument(document);
       navigate(`/project/${document.id}/scene/${document.startSceneId}`);

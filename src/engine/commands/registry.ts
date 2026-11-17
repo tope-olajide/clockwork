@@ -1021,6 +1021,10 @@ const commands: CommandDefinition[] = [
   ),
 ];
 
+export function assetUsage(document: ProjectDocument, assetId: string): string[] {
+  return assetReferences(document, assetId);
+}
+
 function assetReferences(document: ProjectDocument, assetId: string): string[] {
   const references: string[] = [];
   if (document.scenes.some((scene) => scene.background.assetId === assetId)) references.push("scene background");

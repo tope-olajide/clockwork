@@ -91,6 +91,28 @@ Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
 A 2,000-object scene renders and stays responsive; rendering is sprite-batched, and the uncapped measurement is 801 fps (≈1.25 ms per frame).
 Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
 
+## Assets
+
+### Starter art and audio
+
+Every new project (and the built-in demo) seeds 11 original sprite/background images and three SFX WAVs into local storage with stable asset ids. Platformer objects reference the art automatically, so a new project opens with real player, coin, enemy, hazard, flag, ground and parallax visuals instead of flat rectangles.
+Completed in Slice 3 · verified at 1366×768 (cold-profile run).
+
+### Asset browser
+
+The Assets page supports import (file picker or drag onto the canvas), search, kind filters with counts, inline rename, usage counts with in-use references, thumbnails, drag-to-canvas, add-to-scene, slicing, animation clips and tilemap creation. Duplicate imports reuse the existing asset and report “Already in project”; deleting an in-use asset is refused with a reference message; assets and thumbnails restore after reload.
+Completed in Slice 3 · verified at 1366×768 (cold-profile run).
+
+### Sprite slicing and animation
+
+Grid slicing supports 4×2 sheets (verified frame size 341×384 on a 1366×768 import) and manual frame entry with an overlay; the animation editor previews frames at the requested FPS and saves named clips with loop settings.
+Completed in Slice 3 · verified at 1366×768 (cold-profile run).
+
+### Tilemap painting
+
+A 20×10 tilemap can be created from a tileset image. Selecting it shows Paint/Erase/Fill/Pick, a brush size and tile index; the canvas draws a tile grid and hover cell, and each drag stroke is one undo entry (verified paint, erase, fill and one-undo revert).
+Completed in Slice 3 · verified at 1366×768 (cold-profile run).
+
 ## Runtime
 
 ### Manual Play from the project

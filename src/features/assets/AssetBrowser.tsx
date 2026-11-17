@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Boxes, Film, Grid3X3, ImagePlus, Scissors, Trash2, Upload } from "lucide-react";
+import { Boxes, Film, Grid3X3, ImagePlus, Pencil, Scissors, Search, Trash2, Upload } from "lucide-react";
 import { Button, Input, Modal, NumberInput, useToast } from "../../components/ui";
 import { makeObject } from "../../engine/model/factory";
 import { importAssetFile, readAssetBlob } from "../../engine/assets/asset-store";
+import { assetUsage } from "../../engine/commands/registry";
 import { useEngineStore } from "../../engine/store/engine-store";
 import type { Asset } from "../../engine/model/schema";
 
@@ -13,6 +14,16 @@ interface FrameRect {
   h: number;
 }
 
+type KindFilter = "all" | "image" | "audio" | "tileset";
+type SliceMode = "grid" | "manual";
+
+const KIND_FILTERS: Array<{ key: KindFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "image", label: "Images" },
+  { key: "audio", label: "Audio" },
+  { key: "tileset", label: "Tilesets" },
+];
+
 export function AssetBrowser() {
   const document = useEngineStore((state) => state.document);
   const dispatch = useEngineStore((state) => state.dispatch);
@@ -20,12 +31,16 @@ export function AssetBrowser() {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
 
   const [sliceAsset, setSliceAsset] = useState<Asset | null>(null);
+  const [sliceMode, setSliceMode] = useState<SliceMode>("grid");
   const [sliceCols, setSliceCols] = useState(4);
   const [sliceRows, setSliceRows] = useState(2);
   const [slicePadding, setSlicePadding] = useState(0);
   const [sliceSpacing, setSliceSpacing] = useState(0);
+  const [manualFrames, setManualFrames] = useState<FrameRect[]>([]);
   const [sliceImageUrl, setSliceImageUrl] = useState<string | null>(null);
 
   const [animAsset, setAnimAsset] = useState<Asset | null>(null);
@@ -126,6 +141,22 @@ export function AssetBrowser() {
     })();
   }
 
+  async function renameAsset(asset: Asset) {
+    const name = window.prompt("Rename asset", asset.name)?.trim();
+    if (!name || name === asset.name) return;
+    if (name.length > 120) {
+      toast.push("Rename failed", "Asset names are limited to 120 characters.");
+      return;
+    }
+    const outcome = dispatch("asset.update", { assetId: asset.id, patch: { name } });
+    if (!outcome.ok) {
+      toast.push("Rename failed", outcome.error);
+      return;
+    }
+    await saveNow();
+    toast.push("Asset renamed", name);
+  }
+
   function addToScene(asset: Asset) {
     const state = useEngineStore.getState();
     const sceneId = state.activeSceneId ?? document!.scenes[0]?.id;
@@ -178,6 +209,16 @@ export function AssetBrowser() {
     else toast.push("Tilemap created", asset.name);
   }
 
+  function openSlicer(asset: Asset) {
+    setSliceAsset(asset);
+    setSliceMode("grid");
+    setSliceCols(4);
+    setSliceRows(2);
+    setSlicePadding(0);
+    setSliceSpacing(0);
+    setManualFrames(asset.slices ? asset.slices.map((frame) => ({ ...frame })) : []);
+  }
+
   function gridSlices(): FrameRect[] {
     if (!sliceAsset || !sliceAsset.width || !sliceAsset.height) return [];
     const cols = Math.max(1, sliceCols);
@@ -196,6 +237,10 @@ export function AssetBrowser() {
       }
     }
     return slices;
+  }
+
+  function activeSlices(): FrameRect[] {
+    return sliceMode === "manual" ? manualFrames : gridSlices();
   }
 
   async function autoDetectSlices() {
@@ -261,9 +306,30 @@ export function AssetBrowser() {
     } else toast.push("Slice failed", outcome.error);
   }
 
-  async function saveGridSlices() {
+  async function saveSlices() {
     if (!sliceAsset) return;
-    const slices = gridSlices();
+    const slices = activeSlices();
+    if (slices.length === 0) {
+      toast.push("Slice failed", "Add at least one frame.");
+      return;
+    }
+    const width = sliceAsset.width ?? 0;
+    const height = sliceAsset.height ?? 0;
+    const invalid = slices.find(
+      (frame) =>
+        !Number.isFinite(frame.x) ||
+        !Number.isFinite(frame.y) ||
+        frame.w <= 0 ||
+        frame.h <= 0 ||
+        frame.x < 0 ||
+        frame.y < 0 ||
+        (width > 0 && frame.x + frame.w > width) ||
+        (height > 0 && frame.y + frame.h > height),
+    );
+    if (invalid) {
+      toast.push("Slice failed", "Every frame must have a positive size and fit inside the image.");
+      return;
+    }
     const outcome = dispatch("asset.setSlices", { assetId: sliceAsset.id, slices });
     if (!outcome.ok) {
       toast.push("Slice failed", outcome.error);
@@ -272,6 +338,10 @@ export function AssetBrowser() {
     toast.push("Slices saved", `${slices.length} frames`);
     setSliceAsset(null);
     await saveNow();
+  }
+
+  function updateFrame(index: number, patch: Partial<FrameRect>) {
+    setManualFrames((frames) => frames.map((frame, current) => (current === index ? { ...frame, ...patch } : frame)));
   }
 
   async function saveAnimation() {
@@ -298,10 +368,46 @@ export function AssetBrowser() {
   const currentAnimFrame = currentAnimFrames.length > 0 ? (currentAnimFrames[animIndex % currentAnimFrames.length] as number) : 0;
   const currentAnimRect = animAsset?.slices?.[currentAnimFrame] ?? undefined;
 
+  const normalizedQuery = query.trim().toLowerCase();
+  const counts: Record<KindFilter, number> = {
+    all: document.assets.length,
+    image: document.assets.filter((asset) => asset.kind === "image").length,
+    audio: document.assets.filter((asset) => asset.kind === "audio").length,
+    tileset: document.assets.filter((asset) => asset.kind === "tileset").length,
+  };
+  const visibleAssets = document.assets.filter((asset) => {
+    if (kindFilter !== "all" && asset.kind !== kindFilter) return false;
+    if (!normalizedQuery) return true;
+    return `${asset.name} ${asset.tags.join(" ")}`.toLowerCase().includes(normalizedQuery);
+  });
+
   return (
     <div className="assets-browser">
       <div className="assets-toolbar">
         <h2>Assets</h2>
+        <label className="assets-search">
+          <Search size={14} />
+          <input
+            className="input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search assets…"
+            aria-label="Search assets"
+          />
+        </label>
+        <div className="assets-filters" role="group" aria-label="Filter assets by kind">
+          {KIND_FILTERS.map((filter) => (
+            <Button
+              key={filter.key}
+              size="sm"
+              variant={kindFilter === filter.key ? "primary" : "secondary"}
+              aria-pressed={kindFilter === filter.key}
+              onClick={() => setKindFilter(filter.key)}
+            >
+              {filter.label} <span className="row-meta">{counts[filter.key]}</span>
+            </Button>
+          ))}
+        </div>
         <Button onClick={() => inputRef.current?.click()} disabled={busy}>
           <Upload size={14} /> Import
         </Button>
@@ -319,63 +425,116 @@ export function AssetBrowser() {
           <Boxes size={32} />
           <p>No assets yet. Import an image or audio file to get started.</p>
         </div>
+      ) : visibleAssets.length === 0 ? (
+        <div className="workspace-placeholder">
+          <Boxes size={32} />
+          <p>No assets match “{query}”.</p>
+          <Button variant="secondary" onClick={() => { setQuery(""); setKindFilter("all"); }}>Clear filters</Button>
+        </div>
       ) : (
         <div className="assets-grid">
-          {document.assets.map((asset) => (
-            <div key={asset.id} className="asset-card">
-              {asset.thumbnail ? (
-                <img src={asset.thumbnail} alt={asset.name} />
-              ) : (
-                <div className="asset-thumb-placeholder">{asset.kind}</div>
-              )}
-              <div className="asset-card-body">
-                <strong title={asset.name}>{asset.name}</strong>
-                <span>{asset.kind} · {Math.round(asset.size / 1024)} KB</span>
-                {asset.width && asset.height ? <span>{asset.width}×{asset.height}</span> : null}
-                {asset.slices?.length ? <span>{asset.slices.length} frames</span> : null}
-                {asset.animations?.length ? <span>{asset.animations.length} clips</span> : null}
-              </div>
-              <div className="asset-card-actions">
-                {asset.kind === "image" && (
-                  <>
-                    <button className="icon-button" aria-label={`Add ${asset.name} to scene`} onClick={() => addToScene(asset)}>
-                      <ImagePlus size={12} />
-                    </button>
-                    <button className="icon-button" aria-label={`Slice ${asset.name}`} onClick={() => { setSliceAsset(asset); setSliceCols(4); setSliceRows(2); }}>
-                      <Scissors size={12} />
-                    </button>
-                    <button className="icon-button" aria-label={`Animate ${asset.name}`} onClick={() => { setAnimAsset(asset); setAnimFrames(asset.slices?.map((_, index) => index).join(",") ?? ""); }}>
-                      <Film size={12} />
-                    </button>
-                    <button className="icon-button" aria-label={`Create tilemap from ${asset.name}`} onClick={() => createTilemap(asset)}>
-                      <Grid3X3 size={12} />
-                    </button>
-                  </>
+          {visibleAssets.map((asset) => {
+            const usage = assetUsage(document, asset.id);
+            return (
+              <div
+                key={asset.id}
+                className="asset-card"
+                draggable={asset.kind === "image"}
+                onDragStart={(event) => {
+                  if (asset.kind !== "image") return;
+                  event.dataTransfer.setData("application/x-clockwork-asset", asset.id);
+                  event.dataTransfer.effectAllowed = "copy";
+                }}
+                title={asset.kind === "image" ? "Drag onto the canvas to place it" : asset.name}
+              >
+                {asset.thumbnail ? (
+                  <img src={asset.thumbnail} alt={asset.name} draggable={false} />
+                ) : (
+                  <div className="asset-thumb-placeholder">{asset.kind}</div>
                 )}
-                <button className="icon-button danger" aria-label={`Delete ${asset.name}`} onClick={() => onDelete(asset)}>
-                  <Trash2 size={12} />
-                </button>
+                <div className="asset-card-body">
+                  <strong title={asset.name}>{asset.name}</strong>
+                  <span>{asset.kind} · {Math.round(asset.size / 1024)} KB</span>
+                  {asset.width && asset.height ? <span>{asset.width}×{asset.height}</span> : null}
+                  {asset.slices?.length ? <span>{asset.slices.length} frames</span> : null}
+                  {asset.animations?.length ? <span>{asset.animations.length} clips</span> : null}
+                  <span className={`asset-usage${usage.length > 0 ? " in-use" : ""}`}>
+                    {usage.length > 0 ? `Used by: ${[...new Set(usage)].join(", ")}` : "Unused"}
+                  </span>
+                </div>
+                <div className="asset-card-actions">
+                  {asset.kind === "image" && (
+                    <>
+                      <button className="icon-button" aria-label={`Add ${asset.name} to scene`} onClick={() => addToScene(asset)}>
+                        <ImagePlus size={12} />
+                      </button>
+                      <button className="icon-button" aria-label={`Slice ${asset.name}`} onClick={() => openSlicer(asset)}>
+                        <Scissors size={12} />
+                      </button>
+                      <button className="icon-button" aria-label={`Animate ${asset.name}`} onClick={() => { setAnimAsset(asset); setAnimFrames(asset.slices?.map((_, index) => index).join(", ") ?? ""); }}>
+                        <Film size={12} />
+                      </button>
+                      <button className="icon-button" aria-label={`Create tilemap from ${asset.name}`} onClick={() => createTilemap(asset)}>
+                        <Grid3X3 size={12} />
+                      </button>
+                    </>
+                  )}
+                  <button className="icon-button" aria-label={`Rename ${asset.name}`} onClick={() => void renameAsset(asset)}>
+                    <Pencil size={12} />
+                  </button>
+                  <button className="icon-button danger" aria-label={`Delete ${asset.name}`} onClick={() => onDelete(asset)}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       <Modal open={Boolean(sliceAsset)} onOpenChange={(open) => !open && setSliceAsset(null)} title="Slice sprite sheet">
         {sliceAsset && (
           <div className="slice-editor">
-            <div className="slice-controls">
-              <label>Columns <NumberInput value={sliceCols} min={1} onChange={(event) => setSliceCols(Number(event.target.value))} /></label>
-              <label>Rows <NumberInput value={sliceRows} min={1} onChange={(event) => setSliceRows(Number(event.target.value))} /></label>
-              <label>Padding <NumberInput value={slicePadding} min={0} onChange={(event) => setSlicePadding(Number(event.target.value))} /></label>
-              <label>Spacing <NumberInput value={sliceSpacing} min={0} onChange={(event) => setSliceSpacing(Number(event.target.value))} /></label>
+            <div className="assets-filters" role="tablist" aria-label="Slice mode">
+              <Button size="sm" variant={sliceMode === "grid" ? "primary" : "secondary"} role="tab" aria-selected={sliceMode === "grid"} onClick={() => setSliceMode("grid")}>Grid</Button>
+              <Button size="sm" variant={sliceMode === "manual" ? "primary" : "secondary"} role="tab" aria-selected={sliceMode === "manual"} onClick={() => setSliceMode("manual")}>Manual frames</Button>
             </div>
+            {sliceMode === "grid" ? (
+              <div className="slice-controls">
+                <label>Columns <NumberInput value={sliceCols} min={1} onChange={(event) => setSliceCols(Number(event.target.value))} /></label>
+                <label>Rows <NumberInput value={sliceRows} min={1} onChange={(event) => setSliceRows(Number(event.target.value))} /></label>
+                <label>Padding <NumberInput value={slicePadding} min={0} onChange={(event) => setSlicePadding(Number(event.target.value))} /></label>
+                <label>Spacing <NumberInput value={sliceSpacing} min={0} onChange={(event) => setSliceSpacing(Number(event.target.value))} /></label>
+              </div>
+            ) : (
+              <div className="manual-frames">
+                {manualFrames.length === 0 && <p className="panel-helper">No manual frames yet. Add one and set its position and size.</p>}
+                {manualFrames.map((frame, index) => (
+                  <div className="manual-frame-row" key={index}>
+                    <span className="row-meta">#{index}</span>
+                    <label>X <NumberInput value={frame.x} onChange={(event) => updateFrame(index, { x: Number(event.target.value) })} aria-label={`Frame ${index} x`} /></label>
+                    <label>Y <NumberInput value={frame.y} onChange={(event) => updateFrame(index, { y: Number(event.target.value) })} aria-label={`Frame ${index} y`} /></label>
+                    <label>W <NumberInput value={frame.w} min={1} onChange={(event) => updateFrame(index, { w: Number(event.target.value) })} aria-label={`Frame ${index} width`} /></label>
+                    <label>H <NumberInput value={frame.h} min={1} onChange={(event) => updateFrame(index, { h: Number(event.target.value) })} aria-label={`Frame ${index} height`} /></label>
+                    <Button variant="ghost" size="sm" onClick={() => setManualFrames((frames) => frames.filter((_, current) => current !== index))}>Remove</Button>
+                  </div>
+                ))}
+                <div className="dialog-footer">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setManualFrames((frames) => [...frames, { x: 0, y: 0, w: Math.min(64, sliceAsset.width ?? 64), h: Math.min(64, sliceAsset.height ?? 64) }])}
+                  >
+                    + Add frame
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="slice-preview">
               {sliceImageUrl && (
                 <div className="slice-image-wrap">
                   <img src={sliceImageUrl} alt={sliceAsset.name} />
                   <svg className="slice-overlay" viewBox={`0 0 ${sliceAsset.width ?? 1} ${sliceAsset.height ?? 1}`} preserveAspectRatio="none">
-                    {gridSlices().map((frame, index) => (
+                    {activeSlices().map((frame, index) => (
                       <g key={index}>
                         <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#ff856f" strokeWidth={Math.max(1, (sliceAsset.width ?? 1) / 200)} />
                         <text x={frame.x + 4} y={frame.y + 14} fill="#f1f0ed" fontSize={Math.max(8, (sliceAsset.width ?? 1) / 40)}>{index}</text>
@@ -387,7 +546,7 @@ export function AssetBrowser() {
             </div>
             <div className="dialog-footer">
               <Button variant="secondary" onClick={() => void autoDetectSlices()}>Auto-detect</Button>
-              <Button onClick={() => void saveGridSlices()}>Save slices</Button>
+              <Button onClick={() => void saveSlices()}>Save slices</Button>
             </div>
           </div>
         )}

@@ -4,6 +4,7 @@ import { runCommand } from "../commands/registry";
 import { CommandError, validateDocument } from "../commands/validation";
 import { duplicateProjectDocument } from "../model/clone";
 import { createProjectFromTemplate } from "../model/templates";
+import { applyStarterVisuals, seedStarterAssets } from "../assets/starter-seed";
 import type { ProjectDocument, ProjectRecord, TemplateOrigin } from "../model/schema";
 import {
   deleteProjectRecord,
@@ -153,7 +154,7 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
   },
 
   createFromTemplate: async (template, name) => {
-    const document = createProjectFromTemplate(template, name);
+    const document = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate(template, name)));
     await saveProjectDocument(document);
     set({
       document,
@@ -402,7 +403,7 @@ export async function ensureDemoProject(): Promise<void> {
     const records = await listProjectRecords();
     if (records.length > 0) return;
     if (localStorage.getItem("clockwork:seeded:v1")) return;
-    const demo = createProjectFromTemplate("platformer", "Neon Runner");
+    const demo = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate("platformer", "Neon Runner")));
     await saveProjectDocument(demo);
     localStorage.setItem("clockwork:seeded:v1", "1");
   } catch {
@@ -414,7 +415,7 @@ export async function createAndSaveProject(
   template: Exclude<TemplateOrigin, "brief" | "import">,
   name: string,
 ): Promise<ProjectDocument> {
-  const document = createProjectFromTemplate(template, name);
+  const document = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate(template, name)));
   await saveProjectDocument(document);
   return document;
 }

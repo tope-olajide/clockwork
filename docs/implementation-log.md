@@ -239,6 +239,16 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - New known issues: see `docs/known-issues.md` (Slice 6 not gate-closed).
 - Known limitations / not yet verified: `AI_MOCK=1` covering all required drawer/stream states end-to-end in the UI; streamed assistant text, tool-call card rendering, `capture_viewport` PNG displayed and attached to the next step; Stop within ~200 ms and Retry preserving thread; Ask/Build/Plan mode UI behavior in-scope for Slice 6 (read-only, no `apply_commands`); agent drawer dock/overlay behavior at 1366×768/≥1600 without horizontal overflow; revision/context refresh after tool steps; one real env-configured provider streamed tool call (no credentials/evidence in this session); provider settings/key storage/vault correctly deferred to Slice 6.5.
 
+## Audit — Slices 3–7 code review (2026-11-17)
+
+- Scope: read-only audit of the Slice 3–7 implementation against `docs/clockwork-implementation-plan.md`; cross-checked `docs/implementation-log.md`, `docs/known-issues.md`, `features.md`.
+- Checks: `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json` pass; `./node_modules/.bin/vite build` pass (both re-run in this session after the Slice 7 working-tree edits).
+- Result: Slice 1, 2 and 4 gates are fully logged; Slice 3 is implemented but its gate is unlogged and its starter assets are missing; Slice 5/6/6.5 are in-progress with logged partial evidence; Slice 7 is partially implemented and unlogged.
+- Concrete gaps found and added to `docs/known-issues.md` under “Audit — Slices 3–7 code review”: missing `public/starter/**` art/audio; asset-browser search/filter/rename/usage missing; keyboard-only input (no pointer/gamepad) and no sub-stepping; no chat persistence; no server env schema/body/rate limits; read-tool naming deviation; no `AI_MOCK` slow/three-step fixtures; no agent presence or ghost overlay; `start_playtest` stub; selection “Ask AI” placeholder; no presets; no golden-prompt fixtures; conflict handling is prompt-only.
+- Acceptance: none of the Slice 3/5/6/6.5/7 gates were closed by this audit, and no feature was added to `features.md`.
+- Follow-up: ordered remediation plan written to `docs/slice-3-7-fixes.md` (S3-1 … S7-9), starting with starter assets and seeding.
+- Known limitations: this was a code-and-doc audit, not a browser run; it did not re-execute any acceptance script.
+
 ## Slice 6.5 — AI providers, model selection, key vault, settings (in progress, not gate-closed)
 
 - Date: 2026-11-17
@@ -258,3 +268,23 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Code completed after initial Slice 6.5 foundation: integrated agent model picker into the editor drawer/session with per-project per-chat model override persistence in `localStorage` (`clockwork:agent-model:<projectId>`), server-default fallback, and model/capability metadata loading from `/api/ai/{models,providers,settings}`; wired "Open settings" to project AI settings (`?section=ai`) and added setup/error actions ("Open settings", "Choose another model", "Retry"); gated Build/Plan to tool-capable models with in-UI explanation and server-side `/step` rejection (`no-tools`) for non-tool models; hid/refused `capture_viewport` for vision-less models in client context/tool execution and filtered server tool definitions; added typed agent error handling for `no-key`/`invalid-key`/`no-model`/`model-unavailable`/`no-tools`/`no-vision`/`rate-limit`/`provider-timeout`; added basic model-window-aware context/history trimming and provider error-code mapping in the OpenAI-compatible stream path.
 - Checks: `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json` pass; `./node_modules/.bin/vite build` pass.
 - Still not gate-closed / not yet verified in browser or with real providers: all Slice 6.5 acceptance UI flows (save key to vault and confirm persistence across server restart, session-only key loss after restart, masked hints, test connection states, custom OpenAI-compatible provider+model real chat, model picker search/grouping/metadata/default-per-chat override surviving reload), capability-gating UX in real use, key absence from `localStorage`/`sessionStorage`/client JS/SSE payloads/API responses/logs, fresh-install no-key setup card behavior, SSRF/rate/body-limit hardening beyond basic guards, and one real streamed provider/custom-provider turn. Vault remains encrypted JSON (`.data/vault.json`) rather than SQLite. Slice 6 gate remains unclosed.
+
+## Slice 3 — Assets, slicing, animation, tilemaps (gate closed)
+
+- Date: 2026-11-17
+- Commit: see this change set (working tree at time of writing)
+- `pnpm typecheck`: pass (`node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`, exit 0).
+- `pnpm build`: pass (`./node_modules/.bin/vite build`, exit 0); chunk-size warnings only.
+- Starter assets: original SVGs/WAVs in `public/starter/` (11 SVG, 3 WAV), generated deterministically by `scripts/generate-starter-assets.mjs`; seeded into IndexedDB as PNG blobs with stable ids on project creation/demo creation. 14 assets stored (11 images + 3 audio); player sheet is 512×256 with 8 slices and clips idle 4 fps / run 12 fps / jump 1 fps.
+- Asset browser: search, kind filter with counts, rename, usage counts, drag-to-canvas, slice/manual frames, animation editor, tilemap creation.
+- Fixed during the gate: Pixi texture loading failed for extensionless blob URLs (`Assets.load` could not pick a parser), so sprites fell back to tinted rectangles; `src/engine/render/texture-cache.ts` now decodes the blob URL through an `Image` and builds `Texture.from(image)`. Starter art now renders in the scene (hills/player/coin etc. visible at 1366×768).
+- Cold-profile browser runs (headless Chrome, fresh profile, production preview at 1366×768):
+  - Dashboard → project → scene: seeded project opens; 14 assets present; asset grid lists 14 cards; thumbnails load; usage badges show; search filters to “Drone”; rename shows “Drone Renamed”; manual slice modal shows 8 grid frames, adding a 9th frame saves (`9 frames` toast); in-use delete is refused (`Asset is in use by scene object.`); reload restores all 14 assets/thumbnails.
+  - PNG drop onto canvas: creates a new asset and a selected sprite (`Sprite added`, asset count 14 → 15). Dropping an existing asset card creates one sprite object. New-project scene shows starter sprite art (hills and ground) instead of only flat rects.
+  - 4×2 grid slice of a 1366×768 imported PNG saved 8 frames at 341×384 each; duplicate import rejected (`s3-home.png is already imported.`) with no asset-count change; animation preview at FPS 5 advanced 4 distinct frames in a 1.2 s sample.
+  - Fit body to art: selected starter flag sprite body became 53×87 (alpha-trimmed from 64×96), confirming the tight collider path.
+  - Tilemap: `Ground` → 20×10 tilemap created (toast `Tilemap created`); toolbar showed Paint/Erase/Fill/Pick; grid lines render over the selected tilemap; hover highlights the cell; one paint stroke wrote 1 cell and one undo restored the previous data; Fill filled all 200 cells; Erase cleared a cell.
+- Console: no page exceptions in the final tilemap/import runs; animation/drag run console output limited to the harness's own logs. The earlier Pixi parser warning disappeared after the texture fix.
+- Acceptance: **closed** for the Slice 3 list in `docs/slice-3-7-fixes.md` §S3-5.
+- Features added: `features.md` → Assets.
+- Known limitations: starter assets are generated original art, not hand-authored final art; the seeded PNG rasterization path requires canvas 2D (no-WebGL still allows editing); tilemap hover/paint pixel mapping was exercised with synthetic pointer events; manual frame rows use number inputs (no drag-handles in the modal).

@@ -123,6 +123,15 @@ export function EngineViewport() {
   const [tilemapTileIndex, setTilemapTileIndex] = useState(1);
   const tileStrokeRef = useRef<{ objectId: string; mode: "paint" | "erase"; transactionId: string } | null>(null);
 
+  const tileHover = useMemo(() => {
+    if (!selectedTilemap || selectedTilemap.visual?.kind !== "tilemap" || !cursorWorld) return null;
+    const visual = selectedTilemap.visual;
+    const col = Math.floor((cursorWorld.x - selectedTilemap.transform.x) / visual.tileSize);
+    const row = Math.floor((cursorWorld.y - selectedTilemap.transform.y) / visual.tileSize);
+    if (col < 0 || row < 0 || col >= visual.cols || row >= visual.rows) return null;
+    return { col, row };
+  }, [selectedTilemap, cursorWorld]);
+
   sceneRef.current = scene;
 
   useEffect(() => {
@@ -229,8 +238,8 @@ export function EngineViewport() {
     renderer.previewTransforms(preview, scene);
 
     const overlay = overlayRef.current;
-    if (overlay) drawOverlay(overlay, scene, camera, viewport, selection, hoverId, marquee, guides);
-  }, [ready, scene, document, camera, viewport, selection, hoverId, marquee, guides, preview, textureVersion]);
+    if (overlay) drawOverlay(overlay, scene, camera, viewport, selection, hoverId, marquee, guides, selectedTilemap, tileHover);
+  }, [ready, scene, document, camera, viewport, selection, hoverId, marquee, guides, preview, textureVersion, selectedTilemap, tileHover]);
 
   // Preload asset textures for the active scene/document so sprites and tilemaps can render real art.
   useEffect(() => {
@@ -1027,13 +1036,43 @@ export function EngineViewport() {
           onPointerUp={onPointerUp}
           onPointerLeave={() => setHoverId(null)}
           onDragOver={(event) => {
-            if (event.dataTransfer?.types?.includes("Files")) {
+            const types = event.dataTransfer?.types ?? [];
+            if (types.includes("Files") || types.includes("application/x-clockwork-asset")) {
               event.preventDefault();
               event.dataTransfer.dropEffect = "copy";
             }
           }}
           onDrop={(event) => {
             event.preventDefault();
+            const draggedAssetId = event.dataTransfer?.getData("application/x-clockwork-asset");
+            if (draggedAssetId) {
+              const state = useEngineStore.getState();
+              const doc = state.document;
+              const targetScene = doc?.scenes.find((candidate) => candidate.id === state.activeSceneId) ?? doc?.scenes[0] ?? null;
+              const layerId = targetScene?.layers[0]?.id;
+              const asset = doc?.assets.find((candidate) => candidate.id === draggedAssetId);
+              if (!doc || !targetScene || !layerId || !asset || doc.archivedAt) return;
+              const world = pointToWorld(localPoint(event));
+              const objectId = newObjectId();
+              const outcome = state.dispatch("object.create", {
+                sceneId: targetScene.id,
+                object: {
+                  id: objectId,
+                  name: asset.name,
+                  layerId,
+                  transform: makeTransform(world.x, world.y),
+                  visual: { kind: "sprite" as const, assetId: asset.id, frame: 0, width: asset.width, height: asset.height },
+                  behaviors: [],
+                  properties: {},
+                  tags: [],
+                },
+              });
+              if (outcome.ok) {
+                setSelection([objectId]);
+                toast.push("Sprite added", asset.name);
+              } else toast.push("Sprite failed", outcome.error);
+              return;
+            }
             const file = event.dataTransfer?.files?.[0];
             if (!file) return;
             const state = useEngineStore.getState();
@@ -1142,6 +1181,8 @@ function drawOverlay(
   hoverId: string | null,
   marquee: { x1: number; y1: number; x2: number; y2: number } | null,
   guides: { x: number[]; y: number[] },
+  tilemap: GameObject | null,
+  tileHover: { col: number; row: number } | null,
 ): void {
   overlay.clear();
   const screen = (x: number, y: number) => worldToScreen(camera, viewport, { x, y });
@@ -1206,6 +1247,32 @@ function drawOverlay(
   for (const gy of guides.y) {
     const point = screen(0, gy);
     overlay.moveTo(0, point.y).lineTo(viewport.width, point.y).stroke({ width: 1, color: 0xf4c56a, alpha: 0.8 });
+  }
+
+  if (tilemap?.visual?.kind === "tilemap") {
+    const visual = tilemap.visual;
+    const origin = screen(tilemap.transform.x, tilemap.transform.y);
+    const cell = visual.tileSize * camera.zoom;
+    const width = visual.cols * cell;
+    const height = visual.rows * cell;
+    for (let col = 0; col <= visual.cols; col += 1) {
+      const x = origin.x + col * cell;
+      overlay.moveTo(x, origin.y).lineTo(x, origin.y + height).stroke({ width: 1, color: 0x8f9dff, alpha: 0.2 });
+    }
+    for (let row = 0; row <= visual.rows; row += 1) {
+      const y = origin.y + row * cell;
+      overlay.moveTo(origin.x, y).lineTo(origin.x + width, y).stroke({ width: 1, color: 0x8f9dff, alpha: 0.2 });
+    }
+    if (tileHover) {
+      const hover = screen(
+        tilemap.transform.x + tileHover.col * visual.tileSize,
+        tilemap.transform.y + tileHover.row * visual.tileSize,
+      );
+      overlay
+        .rect(hover.x, hover.y, cell, cell)
+        .fill({ color: 0x8f9dff, alpha: 0.22 })
+        .stroke({ width: 1.5, color: 0xc7d0ff, alpha: 0.9 });
+    }
   }
 
   void scene;
