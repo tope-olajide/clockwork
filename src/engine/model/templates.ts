@@ -7,8 +7,9 @@ import {
   makeObject,
   makeScene,
   makeSettings,
+  newId,
 } from "./factory";
-import type { ProjectDocument, Scene, TemplateOrigin } from "./schema";
+import type { GameObject, Prefab, ProjectDocument, Scene, TemplateOrigin } from "./schema";
 
 const coral = "#ff856f";
 const periwinkle = "#a9b4ff";
@@ -110,42 +111,42 @@ function platformerTemplate(name: string): ProjectDocument {
     bodyType: "static",
     tags: ["ground"],
   });
-  const coinA = makeObject({
-    name: "Core A",
-    layerId: play.id,
-    x: 610,
-    y: 630,
-    width: 22,
-    height: 22,
-    color: gold,
-    visual: { kind: "rect", width: 22, height: 22, color: gold, stroke: "#fff1c4" },
-    behaviors: [makeBehavior("collectible", { variable: "coins", amount: 1 })],
-    tags: ["coin"],
-  });
-  const coinB = makeObject({
-    name: "Core B",
-    layerId: play.id,
-    x: 1080,
-    y: 500,
-    width: 22,
-    height: 22,
-    color: gold,
-    visual: { kind: "rect", width: 22, height: 22, color: gold, stroke: "#fff1c4" },
-    behaviors: [makeBehavior("collectible", { variable: "coins", amount: 1 })],
-    tags: ["coin"],
-  });
-  const coinC = makeObject({
-    name: "Core C",
-    layerId: play.id,
-    x: 1540,
-    y: 615,
-    width: 22,
-    height: 22,
-    color: gold,
-    visual: { kind: "rect", width: 22, height: 22, color: gold, stroke: "#fff1c4" },
-    behaviors: [makeBehavior("collectible", { variable: "coins", amount: 1 })],
-    tags: ["coin"],
-  });
+  const coinPrefab: Prefab = {
+    id: "pfb_coin",
+    name: "Coin",
+    root: {
+      id: "pfb_coin_root",
+      name: "Coin",
+      layerId: play.id,
+      transform: { x: 610, y: 630, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      visual: { kind: "rect", width: 22, height: 22, color: gold, stroke: "#fff1c4" },
+      behaviors: [makeBehavior("collectible", { variable: "coins", amount: 1 })],
+      properties: {},
+      tags: ["coin"],
+    },
+    objects: [],
+    params: {},
+  };
+
+  function coinInstance(name: string, x: number, y: number): GameObject {
+    return {
+      id: newId("obj"),
+      name,
+      layerId: play.id,
+      prefabId: coinPrefab.id,
+      prefabInstanceId: newId("pinst"),
+      prefabSlot: "root",
+      transform: { x, y, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      visual: { kind: "rect", width: 22, height: 22, color: gold, stroke: "#fff1c4" },
+      behaviors: [makeBehavior("collectible", { variable: "coins", amount: 1 })],
+      properties: {},
+      tags: ["coin"],
+    };
+  }
+
+  const coinA = coinInstance("Core A", 610, 630);
+  const coinB = coinInstance("Core B", 1080, 500);
+  const coinC = coinInstance("Core C", 1540, 615);
   const hazard = makeObject({
     name: "Spark hazard",
     layerId: play.id,
@@ -197,6 +198,41 @@ function platformerTemplate(name: string): ProjectDocument {
     tags: ["ui"],
   });
 
+  const winLayer = makeLayer("Win", 0);
+  const winMessage = makeObject({
+    name: "Win message",
+    layerId: winLayer.id,
+    x: 640,
+    y: 360,
+    width: 420,
+    height: 40,
+    color: "#f1f0ed",
+    visual: {
+      kind: "text",
+      text: "All cores recovered. You win!",
+      style: { font: "inter", size: 32, color: "#f1f0ed", align: "center" },
+    },
+    tags: ["ui"],
+  });
+  const winScene = makeScene({
+    name: "Win",
+    width: 1280,
+    height: 720,
+    background: "#10162a",
+    layers: [winLayer],
+    objects: [winMessage],
+    rules: [
+      {
+        id: "rul_win_message",
+        name: "Show win message",
+        enabled: true,
+        once: true,
+        when: [{ kind: "scene-start" }],
+        do: [{ kind: "show-message", text: "All cores recovered. You win!", durationMs: 2200 }],
+      },
+    ],
+  });
+
   const scene = makeScene({
     name: "Dusk Run",
     width: 2400,
@@ -206,23 +242,23 @@ function platformerTemplate(name: string): ProjectDocument {
     objects: [moon, ridge, ridgeTwo, ground, ledge, ledgeB, ledgeC, player, coinA, coinB, coinC, hazard, checkpoint, goal, hint],
     rules: [
       {
-        id: "rul_goal",
-        name: "Reach the relay",
-        enabled: true,
-        once: true,
-        when: [{ kind: "overlap", objectId: player.id, otherTag: "goal" }],
-        do: [
-          { kind: "set-variable", name: "won", op: "set", value: true },
-          { kind: "show-message", text: "Relay reached. Run complete.", durationMs: 2200 },
-        ],
-      },
-      {
-        id: "rul_core",
-        name: "Count every core",
+        id: "rul_win_scene",
+        name: "Win when all cores collected",
         enabled: true,
         once: true,
         when: [{ kind: "variable", name: "coins", op: ">=", value: 3 }],
-        do: [{ kind: "show-message", text: "All cores recovered.", durationMs: 1800 }],
+        do: [
+          { kind: "set-variable", name: "won", op: "set", value: true },
+          { kind: "go-scene", sceneId: winScene.id },
+        ],
+      },
+      {
+        id: "rul_lose",
+        name: "Lose when time runs out",
+        enabled: true,
+        once: true,
+        when: [{ kind: "variable", name: "lives", op: "<=", value: 0 }],
+        do: [{ kind: "show-message", text: "Out of lives. Try again.", durationMs: 2200 }],
       },
     ],
   });
@@ -233,16 +269,19 @@ function platformerTemplate(name: string): ProjectDocument {
     settings: makeSettings({
       background: "#10162a",
       ui: {
-        hud: [{ id: "hud_coins", variable: "coins", label: "CORES", corner: "top-left", style: "text" }],
+        hud: [{ id: "hud_coins", variable: "coins", label: "CORES", corner: "top-left", style: "text", visible: true }],
         accent: coral,
         font: "inter",
+        message: { color: "#f1f0ed", background: "rgba(11, 13, 18, 0.72)", fontSize: 20 },
       },
     }),
     startSceneId: scene.id,
-    scenes: [scene],
+    scenes: [scene, winScene],
+    prefabs: [coinPrefab],
     variables: [
       { id: "var_coins", name: "coins", type: "number", initial: 0, description: "Cores collected in the run." },
       { id: "var_won", name: "won", type: "boolean", initial: false, description: "Set when the relay is reached." },
+      { id: "var_lives", name: "lives", type: "number", initial: 3, description: "Lives remaining." },
     ],
   });
   return doc;
@@ -401,9 +440,10 @@ function topDownTemplate(name: string): ProjectDocument {
       background: "#111a2b",
       gravity: { x: 0, y: 0 },
       ui: {
-        hud: [{ id: "hud_cores", variable: "cores", label: "CORES", corner: "top-left", style: "text" }],
+        hud: [{ id: "hud_cores", variable: "cores", label: "CORES", corner: "top-left", style: "text", visible: true }],
         accent: periwinkle,
         font: "inter",
+        message: { color: "#f1f0ed", background: "rgba(11, 13, 18, 0.72)", fontSize: 20 },
       },
     }),
     startSceneId: scene.id,
@@ -525,9 +565,10 @@ function puzzleTemplate(name: string): ProjectDocument {
       background: "#141b2d",
       gravity: { x: 0, y: 0 },
       ui: {
-        hud: [{ id: "hud_keys", variable: "keys", label: "KEYS", corner: "top-left", style: "text" }],
+        hud: [{ id: "hud_keys", variable: "keys", label: "KEYS", corner: "top-left", style: "text", visible: true }],
         accent: gold,
         font: "inter",
+        message: { color: "#f1f0ed", background: "rgba(11, 13, 18, 0.72)", fontSize: 20 },
       },
     }),
     startSceneId: scene.id,

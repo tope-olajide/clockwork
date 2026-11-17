@@ -1,6 +1,11 @@
 import type { GameObject, ProjectDocument, Rule, Scene } from "../model/schema";
+import { ruleReferenceIssues } from "../model/references";
 import { playAssetSound } from "./audio";
 import { emptyInput, type InputFrame } from "./input";
+
+function effectiveVolume(master: number, channel: number): number {
+  return Math.max(0, Math.min(1, master * channel));
+}
 
 export const FIXED_DT = 1 / 60;
 
@@ -35,6 +40,9 @@ export interface RuntimeObject {
   coyoteMs: number;
   jumpBufferMs: number;
   timerMs: number;
+  animationKey: string;
+  animationTime: number;
+  animationFrame?: number;
 }
 
 export interface RuntimeSnapshot {
@@ -125,6 +133,7 @@ export class Runtime {
   checkpoint = { x: 0, y: 0 };
   lastError: string | null = null;
   private firedRules = new Set<string>();
+  private blockedRules = new Set<string>();
   private timers = new Map<string, number>();
   private lastCheckpointId: string | null = null;
   private messageId = 0;
@@ -137,7 +146,7 @@ export class Runtime {
     this.reset();
   }
 
-  reset(): void {
+  reset(options: { preserveVariables?: boolean; preserveEvents?: boolean; preserveFiredRules?: boolean; preserveInputs?: boolean } = {}): void {
     this.objects = this.scene.objects.map((source) => ({
       source: structuredClone(source),
       x: source.transform.x,
@@ -155,9 +164,16 @@ export class Runtime {
       coyoteMs: 0,
       jumpBufferMs: 0,
       timerMs: 0,
+      animationKey: "",
+      animationTime: 0,
+      animationFrame: undefined,
     }));
+    const previousVariables = this.variables;
     this.variables = {};
-    for (const variable of this.document.variables) this.variables[variable.name] = variable.initial;
+    for (const variable of this.document.variables) this.variables[variable.name] = previousVariables[variable.name] ?? variable.initial;
+    if (!options.preserveVariables) {
+      for (const variable of this.document.variables) this.variables[variable.name] = variable.initial;
+    }
     const player = this.player();
     this.checkpoint = player ? { x: player.x, y: player.y } : { x: 0, y: 0 };
     this.camera = { x: player?.x ?? this.scene.camera.x, y: player?.y ?? this.scene.camera.y, zoom: this.scene.camera.zoom };
@@ -165,10 +181,11 @@ export class Runtime {
     this.frame = 0;
     this.elapsed = 0;
     this.status = "running";
-    this.events = [];
+    if (!options.preserveEvents) this.events = [];
     this.messages = [];
-    this.recordedInputs = [];
-    this.firedRules.clear();
+    if (!options.preserveInputs) this.recordedInputs = [];
+    if (!options.preserveFiredRules) this.firedRules.clear();
+    this.blockedRules.clear();
     this.timers.clear();
     this.lastCheckpointId = null;
     this.lastError = null;
@@ -246,6 +263,7 @@ export class Runtime {
       this.integratePhysics();
       this.checkInteractions();
       this.evaluateRules(input);
+      this.updateAnimations();
       this.updateCamera();
       this.updateMessages();
     } catch (error) {
@@ -420,7 +438,7 @@ export class Runtime {
         this.setVariable(variable, "add", amount);
         if (boolParam(params, "destroyOnCollect", true)) object.active = false;
         const sfx = stringParam(params, "sfxAssetId", "");
-        if (sfx) void playAssetSound(sfx);
+        if (sfx) void playAssetSound(sfx, effectiveVolume(this.document.settings.audio.masterVolume, this.document.settings.audio.sfxVolume));
         this.event("collect", `${object.source.name} collected`, object.source.id);
         continue;
       }
@@ -494,6 +512,14 @@ export class Runtime {
     for (const rule of this.scene.rules) {
       if (!rule.enabled || budget <= 0) continue;
       if (rule.once && this.firedRules.has(rule.id)) continue;
+      const issues = ruleReferenceIssues(this.document, this.scene, rule);
+      if (issues.length > 0) {
+        if (!this.blockedRules.has(rule.id)) {
+          this.blockedRules.add(rule.id);
+          this.event("rule-blocked", `${rule.name}: ${issues[0]!.message}`);
+        }
+        continue;
+      }
       if (!rule.when.every((condition) => this.conditionMet(condition, input))) continue;
       if (rule.once) this.firedRules.add(rule.id);
       this.event("rule", `${rule.name} fired`);
@@ -502,11 +528,16 @@ export class Runtime {
         budget -= 1;
         if (action.kind === "set-variable") this.setVariable(action.name, action.op, action.value);
         else if (action.kind === "show-message") this.message(action.text, action.durationMs ?? 2000);
-        else if (action.kind === "play-sound") void playAssetSound(action.assetId, action.volume ?? this.document.settings.audio.sfxVolume);
+        else if (action.kind === "play-sound") {
+          const volume = action.volume ?? this.document.settings.audio.sfxVolume;
+          void playAssetSound(action.assetId, effectiveVolume(this.document.settings.audio.masterVolume, volume));
+        }
         else if (action.kind === "log") this.event("log", action.message);
         else if (action.kind === "destroy") {
           const target = action.target === "object" && action.objectId ? this.objects.find((object) => object.source.id === action.objectId) : undefined;
           if (target) target.active = false;
+        } else if (action.kind === "spawn") {
+          this.spawnPrefab(action.prefabId, action.x, action.y);
         } else if (action.kind === "set-behavior-param") {
           const object = this.objects.find((candidate) => candidate.source.id === action.objectId);
           const behavior = object?.source.behaviors.find((candidate) => candidate.id === action.behaviorId);
@@ -519,11 +550,58 @@ export class Runtime {
     }
   }
 
+  private spawnPrefab(prefabId: string, x: number, y: number): void {
+    const prefab = this.document.prefabs.find((candidate) => candidate.id === prefabId);
+    if (!prefab) return;
+    const sources = [prefab.root, ...prefab.objects];
+    const ids = new Map<string, string>();
+    const instanceId = `pinst_${this.frame}_${this.objects.length}`;
+    const dx = x - prefab.root.transform.x;
+    const dy = y - prefab.root.transform.y;
+    for (const source of sources) {
+      const clone = structuredClone(source);
+      clone.id = `obj_${this.frame}_${this.objects.length}_${ids.size}`;
+      ids.set(source.id, clone.id);
+      clone.transform = { ...clone.transform, x: clone.transform.x + dx, y: clone.transform.y + dy };
+      clone.prefabId = prefab.id;
+      clone.prefabInstanceId = instanceId;
+      clone.prefabSlot = source.id === prefab.root.id ? "root" : `obj:${prefab.objects.indexOf(source)}`;
+      this.objects.push({
+        source: clone,
+        x: clone.transform.x,
+        y: clone.transform.y,
+        rotation: clone.transform.rotation,
+        scaleX: clone.transform.scaleX,
+        scaleY: clone.transform.scaleY,
+        vx: 0,
+        vy: 0,
+        grounded: false,
+        active: true,
+        spawnX: clone.transform.x,
+        spawnY: clone.transform.y,
+        airJumps: 0,
+        coyoteMs: 0,
+        jumpBufferMs: 0,
+        timerMs: 0,
+        animationKey: "",
+        animationTime: 0,
+        animationFrame: undefined,
+      });
+    }
+    for (const object of this.objects) {
+      if (object.source.prefabInstanceId !== instanceId || !object.source.parentId) continue;
+      object.source.parentId = ids.get(object.source.parentId) ?? undefined;
+      if (!object.source.parentId) delete object.source.parentId;
+    }
+    this.event("spawn", `${prefab.name} spawned`);
+  }
+
   transition(sceneId: string): void {
     const next = this.document.scenes.find((scene) => scene.id === sceneId);
     if (!next) return;
     this.scene = next;
-    this.reset();
+    this.reset({ preserveVariables: true, preserveEvents: true, preserveFiredRules: true, preserveInputs: true });
+    if (this.variables.won === true) this.status = "won";
   }
 
   setViewport(width: number, height: number): void {
@@ -568,22 +646,53 @@ export class Runtime {
     this.messages = this.messages.filter((message) => message.remainingMs > 0);
   }
 
+  private updateAnimations(): void {
+    for (const object of this.objects) {
+      if (!object.active) continue;
+      const assignments = object.source.animations;
+      if (!assignments || object.source.visual?.kind !== "sprite") continue;
+      const key = !object.grounded ? "jump" : Math.abs(object.vx) > 1 ? "run" : "idle";
+      const animationId = assignments[key as keyof typeof assignments] ?? assignments.idle;
+      if (!animationId) continue;
+      const visual = object.source.visual;
+      if (visual.kind !== "sprite") continue;
+      const asset = this.document.assets.find((candidate) => candidate.id === visual.assetId);
+      const clip = asset?.animations?.find((candidate) => candidate.id === animationId);
+      if (!clip || clip.frameIndices.length === 0) continue;
+      if (object.animationKey !== animationId) {
+        object.animationKey = animationId;
+        object.animationTime = 0;
+      }
+      object.animationTime += FIXED_DT;
+      const rawIndex = Math.floor(object.animationTime * clip.fps);
+      const index = clip.loop ? rawIndex % clip.frameIndices.length : Math.min(clip.frameIndices.length - 1, rawIndex);
+      object.animationFrame = clip.frameIndices[index] ?? clip.frameIndices[0];
+    }
+  }
+
   renderScene(): Scene {
     return {
       ...this.scene,
       objects: this.objects
         .filter((object) => object.active)
-        .map((object) => ({
-          ...object.source,
-          transform: {
-            ...object.source.transform,
-            x: object.x,
-            y: object.y,
-            rotation: object.rotation,
-            scaleX: object.scaleX,
-            scaleY: object.scaleY,
-          },
-        })),
+        .map((object) => {
+          const visual =
+            object.source.visual?.kind === "sprite" && object.animationFrame !== undefined
+              ? { ...object.source.visual, frame: object.animationFrame }
+              : object.source.visual;
+          return {
+            ...object.source,
+            visual,
+            transform: {
+              ...object.source.transform,
+              x: object.x,
+              y: object.y,
+              rotation: object.rotation,
+              scaleX: object.scaleX,
+              scaleY: object.scaleY,
+            },
+          };
+        }),
     };
   }
 

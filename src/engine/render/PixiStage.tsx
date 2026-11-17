@@ -72,6 +72,7 @@ type Gesture = GestureMove | GestureScale | GestureRotate | GesturePan | Gesture
 
 const HANDLE_SIZE = 7;
 const ROTATE_OFFSET = 26;
+const sceneCameraCache = new Map<string, CameraState>();
 
 interface ContextMenuState {
   x: number;
@@ -251,8 +252,13 @@ export function EngineViewport() {
   // Fit the scene when it changes or when the viewport first becomes measurable.
   useEffect(() => {
     if (!scene || viewport.width === 0 || viewport.height === 0) return;
-    setCamera(fitCamera(viewport, scene.size));
+    const cached = sceneCameraCache.get(scene.id);
+    setCamera(cached ?? fitCamera(viewport, scene.size));
   }, [scene?.id, viewport.width > 0, viewport.height > 0]);
+
+  useEffect(() => {
+    if (scene) sceneCameraCache.set(scene.id, camera);
+  }, [scene?.id, camera]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

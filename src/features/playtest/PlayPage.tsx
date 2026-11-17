@@ -8,7 +8,7 @@ import { ensureTexture, getTexture } from "../../engine/render/texture-cache";
 import { SceneRenderer } from "../../engine/render/scene-renderer";
 import { InputManager } from "../../engine/runtime/input";
 import { FIXED_DT, Runtime } from "../../engine/runtime/runtime";
-import { unlockAudio } from "../../engine/runtime/audio";
+import { playSceneMusic, setSceneMusicVolume, stopSceneMusic, unlockAudio } from "../../engine/runtime/audio";
 import { useEngineStore } from "../../engine/store/engine-store";
 
 function formatTime(seconds: number): string {
@@ -67,6 +67,7 @@ export function PlayPage() {
       runtimeRef.current = null;
       inputRef.current = null;
       setPlaytestRunning(false);
+      stopSceneMusic();
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
@@ -123,6 +124,13 @@ export function PlayPage() {
           const height = host.clientHeight;
           runtime.setViewport(width, height);
           const scene = runtime.renderScene();
+          const musicVolume = (current.settings.audio.masterVolume ?? 1) * (current.settings.audio.musicVolume ?? 1) * (scene.audio?.volume ?? 1);
+          if (scene.audio?.musicAssetId) {
+            void playSceneMusic(scene.audio.musicAssetId, musicVolume, scene.audio.loop ?? true);
+            setSceneMusicVolume(musicVolume);
+          } else {
+            stopSceneMusic();
+          }
           renderer.render(scene, current, textureVersionRef.current);
           renderer.applyCamera(scene, runtime.camera);
           renderer.root.position.set(width / 2 - runtime.camera.x * runtime.camera.zoom, height / 2 - runtime.camera.y * runtime.camera.zoom);
@@ -302,13 +310,13 @@ export function PlayPage() {
       <main className="player-stage play-stage">
         <div className="play-viewport" ref={hostRef}>
           <div className="play-hud">
-            {hud.map((widget) => {
+            {hud.filter((widget) => widget.visible !== false).map((widget) => {
               const value = snapshot?.variables[widget.variable];
               return (
                 <div key={widget.id} className={`play-hud-widget ${widget.corner}`}>
                   <span>{widget.label}</span>
                   {widget.style === "bar" ? (
-                    <span className="play-hud-bar">
+                    <span className="play-hud-bar" aria-label={`${widget.label} ${String(value ?? 0)} of ${widget.max ?? 1}`}>
                       <span style={{ width: `${Math.min(100, (Number(value ?? 0) / (widget.max ?? 1)) * 100)}%` }} />
                     </span>
                   ) : (
@@ -318,7 +326,17 @@ export function PlayPage() {
               );
             })}
             {snapshot?.messages.map((message) => (
-              <div key={message.id} className="play-message">{message.text}</div>
+              <div
+                key={message.id}
+                className="play-message"
+                style={{
+                  color: current.settings.ui.message.color,
+                  background: current.settings.ui.message.background,
+                  fontSize: `${current.settings.ui.message.fontSize}px`,
+                }}
+              >
+                {message.text}
+              </div>
             ))}
           </div>
           {debug && (

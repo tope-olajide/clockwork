@@ -92,16 +92,35 @@ export const behaviorInstanceSchema = z.object({
   params: z.record(z.string(), z.unknown()).default({}),
 });
 
+export const animationClipSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(80),
+  frameIndices: z.array(z.number().int().nonnegative()),
+  fps: z.number().positive(),
+  loop: z.boolean(),
+});
+
+export const animationAssignmentsSchema = z.object({
+  idle: z.string().optional(),
+  run: z.string().optional(),
+  jump: z.string().optional(),
+});
+
 export const gameObjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(80),
   layerId: z.string().min(1),
   parentId: z.string().optional(),
   prefabId: z.string().optional(),
+  prefabInstanceId: z.string().optional(),
+  prefabSlot: z.string().optional(),
+  /** Top-level fields changed on this instance and preserved by prefab updates. */
+  prefabOverrides: z.record(z.string(), z.unknown()).optional(),
   transform: transformSchema,
   visual: visualSchema.optional(),
   body: bodySchema.optional(),
   behaviors: z.array(behaviorInstanceSchema).default([]),
+  animations: animationAssignmentsSchema.optional(),
   properties: z.record(z.string(), z.unknown()).default({}),
   tags: z.array(z.string()).default([]),
 });
@@ -199,17 +218,7 @@ export const assetSchema = z.object({
   slices: z
     .array(z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }))
     .optional(),
-  animations: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        frameIndices: z.array(z.number().int().nonnegative()),
-        fps: z.number().positive(),
-        loop: z.boolean(),
-      }),
-    )
-    .optional(),
+  animations: z.array(animationClipSchema).optional(),
 });
 
 export const prefabSchema = z.object({
@@ -229,6 +238,22 @@ export const variableSchema = z.object({
   description: z.string().optional(),
 });
 
+export const hudWidgetSchema = z.object({
+  id: z.string(),
+  variable: z.string(),
+  label: z.string(),
+  corner: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]),
+  style: z.enum(["text", "bar"]),
+  max: z.number().positive().optional(),
+  visible: z.boolean().default(true),
+});
+
+export const messageStyleSchema = z.object({
+  background: z.string().default("#0b0d12"),
+  color: z.string().default("#f1f0ed"),
+  fontSize: z.number().positive().default(22),
+});
+
 export const projectSettingsSchema = z.object({
   width: z.number().int().positive().default(1280),
   height: z.number().int().positive().default(720),
@@ -245,20 +270,16 @@ export const projectSettingsSchema = z.object({
       jump: ["Space", "KeyW"],
       action: ["KeyE", "Enter"],
     }),
-  audio: z.object({ musicVolume: z.number().min(0).max(1).default(0.6), sfxVolume: z.number().min(0).max(1).default(0.8) }),
+  audio: z.object({
+    masterVolume: z.number().min(0).max(1).default(0.8),
+    musicVolume: z.number().min(0).max(1).default(0.6),
+    sfxVolume: z.number().min(0).max(1).default(0.8),
+  }),
   ui: z.object({
-    hud: z.array(
-      z.object({
-        id: z.string(),
-        variable: z.string(),
-        label: z.string(),
-        corner: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]),
-        style: z.enum(["text", "bar"]),
-        max: z.number().positive().optional(),
-      }),
-    ).default([]),
+    hud: z.array(hudWidgetSchema).default([]),
     accent: z.string().default("#ff856f"),
     font: z.enum(["inter", "mono"]).default("inter"),
+    message: messageStyleSchema.default({ background: "#0b0d12", color: "#f1f0ed", fontSize: 22 }),
   }),
 });
 
@@ -292,8 +313,12 @@ export type Rule = z.infer<typeof ruleSchema>;
 export type Condition = z.infer<typeof conditionSchema>;
 export type RuleAction = z.infer<typeof ruleActionSchema>;
 export type Asset = z.infer<typeof assetSchema>;
+export type AnimationClip = z.infer<typeof animationClipSchema>;
+export type AnimationAssignments = z.infer<typeof animationAssignmentsSchema>;
 export type Prefab = z.infer<typeof prefabSchema>;
 export type Variable = z.infer<typeof variableSchema>;
+export type HudWidget = z.infer<typeof hudWidgetSchema>;
+export type MessageStyle = z.infer<typeof messageStyleSchema>;
 export type ProjectRecord = {
   id: string;
   name: string;

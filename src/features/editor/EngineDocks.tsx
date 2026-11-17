@@ -20,13 +20,13 @@ import {
   Button,
   Input,
   NumberInput,
-  Tabs,
-  TabsContent,
   Tooltip,
   useToast,
 } from "../../components/ui";
+import { behaviorSpec, BEHAVIOR_CATALOG } from "../../engine/model/behavior-catalog";
 import { makeBehavior, makeBody, makeLayer, makeObject, makeTransform, newObjectId } from "../../engine/model/factory";
 import type {
+  BehaviorInstance,
   BehaviorType,
   GameObject,
   Layer,
@@ -34,25 +34,15 @@ import type {
 } from "../../engine/model/schema";
 import { useEngineStore } from "../../engine/store/engine-store";
 import { EngineViewport } from "../../engine/render/PixiStage";
+import { LogicPage } from "../logic/LogicPage";
+import { ContentPage } from "../content/ContentPage";
+import { PresentationPage } from "../presentation/PresentationPage";
 
 export type WorkspaceTab = "scene" | "content" | "logic" | "presentation";
 export type PresentationTab = "look" | "animation" | "audio" | "ui";
 export type InspectorTab = "scene" | "object";
 
-const BEHAVIOR_TYPES: BehaviorType[] = [
-  "platformer-controller",
-  "top-down-controller",
-  "patrol",
-  "follow",
-  "collectible",
-  "hazard",
-  "checkpoint",
-  "camera-follow",
-  "spawner",
-  "timer",
-  "variable-set",
-  "health",
-];
+const BEHAVIOR_TYPES: BehaviorType[] = BEHAVIOR_CATALOG.map((spec) => spec.type);
 
 function TinyButton({
   label,
@@ -494,7 +484,7 @@ export function EngineLeftDock() {
                     }}
                   />
                 ) : (
-                  <span className="object-name">{object.name}</span>
+                  <span className="object-name">{object.name}{object.prefabId ? " · prefab" : ""}{object.prefabOverrides ? " *" : ""}</span>
                 )}
                 <span className="row-meta">{layer?.name ?? "No layer"} · {object.visual?.kind ?? "empty"}</span>
                 <span className="row-actions">
@@ -874,16 +864,14 @@ function ObjectInspector({
         <div className="inspector-section-title">Behaviors</div>
         {object.behaviors.length === 0 && <p className="panel-helper">No behaviors on this object.</p>}
         {object.behaviors.map((behavior) => (
-          <div className="behavior-row" key={behavior.id}>
-            <Box size={12} />
-            <span className="input-mono">{behavior.type}</span>
-            <TinyButton
-              label={`Remove ${behavior.type}`}
-              icon={<Trash2 size={11} />}
-              disabled={readOnly}
-              onClick={() => onRemoveBehavior(behavior.id)}
-            />
-          </div>
+          <BehaviorEditor
+            key={behavior.id}
+            behavior={behavior}
+            readOnly={readOnly}
+            sceneId={scene.id}
+            objectId={object.id}
+            onRemove={() => onRemoveBehavior(behavior.id)}
+          />
         ))}
         <div className="behavior-add">
           <select className="input" value={behaviorType} onChange={(event) => setBehaviorType(event.target.value as BehaviorType)} aria-label="Behavior type" disabled={readOnly}>
@@ -894,6 +882,17 @@ function ObjectInspector({
           </Button>
         </div>
       </section>
+      {object.prefabId && (
+        <section className="inspector-section">
+          <div className="inspector-section-title">Prefab</div>
+          <div className="details-list">
+            <div className="detail-row"><span>Prefab</span><span className="value input-mono">{object.prefabId}</span></div>
+            <div className="detail-row"><span>Instance</span><span className="value input-mono">{object.prefabInstanceId ?? "—"}</span></div>
+            <div className="detail-row"><span>Overrides</span><span className="value">{object.prefabOverrides ? Object.keys(object.prefabOverrides).join(", ") : "none"}</span></div>
+          </div>
+          <p className="panel-helper">Manage detach/revert in the Content workspace.</p>
+        </section>
+      )}
       <Button variant="primary" className="inspector-save" onClick={save} disabled={readOnly}>
         Save object
       </Button>
@@ -907,77 +906,104 @@ export function EngineWorkspace({
   tab,
   presentationTab,
   onPresentationTab,
-  onToast,
 }: {
   tab: WorkspaceTab;
   presentationTab: PresentationTab;
   onPresentationTab: (tab: PresentationTab) => void;
   onToast: (title: string, message?: string) => void;
 }) {
-  const { document, scene } = useActiveScene();
-
   if (tab === "scene") return <EngineViewport />;
-
-  if (tab === "presentation") {
-    return (
-      <div className="workspace-placeholder" style={{ margin: "20px auto", width: "min(760px, calc(100% - 40px))" }}>
-        <h2>Presentation</h2>
-        <p>Look, animation, audio, and Game UI live inside this workspace, not in the top navigation.</p>
-        <div style={{ marginTop: 16 }}>
-          <Tabs
-            value={presentationTab}
-            onValueChange={(value) => onPresentationTab(value as PresentationTab)}
-            items={[
-              { value: "look", label: "Look" },
-              { value: "animation", label: "Animation" },
-              { value: "audio", label: "Audio" },
-              { value: "ui", label: "Game UI" },
-            ]}
-          >
-            <TabsContent value={presentationTab}>
-              <div style={{ paddingTop: 12 }}>
-                <div className="field-grid" style={{ maxWidth: 430 }}>
-                  <label className="field-row"><span>Resolution</span><span className="value">{document?.settings.width ?? 1280} × {document?.settings.height ?? 720}</span></label>
-                  <label className="field-row"><span>Pixel art</span><span className="value">{document?.settings.pixelArt ? "On" : "Off"}</span></label>
-                  <label className="field-row"><span>Scene background</span><span className="value input-mono">{scene?.background.color ?? "—"}</span></label>
-                  <label className="field-row"><span>Camera zoom</span><span className="value">{scene?.camera.zoom ?? 1}</span></label>
-                </div>
-                <Button variant="secondary" size="sm" style={{ marginTop: 12 }} onClick={() => onToast("Presentation", "Visual editing arrives in Slice 5. Project settings are editable in the project overview.")}>
-                  Open project settings
-                </Button>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+  if (tab === "logic") return <LogicPage />;
+  if (tab === "content") return <ContentPage />;
+  return (
+    <div className="workspace-placeholder" style={{ margin: "20px auto", width: "min(980px, calc(100% - 40px))", height: "calc(100% - 40px)", maxHeight: "none" }}>
+      <h2 style={{ marginBottom: 8 }}>Presentation</h2>
+      <div className="inspector-segment" role="group" aria-label="Presentation tabs" style={{ marginBottom: 12 }}>
+        {([
+          ["look", "Look"],
+          ["animation", "Animation"],
+          ["audio", "Audio"],
+          ["ui", "Game UI"],
+        ] as const).map(([value, label]) => (
+          <button key={value} aria-pressed={presentationTab === value} onClick={() => onPresentationTab(value)}>
+            {label}
+          </button>
+        ))}
       </div>
-    );
-  }
-
-  if (tab === "content") {
-    return (
-      <div className="workspace-placeholder" style={{ margin: "auto", width: "min(720px, calc(100% - 40px))" }}>
-        <h2>Content</h2>
-        <p>Scene authoring lives here: object palette, prefabs, tilesets, and animation clips.</p>
-        <div className="details-list" style={{ marginTop: 14 }}>
-          <div className="detail-row"><span>Objects</span><span className="value">{scene?.objects.length ?? 0}</span></div>
-          <div className="detail-row"><span>Assets</span><span className="value">{document?.assets.length ?? 0}</span></div>
-          <div className="detail-row"><span>Prefabs</span><span className="value">{document?.prefabs.length ?? 0}</span></div>
-          <div className="detail-row"><span>Layers</span><span className="value">{scene?.layers.length ?? 0}</span></div>
-        </div>
-        <p className="panel-helper" style={{ marginTop: 12 }}>Asset and prefab authoring arrive in Slice 3.</p>
+      <div style={{ overflow: "auto", flex: 1, minHeight: 0 }}>
+        <PresentationPage tab={presentationTab} />
       </div>
-    );
+    </div>
+  );
+}
+
+function BehaviorEditor({
+  behavior,
+  sceneId,
+  objectId,
+  readOnly,
+  onRemove,
+}: {
+  behavior: BehaviorInstance;
+  sceneId: string;
+  objectId: string;
+  readOnly: boolean;
+  onRemove: () => void;
+}) {
+  const dispatch = useEngineStore((state) => state.dispatch);
+  const spec = behaviorSpec(behavior.type);
+
+  function updateParam(key: string, value: unknown) {
+    dispatch("behavior.update", { sceneId, objectId, behaviorId: behavior.id, patch: { params: { [key]: value } } });
   }
 
   return (
-    <div className="workspace-placeholder" style={{ margin: "auto", width: "min(720px, calc(100% - 40px))" }}>
-      <h2>Logic</h2>
-      <p>Variables and rules are stored in this project. Visual editing arrives in Slice 5.</p>
-      <div className="details-list" style={{ marginTop: 14 }}>
-        <div className="detail-row"><span>Variables</span><span className="value">{document?.variables.length ?? 0}</span></div>
-        <div className="detail-row"><span>Rules</span><span className="value">{scene?.rules.length ?? 0}</span></div>
-        <div className="detail-row"><span>Input map</span><span className="value">{document ? Object.keys(document.settings.inputMap).join(" · ") : "—"}</span></div>
+    <div className="behavior-editor">
+      <div className="behavior-row">
+        <Box size={12} />
+        <span className="input-mono">{spec.label}</span>
+        <label className="logic-check" style={{ marginLeft: "auto" }}>
+          <input
+            type="checkbox"
+            checked={behavior.enabled}
+            disabled={readOnly}
+            aria-label={`${spec.label} enabled`}
+            onChange={(event) => dispatch("behavior.update", { sceneId, objectId, behaviorId: behavior.id, patch: { enabled: event.target.checked } })}
+          />
+          On
+        </label>
+        <TinyButton label={`Remove ${spec.label}`} icon={<Trash2 size={11} />} disabled={readOnly} onClick={onRemove} />
       </div>
+      {spec.params.length > 0 && (
+        <div className="behavior-param-grid">
+          {spec.params.map((param) => {
+            const value = behavior.params[param.key] ?? param.default;
+            if (param.type === "boolean") {
+              return (
+                <label key={param.key} className="logic-check">
+                  <input type="checkbox" checked={Boolean(value)} disabled={readOnly} onChange={(event) => updateParam(param.key, event.target.checked)} />
+                  {param.label}
+                </label>
+              );
+            }
+            return (
+              <label key={param.key} className="field-row">
+                <span>{param.label}</span>
+                <Input
+                  value={String(value ?? "")}
+                  disabled={readOnly}
+                  aria-label={`${spec.label} ${param.label}`}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    if (param.type === "number") updateParam(param.key, raw === "" ? 0 : Number(raw));
+                    else updateParam(param.key, raw);
+                  }}
+                />
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

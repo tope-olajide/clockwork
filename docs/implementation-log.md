@@ -43,10 +43,10 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - `pnpm typecheck`: pass (`tsc -b`, exit 0).
 - `pnpm build`: pass (`tsc -b && vite build`, Vite 7.3.8, 653.01 kB JS / 200.46 kB gzip, 53.53 kB CSS / 13.00 kB gzip). Existing third-party annotation/chunk-size warnings only.
 - Manual script (headless Chrome against production preview, fresh profile / DB resets): 
-  - **Dashboard/templates:** app loads with demo seed; `From brief` disabled with "Available in Slice 7…" reason. Created projects via `New project` from **Blank**, **Template: Platformer**, **Template: Top-down**, and **Template: Puzzle**; debug JSON showed expected document shapes (blank: 1 scene, 0 objects, 0 vars; platformer: `coins`/`won` vars and 15 objects; top-down: 10 objects, 3 layers, 2 vars; puzzle: 39 objects, 3 layers, 2 vars).
+  - **Dashboard/templates:** app loads with demo seed; `From brief` disabled with \"Available in Slice 7…\" reason. Created projects via `New project` from **Blank**, **Template: Platformer**, **Template: Top-down**, and **Template: Puzzle**; debug JSON showed expected document shapes (blank: 1 scene, 0 objects, 0 vars; platformer: `coins`/`won` vars and 15 objects; top-down: 10 objects, 3 layers, 2 vars; puzzle: 39 objects, 3 layers, 2 vars).
   - **Persist/reload:** each created project reloaded with unchanged name/revision/scene/object counts.
   - **Command bus + revision/undo/redo (evidenced):** `Add scene` +1 revision (scene count increased), `Undo` +1 revision and reverted, `Redo` +1 revision and reapplied. `Add layer` +1 revision. Undo/redo correctness required fixes: enabled Immer `enablePatches()` in the command runner and made undo/redo apply patches immutably while bumping revision. **Fix applied: stored prevRevision in history entries, undo sets revision to prevRevision, redo sets to prevRevision + 1.**
-  - **Import + data identity:** imported a valid `.clockwork.json` transfer (`format: "clockwork-project"`, version 1, `project` document) via Import mode; project opened and debug/document state matched source exactly (id, name, revision, scene/layer/object/variable counts) — verifying import-mode creation and transfer round-trip identity of document data.
+  - **Import + data identity:** imported a valid `.clockwork.json` transfer (`format: \"clockwork-project\"`, version 1, `project` document) via Import mode; project opened and debug/document state matched source exactly (id, name, revision, scene/layer/object/variable counts) — verifying import-mode creation and transfer round-trip identity of document data.
   - **Scene management:** delete scene performed from project overview (scene row removed).
   - **Corrupted recovery:** a deliberately corrupted stored document produced the unavailable/damaged project recovery UI (not a broken editor).
   - **Dashboard actions present:** project action menu exposes Open/Rename/Duplicate/Export/Archive/Delete controls; archive/duplicate/delete/export UI flows are implemented and wired to persistence/transfer.
@@ -115,7 +115,7 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - **Per-mutation revision/undo:** add object, add layer, add scene, rename object (double-click), delete object and delete layer each produced exactly one revision and one undo entry, and undo restored the prior revision, history and object/layer/scene counts. Scene delete from the overview produced exactly one revision and left an undo entry.
 - **Rename:** dashboard `Rename` (prompt) updated the card to `Gate Renamed` and survived reload.
 - **Start scene:** setting the second scene as start updated the overview stat and row marker, survived reload, and deleting that scene fell the start scene back to `Dusk Run`.
-- **Malformed import:** importing `{format:"not-clockwork",version:99}` showed `Import failed — This is not a Clockwork project file.` and created no project card.
+- **Malformed import:** importing `{format:\"not-clockwork\",version:99}` showed `Import failed — This is not a Clockwork project file.` and created no project card.
 - **No regressions / console:** no console errors across both runs.
 - **Multi-select inspector:** selecting Player + Relay shows the shared-transform panel with mixed-value fields; setting X=500 and applying moved both objects in exactly one revision and one undo entry, and undo restored both.
 - **Group:** Group selection works from the inspector and from the canvas context menu. It creates a group parent in one revision with the selected objects as children; undo removes it. The canvas items read `Group selection (2)` for multi-select.
@@ -140,7 +140,7 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Date: 2026-11-17
 - `pnpm typecheck` / `pnpm build`: pass.
 - Browser evidence: headless Chrome 1440×900, one fresh cold profile, production preview on `127.0.0.1:4173`, CDP-driven, dialogs and downloads handled. **45/45 checks pass; no console errors.**
-- **Bug fixed before the run:** `/project/:id?section=project` rendered the overview because the render branch only tested placeholder sections (`section` was `null` for `project`). The settings panel was therefore unreachable from every Settings entry point. The branch now keys off `sectionKey === "project"`; the consolidated run exercises the real settings panel for read-only state, rename, start scene, save, export and import.
+- **Bug fixed before the run:** `/project/:id?section=project` rendered the overview because the render branch only tested placeholder sections (`section` was `null` for `project`). The settings panel was therefore unreachable from every Settings entry point. The branch now keys off `sectionKey === \"project\"`; the consolidated run exercises the real settings panel for read-only state, rename, start scene, save, export and import.
 - **Coverage in one pass:** demo seeding; dashboard rename plus reload persistence; search; template filter; status filter; archive → archived read-only overview and disabled settings controls → restore; Blank creation; add object/layer/scene, object rename, delete object/layer each at exactly one revision and one undo entry; undo revision rollback and redo restore; `Unsaved → Saving… → Saved`; reload restores revision/content/save pill; settings start-scene select plus overview stat; start-scene deletion fallback; settings rename; settings export file and payload; settings import round-trip; overview Play/Share disabled with Slice 4/8 titles; Template creation; malformed import rejected via `Import failed` toast with no project created; 21 MB import rejected with a disabled Create button; duplicate gets a new id and disjoint object ids; corrupted document recovery panel and `Delete damaged project`; zero console errors.
 - **Gate status:** Slice 1 acceptance is fully evidenced in a single clean pass. Slice 2 checks not repeated here remain as noted above.
 
@@ -179,7 +179,7 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
   - camera deadzone ignores a 40 px move (1000 → 1000) and follows a 200 px move (→1024);
   - identical seed + 300 input frames produce identical snapshots (887 chars);
   - a synthetic runtime failure reports `Dusk Run (scene-id) · Player (object-id)` and stops without throwing;
-  - document `dispatch` returns `{ok:false, code:"READ_ONLY"}` while `playtestRunning`.
+  - document `dispatch` returns `{ok:false, code:\"READ_ONLY\"}` while `playtestRunning`.
 - **Renderer check: pass.** `SceneRenderer.applyCamera` at camera x=1600 produced sky=380, far=280, play=0, UI=400 px, matching each layer’s configured parallax factor.
 - **Browser evidence — cold profile, 1366×768, production preview, CDP-driven:**
   - Overview `Play start scene` navigated to `/play/:projectId`, loaded the start scene (`scn_Odt_j-svgs`), showed `PLAYING`, `READ-ONLY`, HUD `CORES 0`, and the runtime console.
@@ -197,9 +197,29 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
   - Checkpoints logged every frame while overlapping; they now log once per checkpoint.
   - Parallax forced the first layer to factor 1; all layers now use their configured factors.
   - Static-body collision now honors `body.offsetX/offsetY`, matching dynamic-body collision.
-- **Viewports checked:** 1366×768 (cold profile). 1440×900 and other sizes were not re-run for this slice.
+- Viewports checked: 1366×768 (cold profile). 1440×900 and other sizes were not re-run for this slice.
 - **Console:** no page-level exceptions in the final browser passes.
 - **Acceptance: 10/10 checked.** Platformer flow, configured double jump/coyote/buffer, camera/parallax, pause/step/reset, scoped runtime errors, deterministic traces, ≥59 fps telemetry, read-only dispatch plus rail/Overview entry, no-model manual Play (the Play route has no AI/Kane dependency), and typecheck/build.
 - **Features completed:** four Runtime features added to `features.md` (Manual Play, Platformer run, Camera/HUD/messages, Play controls/telemetry/determinism).
 - **New known issues:** Play is a separate route; replay has no UI control; audio/music paths were not exercised because the template has no audio assets; telemetry is not yet exposed to the agent; the Slice 3 gate remains unlogged.
 - **Known limitations:** runtime physics is deterministic single-player AABB with static bodies and tilemap tiles; no rotation collision or rigid-body solver.
+
+## Slice 5 — Logic authoring, prefabs, presentation (partial, in progress)
+
+- Date: 2026-11-17
+- Commit: (uncommitted; implementation in working tree)
+- `pnpm typecheck`: pass (`tsc -b`, exit 0).
+- `pnpm build`: pass (`tsc -b && vite build`, exit 0). Vite chunk-size warning only.
+- Manual script (headless Chrome 1366×768, cold profiles, production preview `http://localhost:4174`, CDP-driven, temporary harness files deleted after runs):
+  - Created a new Platformer project from the dashboard and opened the editor at `/project/:id/scene/:sceneId`.
+  - Switched to **Presentation** and verified subtab URL state: `?tab=presentation&ptab=look`, `&ptab=animation`, `&ptab=audio`, and `&ptab=ui` updated on click; reloading with `ptab=ui` preserved `ptab=ui`.
+  - Switched to **Content** and **Logic** workspaces; Logic text showed template variables/rules context including `coins` and win-related content, and Content showed prefab controls including Coin.
+  - From Content, set prefab instance count to 10 and clicked Instantiate; the command completed without a `structuredClone` cloning error and the project revision advanced (e.g. `r0` → `r1` in the gate run).
+  - Opened Play route `/play/:projectId`; Play loaded in `running` state with HUD present and variables `{"coins":0,"won":false,"lives":3}` observed on the player root.
+  - Fixed during verification: prefab/command cloning now unwraps Immer drafts before `structuredClone` (instantiate no longer throws in command execution), and Presentation workspace now exposes subtab controls that update `?ptab=`.
+- Viewports checked: 1366×768 (headless, cold profile). 1440×900/1920×1080/1024 drawer not re-run.
+- Console: not exhaustively audited in this pass.
+- Acceptance: **not closed** (partial evidence only; full Slice 5 gate not completed in one clean run).
+- Features completed: none added to `features.md` (Slice 5 gate not complete/fully verified).
+- New known issues: added Slice 5 verification gaps and limitations to `docs/known-issues.md`.
+- Known limitations: end-to-end acceptance for rule authoring/play (“coins == 3 → go to Win scene” once from editor-created flow), stale/deleted-reference refusal UX, gravity/jump inspector affecting playtest, input rebinding to `KeyW` in play and duplicate-binding conflict warnings, prefab instantiate×10/update/override survival/detach behaviors, HUD bound updates/bar/max/hide in play, `show-message` duration clearing, per-scene music/SFX volume behavior, animation clip preview and runtime playback, and viewport camera preservation across Scene/Content/Logic/Presentation switches were not fully browser-verified in this pass. Audio/music assets and audible playback were not exercised. Runtime behavior is implemented in code paths but requires targeted manual/automated evidence before gate closure.

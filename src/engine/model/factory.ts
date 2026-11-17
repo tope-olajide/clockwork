@@ -7,6 +7,7 @@ import type {
   Layer,
   ProjectDocument,
   ProjectSettings,
+  Rule,
   Scene,
   TemplateOrigin,
   Visual,
@@ -58,6 +59,17 @@ export function makeBehavior(type: BehaviorType, params: Record<string, unknown>
   return { id: newBehaviorId(), type, enabled: true, params };
 }
 
+export function makeRule(name: string): Rule {
+  return {
+    id: newId("rul"),
+    name,
+    enabled: true,
+    once: false,
+    when: [],
+    do: [],
+  };
+}
+
 export function makeLayer(name: string, order: number, overrides: Partial<Layer> = {}): Layer {
   return {
     id: newLayerId(),
@@ -85,6 +97,11 @@ export function makeObject(input: {
   behaviors?: BehaviorInstance[];
   tags?: string[];
   properties?: Record<string, unknown>;
+  prefabId?: string;
+  prefabInstanceId?: string;
+  prefabSlot?: string;
+  prefabOverrides?: Record<string, unknown>;
+  animations?: GameObject["animations"];
 }): GameObject {
   const visual = input.visual ?? makeRect(input.width, input.height, input.color);
   const body =
@@ -100,8 +117,13 @@ export function makeObject(input: {
     visual,
     body,
     behaviors: input.behaviors ?? [],
+    animations: input.animations,
     properties: input.properties ?? {},
     tags: input.tags ?? [],
+    ...(input.prefabId ? { prefabId: input.prefabId } : {}),
+    ...(input.prefabInstanceId ? { prefabInstanceId: input.prefabInstanceId } : {}),
+    ...(input.prefabSlot ? { prefabSlot: input.prefabSlot } : {}),
+    ...(input.prefabOverrides ? { prefabOverrides: input.prefabOverrides } : {}),
   };
 }
 
@@ -145,8 +167,8 @@ export function makeSettings(overrides: Partial<ProjectSettings> = {}): ProjectS
       jump: ["Space", "KeyW"],
       action: ["KeyE", "Enter"],
     },
-    audio: { musicVolume: 0.6, sfxVolume: 0.8 },
-    ui: { hud: [], accent: "#ff856f", font: "inter" },
+    audio: { masterVolume: 0.8, musicVolume: 0.6, sfxVolume: 0.8 },
+    ui: { hud: [], accent: "#ff856f", font: "inter", message: { background: "#0b0d12", color: "#f1f0ed", fontSize: 22 } },
     ...overrides,
   };
 }
@@ -157,6 +179,8 @@ export function makeDocument(input: {
   settings: ProjectSettings;
   startSceneId: string;
   scenes: Scene[];
+  assets?: ProjectDocument["assets"];
+  prefabs?: ProjectDocument["prefabs"];
   variables?: ProjectDocument["variables"];
 }): ProjectDocument {
   const time = nowIso();
@@ -171,8 +195,8 @@ export function makeDocument(input: {
     settings: input.settings,
     startSceneId: input.startSceneId,
     scenes: input.scenes,
-    assets: [],
-    prefabs: [],
+    assets: input.assets ?? [],
+    prefabs: input.prefabs ?? [],
     variables: input.variables ?? [],
   };
 }

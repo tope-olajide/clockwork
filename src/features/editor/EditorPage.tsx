@@ -366,7 +366,7 @@ export function EditorPage() {
     onProjects: () => navigate("/"),
     onHierarchy: openHierarchy,
     onInspector: openInspector,
-    onPlay: () => toast.push("Play", "Manual Play arrives in Slice 4."),
+    onPlay: () => navigate(`/play/${current?.id ?? projectId}`),
     onAiPlay: () => toast.push("AI Play", "AI Play arrives with Kane in Slice 10."),
     onSettings: () => toast.push("Settings", "AI settings arrive in Slice 6.5."),
     onToast: toast.push,
@@ -729,13 +729,15 @@ function DockResizer({
 }
 
 function TooltipPlayButtons({ onToast }: { onToast: (title: string, message?: string) => void }) {
+  const navigate = useNavigate();
+  const { projectId = "" } = useParams();
   return (
     <div className="play-group">
       <Button
         variant="primary"
         size="sm"
         icon={<Play size={13} />}
-        onClick={() => onToast("Manual Play", "The runtime arrives in Slice 4. Manual Play needs no model.")}
+        onClick={() => navigate(`/play/${projectId}`)}
       >
         Play
       </Button>

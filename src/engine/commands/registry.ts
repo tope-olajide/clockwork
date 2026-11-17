@@ -8,25 +8,36 @@ import {
   nowIso,
 } from "../model/factory";
 import {
+  animationAssignmentsSchema,
+  animationClipSchema,
   assetSchema,
   behaviorInstanceSchema,
   bodySchema,
+  conditionSchema,
   gameObjectSchema,
+  hudWidgetSchema,
   layerSchema,
   prefabSchema,
   projectSettingsSchema,
+  ruleActionSchema,
+  ruleSchema,
   sceneSchema,
   transformSchema,
+  variableSchema,
   vec2Schema,
   type BehaviorInstance,
   type GameObject,
   type Layer,
   type ProjectDocument,
   type ProjectSettings,
+  type Rule,
   type Scene,
+  type Variable,
   type Visual,
 } from "../model/schema";
+import { ruleReferenceIssues } from "../model/references";
 import { CommandError, validateDocument } from "./validation";
+import { detachPrefabInstance, instantiatePrefab, recordPrefabOverride, refreshPrefabInstances } from "./prefab";
 
 enablePatches();
 
@@ -60,6 +71,10 @@ const scenePatchSchema = z.object({
   size: z.object({ w: z.number().positive(), h: z.number().positive() }).optional(),
   background: z.object({ color: z.string(), assetId: z.string().optional() }).optional(),
   camera: z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() }).optional(),
+  audio: z
+    .object({ musicAssetId: z.string().optional(), loop: z.boolean(), volume: z.number().min(0).max(1) })
+    .nullable()
+    .optional(),
 });
 
 const objectPatchSchema = z.object({
@@ -70,6 +85,17 @@ const objectPatchSchema = z.object({
   visual: z.unknown().nullable().optional(),
   body: bodySchema.nullable().optional(),
   behaviors: z.array(behaviorInstanceSchema).optional(),
+  animations: animationAssignmentsSchema.nullable().optional(),
+  properties: z.record(z.string(), z.unknown()).optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+const prefabRootPatchSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  visual: z.unknown().nullable().optional(),
+  body: bodySchema.nullable().optional(),
+  behaviors: z.array(behaviorInstanceSchema).optional(),
+  animations: animationAssignmentsSchema.nullable().optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
   tags: z.array(z.string()).optional(),
 });
@@ -111,6 +137,35 @@ function objectOf(scene: Scene, value: string): GameObject {
   const object = scene.objects.find((candidate) => candidate.id === value);
   if (!object) throw new CommandError("NOT_FOUND", "That object does not exist.");
   return object;
+}
+
+function validateRuleReferences(document: ProjectDocument, scene: Scene, rule: Rule): void {
+  const issues = ruleReferenceIssues(document, scene, rule);
+  if (issues.length > 0) {
+    throw new CommandError("INVALID_REFERENCE", `Rule “${rule.name}”: ${issues[0]!.message}`);
+  }
+}
+
+function variableOf(document: ProjectDocument, value: string): Variable {
+  const variable = document.variables.find((candidate) => candidate.id === value);
+  if (!variable) throw new CommandError("NOT_FOUND", "That variable does not exist.");
+  return variable;
+}
+
+function renameVariableReferences(document: ProjectDocument, previous: string, next: string): void {
+  for (const scene of document.scenes) {
+    for (const rule of scene.rules) {
+      for (const condition of rule.when) {
+        if (condition.kind === "variable" && condition.name === previous) condition.name = next;
+      }
+      for (const action of rule.do) {
+        if (action.kind === "set-variable" && action.name === previous) action.name = next;
+      }
+    }
+  }
+  for (const widget of document.settings.ui.hud) {
+    if (widget.variable === previous) widget.variable = next;
+  }
 }
 
 function reindexLayers(scene: Scene): void {
@@ -189,6 +244,7 @@ const commands: CommandDefinition[] = [
       if (args.patch.size !== undefined) scene.size = args.patch.size;
       if (args.patch.background !== undefined) scene.background = args.patch.background;
       if (args.patch.camera !== undefined) scene.camera = args.patch.camera;
+      if (args.patch.audio !== undefined) scene.audio = args.patch.audio ?? undefined;
     },
   ),
   definition(
@@ -338,8 +394,13 @@ const commands: CommandDefinition[] = [
         else object.body = args.patch.body;
       }
       if (args.patch.behaviors !== undefined) object.behaviors = args.patch.behaviors;
+      if (args.patch.animations !== undefined) {
+        if (args.patch.animations === null) delete object.animations;
+        else object.animations = args.patch.animations;
+      }
       if (args.patch.properties !== undefined) object.properties = args.patch.properties;
       if (args.patch.tags !== undefined) object.tags = args.patch.tags;
+      recordPrefabOverride(object, args.patch as Record<string, unknown>);
     },
   ),
   definition(
@@ -357,6 +418,7 @@ const commands: CommandDefinition[] = [
     (document, args) => {
       const object = objectOf(sceneOf(document, args.sceneId), args.objectId);
       object.transform = { ...object.transform, ...args.transform };
+      recordPrefabOverride(object, { transform: args.transform });
     },
   ),
   definition(
@@ -367,6 +429,7 @@ const commands: CommandDefinition[] = [
       const object = objectOf(sceneOf(document, args.sceneId), args.objectId);
       if (args.visual === null) delete object.visual;
       else object.visual = args.visual as Visual;
+      recordPrefabOverride(object, { visual: args.visual });
     },
   ),
   definition(
@@ -377,6 +440,7 @@ const commands: CommandDefinition[] = [
       const object = objectOf(sceneOf(document, args.sceneId), args.objectId);
       if (args.body === null) delete object.body;
       else object.body = args.body;
+      recordPrefabOverride(object, { body: args.body });
     },
   ),
   definition(
@@ -384,7 +448,9 @@ const commands: CommandDefinition[] = [
     z.object({ sceneId, objectId, tags: z.array(z.string()) }),
     () => "Update object tags",
     (document, args) => {
-      objectOf(sceneOf(document, args.sceneId), args.objectId).tags = args.tags;
+      const object = objectOf(sceneOf(document, args.sceneId), args.objectId);
+      object.tags = args.tags;
+      recordPrefabOverride(object, { tags: args.tags });
     },
   ),
   definition(
@@ -394,6 +460,7 @@ const commands: CommandDefinition[] = [
     (document, args) => {
       const object = objectOf(sceneOf(document, args.sceneId), args.objectId);
       object.properties = { ...object.properties, ...args.patch };
+      recordPrefabOverride(object, { properties: object.properties });
     },
   ),
   definition(
@@ -472,6 +539,7 @@ const commands: CommandDefinition[] = [
       for (const item of args.transforms) {
         const object = objectOf(scene, item.objectId);
         object.transform = { ...object.transform, ...item.transform };
+        recordPrefabOverride(object, { transform: item.transform });
       }
     },
   ),
@@ -493,7 +561,264 @@ const commands: CommandDefinition[] = [
     z.object({ prefab: prefabSchema }),
     () => "Create prefab",
     (document, args) => {
+      if (document.prefabs.some((prefab) => prefab.id === args.prefab.id)) {
+        throw new CommandError("INVARIANT", "That prefab id already exists.");
+      }
       document.prefabs.push(args.prefab);
+    },
+  ),
+  definition(
+    "prefab.instantiate",
+    z.object({
+      prefabId: z.string().min(1),
+      sceneId,
+      layerId: z.string().optional(),
+      x: z.number().finite().optional(),
+      y: z.number().finite().optional(),
+      count: z.number().int().positive().max(100).default(1),
+      spacing: z.number().finite().optional(),
+    }),
+    (args) => (args.count === 1 ? "Instantiate prefab" : `Instantiate prefab ×${args.count}`),
+    (document, args) => {
+      instantiatePrefab(document, args);
+    },
+  ),
+  definition(
+    "prefab.update",
+    z.object({
+      prefabId: z.string().min(1),
+      patch: z.object({
+        name: z.string().trim().min(1).max(80).optional(),
+        root: prefabRootPatchSchema.optional(),
+      }),
+    }),
+    (args) => `Update prefab${args.patch.name ? ` ${args.patch.name}` : ""}`,
+    (document, args) => {
+      const prefab = document.prefabs.find((candidate) => candidate.id === args.prefabId);
+      if (!prefab) throw new CommandError("NOT_FOUND", "That prefab does not exist.");
+      if (args.patch.name !== undefined) prefab.name = args.patch.name;
+      if (args.patch.root) {
+        const rootPatch = args.patch.root;
+        if (rootPatch.name !== undefined) prefab.root.name = rootPatch.name;
+        if (rootPatch.visual !== undefined) {
+          if (rootPatch.visual === null) delete prefab.root.visual;
+          else prefab.root.visual = rootPatch.visual as Visual;
+        }
+        if (rootPatch.body !== undefined) {
+          if (rootPatch.body === null) delete prefab.root.body;
+          else prefab.root.body = rootPatch.body;
+        }
+        if (rootPatch.behaviors !== undefined) prefab.root.behaviors = rootPatch.behaviors;
+        if (rootPatch.animations !== undefined) {
+          if (rootPatch.animations === null) delete prefab.root.animations;
+          else prefab.root.animations = rootPatch.animations;
+        }
+        if (rootPatch.properties !== undefined) prefab.root.properties = rootPatch.properties;
+        if (rootPatch.tags !== undefined) prefab.root.tags = rootPatch.tags;
+      }
+      refreshPrefabInstances(document, prefab);
+    },
+  ),
+  definition(
+    "prefab.detach",
+    z.object({ sceneId, instanceId: z.string().min(1) }),
+    () => "Detach prefab instance",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      if (detachPrefabInstance(scene, args.instanceId) === 0) {
+        throw new CommandError("NOT_FOUND", "That prefab instance does not exist.");
+      }
+    },
+  ),
+  definition(
+    "prefab.revert",
+    z.object({ sceneId, instanceId: z.string().min(1) }),
+    () => "Revert prefab overrides",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      const objects = scene.objects.filter((object) => object.prefabInstanceId === args.instanceId);
+      if (objects.length === 0) throw new CommandError("NOT_FOUND", "That prefab instance does not exist.");
+      for (const object of objects) delete object.prefabOverrides;
+      const prefab = document.prefabs.find((candidate) => candidate.id === objects[0]!.prefabId);
+      if (prefab) refreshPrefabInstances(document, prefab);
+    },
+  ),
+  definition(
+    "rule.add",
+    z.object({ sceneId, rule: ruleSchema }),
+    () => "Add rule",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      if (scene.rules.some((rule) => rule.id === args.rule.id)) {
+        throw new CommandError("INVARIANT", "That rule id already exists.");
+      }
+      validateRuleReferences(document, scene, args.rule);
+      scene.rules.push(args.rule);
+    },
+  ),
+  definition(
+    "rule.update",
+    z.object({
+      sceneId,
+      ruleId: z.string().min(1),
+      patch: z.object({
+        name: z.string().trim().min(1).max(80).optional(),
+        enabled: z.boolean().optional(),
+        once: z.boolean().optional(),
+        when: z.array(conditionSchema).optional(),
+        do: z.array(ruleActionSchema).optional(),
+      }),
+    }),
+    () => "Update rule",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      const rule = scene.rules.find((candidate) => candidate.id === args.ruleId);
+      if (!rule) throw new CommandError("NOT_FOUND", "That rule does not exist.");
+      const next: Rule = { ...rule, ...args.patch, when: args.patch.when ?? rule.when, do: args.patch.do ?? rule.do };
+      validateRuleReferences(document, scene, next);
+      Object.assign(rule, next);
+    },
+  ),
+  definition(
+    "rule.delete",
+    z.object({ sceneId, ruleId: z.string().min(1) }),
+    () => "Delete rule",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      const before = scene.rules.length;
+      scene.rules = scene.rules.filter((rule) => rule.id !== args.ruleId);
+      if (scene.rules.length === before) throw new CommandError("NOT_FOUND", "That rule does not exist.");
+    },
+  ),
+  definition(
+    "rule.reorder",
+    z.object({ sceneId, ruleId: z.string().min(1), toIndex: z.number().int().nonnegative() }),
+    () => "Reorder rule",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      const index = scene.rules.findIndex((rule) => rule.id === args.ruleId);
+      if (index < 0) throw new CommandError("NOT_FOUND", "That rule does not exist.");
+      const [rule] = scene.rules.splice(index, 1);
+      if (!rule) throw new CommandError("NOT_FOUND", "That rule does not exist.");
+      scene.rules.splice(Math.min(args.toIndex, scene.rules.length), 0, rule);
+    },
+  ),
+  definition(
+    "variable.add",
+    z.object({ variable: variableSchema }),
+    () => "Add variable",
+    (document, args) => {
+      if (document.variables.some((variable) => variable.id === args.variable.id)) {
+        throw new CommandError("INVARIANT", "That variable id already exists.");
+      }
+      if (document.variables.some((variable) => variable.name === args.variable.name)) {
+        throw new CommandError("CONFLICT", "A variable with that name already exists.");
+      }
+      document.variables.push(args.variable);
+    },
+  ),
+  definition(
+    "variable.update",
+    z.object({
+      variableId: z.string().min(1),
+      patch: z.object({
+        name: z.string().trim().min(1).max(80).optional(),
+        type: z.enum(["number", "boolean", "string"]).optional(),
+        initial: z.union([z.number(), z.boolean(), z.string()]).optional(),
+        description: z.string().optional(),
+      }),
+    }),
+    () => "Update variable",
+    (document, args) => {
+      const variable = variableOf(document, args.variableId);
+      const previous = variable.name;
+      const nextName = args.patch.name;
+      if (nextName !== undefined && nextName !== previous) {
+        if (document.variables.some((candidate) => candidate.name === nextName)) {
+          throw new CommandError("CONFLICT", "A variable with that name already exists.");
+        }
+        renameVariableReferences(document, previous, nextName);
+      }
+      if (nextName !== undefined) variable.name = nextName;
+      if (args.patch.type !== undefined) variable.type = args.patch.type;
+      if (args.patch.initial !== undefined) variable.initial = args.patch.initial;
+      if (args.patch.description !== undefined) variable.description = args.patch.description;
+    },
+  ),
+  definition(
+    "variable.delete",
+    z.object({ variableId: z.string().min(1) }),
+    () => "Delete variable",
+    (document, args) => {
+      const variable = variableOf(document, args.variableId);
+      const usages = document.scenes.reduce((count, scene) => {
+        const inRules = scene.rules.reduce(
+          (sum, rule) =>
+            sum +
+            rule.when.filter((condition) => condition.kind === "variable" && condition.name === variable.name).length +
+            rule.do.filter((action) => action.kind === "set-variable" && action.name === variable.name).length,
+          0,
+        );
+        return count + inRules;
+      }, document.settings.ui.hud.filter((widget) => widget.variable === variable.name).length);
+      if (usages > 0) throw new CommandError("INVARIANT", `Variable is used ${usages} time${usages === 1 ? "" : "s"}.`);
+      document.variables = document.variables.filter((candidate) => candidate.id !== args.variableId);
+    },
+  ),
+  definition(
+    "asset.updateAnimation",
+    z.object({ assetId: z.string().min(1), animation: animationClipSchema }),
+    () => "Update animation",
+    (document, args) => {
+      const asset = document.assets.find((candidate) => candidate.id === args.assetId);
+      if (!asset) throw new CommandError("NOT_FOUND", "That asset does not exist.");
+      const index = asset.animations?.findIndex((clip) => clip.id === args.animation.id) ?? -1;
+      if (index < 0) throw new CommandError("NOT_FOUND", "That animation does not exist.");
+      asset.animations![index] = args.animation;
+    },
+  ),
+  definition(
+    "asset.deleteAnimation",
+    z.object({ assetId: z.string().min(1), animationId: z.string().min(1) }),
+    () => "Delete animation",
+    (document, args) => {
+      const asset = document.assets.find((candidate) => candidate.id === args.assetId);
+      if (!asset) throw new CommandError("NOT_FOUND", "That asset does not exist.");
+      asset.animations = (asset.animations ?? []).filter((clip) => clip.id !== args.animationId);
+      for (const scene of document.scenes) {
+        for (const object of scene.objects) {
+          if (!object.animations) continue;
+          for (const key of ["idle", "run", "jump"] as const) {
+            if (object.animations[key] === args.animationId) delete object.animations[key];
+          }
+        }
+      }
+    },
+  ),
+  definition(
+    "hud.add",
+    z.object({ widget: hudWidgetSchema }),
+    () => "Add HUD widget",
+    (document, args) => {
+      document.settings.ui.hud.push(args.widget);
+    },
+  ),
+  definition(
+    "hud.update",
+    z.object({ widgetId: z.string().min(1), patch: hudWidgetSchema.partial() }),
+    () => "Update HUD widget",
+    (document, args) => {
+      const widget = document.settings.ui.hud.find((candidate) => candidate.id === args.widgetId);
+      if (!widget) throw new CommandError("NOT_FOUND", "That HUD widget does not exist.");
+      Object.assign(widget, args.patch);
+    },
+  ),
+  definition(
+    "hud.delete",
+    z.object({ widgetId: z.string().min(1) }),
+    () => "Delete HUD widget",
+    (document, args) => {
+      document.settings.ui.hud = document.settings.ui.hud.filter((widget) => widget.id !== args.widgetId);
     },
   ),
   definition(
@@ -501,7 +826,9 @@ const commands: CommandDefinition[] = [
     z.object({ sceneId, objectId, behavior: behaviorInstanceSchema }),
     () => "Add behavior",
     (document, args) => {
-      objectOf(sceneOf(document, args.sceneId), args.objectId).behaviors.push(args.behavior);
+      const object = objectOf(sceneOf(document, args.sceneId), args.objectId);
+      object.behaviors.push(args.behavior);
+      recordPrefabOverride(object, { behaviors: object.behaviors });
     },
   ),
   definition(
@@ -524,6 +851,7 @@ const commands: CommandDefinition[] = [
       if (args.patch.enabled !== undefined) behavior.enabled = args.patch.enabled;
       if (args.patch.type !== undefined) behavior.type = args.patch.type;
       if (args.patch.params !== undefined) behavior.params = { ...behavior.params, ...args.patch.params };
+      recordPrefabOverride(object, { behaviors: object.behaviors });
     },
   ),
   definition(
@@ -533,6 +861,7 @@ const commands: CommandDefinition[] = [
     (document, args) => {
       const object = objectOf(sceneOf(document, args.sceneId), args.objectId);
       object.behaviors = object.behaviors.filter((behavior) => behavior.id !== args.behaviorId);
+      recordPrefabOverride(object, { behaviors: object.behaviors });
     },
   ),
   definition(

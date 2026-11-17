@@ -3204,3 +3204,136 @@ a {
 .asset-card-body { padding: 8px; display: grid; gap: 2px; font-size: 12px; }
 .asset-card-body strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asset-card .icon-button { position: absolute; top: 6px; right: 6px; }
+
+/* Slice 5 workspaces */
+.logic-page,
+.content-page,
+.presentation-tab {
+  padding: 16px;
+  overflow: auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.logic-section,
+.content-panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  padding: 14px;
+}
+.logic-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.logic-section-head h2,
+.content-panel h2,
+.content-panel h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.logic-list,
+.clip-list,
+.hud-list,
+.input-map-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.logic-row,
+.logic-add-row,
+.prefab-controls,
+.hud-row,
+.input-map-row,
+.rule-row,
+.clip-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.logic-row .input,
+.logic-add-row .input,
+.rule-row .input,
+.hud-row .input {
+  min-width: 90px;
+  flex: 1;
+}
+.logic-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.logic-error {
+  color: #ff9f8f;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.logic-error.full { width: 100%; }
+.rule-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rule-card.flagged {
+  border-color: rgba(244, 197, 106, 0.45);
+  background: rgba(244, 197, 106, 0.04);
+}
+.rule-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rule-card-head .input { min-width: 180px; flex: 1; }
+.rule-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.rule-flag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f4c56a;
+  font-size: 12px;
+}
+.prefab-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.prefab-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prefab-card-head { display: flex; align-items: center; gap: 8px; }
+.prefab-instance-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.key-chip-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.key-chip {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.behavior-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.behavior-param-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding-left: 20px; }
+.clip-row { justify-content: space-between; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+@media (max-width: 1100px) { .rule-grid { grid-template-columns: 1fr; } }

@@ -62,29 +62,7 @@ export function validateDocument(document: ProjectDocument): void {
       }
     }
 
-    for (const rule of scene.rules) {
-      for (const condition of rule.when) {
-        if (condition.kind === "overlap") {
-          if (condition.objectId && !objectIds.has(condition.objectId)) {
-            throw new CommandError("INVALID_REFERENCE", `Rule ${rule.name} references a missing object.`);
-          }
-          if (condition.otherId && !objectIds.has(condition.otherId)) {
-            throw new CommandError("INVALID_REFERENCE", `Rule ${rule.name} references a missing object.`);
-          }
-        }
-        if (condition.kind === "variable" && !document.variables.some((variable) => variable.name === condition.name)) {
-          throw new CommandError("INVALID_REFERENCE", `Rule ${rule.name} references a missing variable.`);
-        }
-      }
-      for (const action of rule.do) {
-        if (action.kind === "go-scene" && !sceneIds.has(action.sceneId)) {
-          throw new CommandError("INVALID_REFERENCE", `Rule ${rule.name} points to a missing scene.`);
-        }
-        if (action.kind === "set-variable" && !document.variables.some((variable) => variable.name === action.name)) {
-          throw new CommandError("INVALID_REFERENCE", `Rule ${rule.name} sets a missing variable.`);
-        }
-      }
-    }
+    // Rule references may become stale after deletions; runtime flags and refuses them.
   }
 
   if (!sceneIds.has(document.startSceneId)) {
