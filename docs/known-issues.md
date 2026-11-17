@@ -49,6 +49,13 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 - **Read-tool names deviate from §5.4.** The implementation exposes `list_scenes`, `get_scene`, `search_entities`, `get_object`, `get_variables`, `get_selection`, `capture_viewport`. §5.4 aliases `get_project_summary`, `query_project` and `inspect_entity` are accepted by the client and listed in the server tool definitions; the original names remain for compatibility.
 - **Hardening is in-memory only.** Rate limiting (60 POST/min per IP and route) lives in server memory and resets on restart; body limit is 1 MB for `/api/*`. Adequate for the local single-user v1, not a multi-instance deployment.
 
+### Slice 9 — Hardening and demo readiness
+
+- **Implemented but not browser-verified.** The Slice 9 acceptance matrix — cold-start 5-minute manual and model paths, 1366/1440/1920 visual audit, 1024 drawer behavior, keyboard-only run, console-warning sweep, refresh-during-save recovery — is deferred to Slice 10.
+- **Coach tour and demo reset are unverified in a real browser.** The tour is dismissible and stored per browser; `?demoReset=1` deletes the existing `Neon Runner` record and reseeds the uncollectible Core B. Confirm it does not remove other projects.
+- **`check:repo` is a source-tree check only.** It does not prove the app runs, and it treats `dist/` as acceptable locally if untracked.
+- **Accessibility was not re-audited.** Focus order, contrast and keyboard paths were not measured in this pass.
+
 ### Slice 8 — Ship, export, share
 
 - **Implemented but not browser-verified.** Static zip export, snapshot creation/read/delete, `/s/:id` snapshot player, the Ship panel and cover capture all typecheck, and the standalone player bundles with esbuild. The acceptance run (unzip and serve offline, same physics, share link input/restart, malformed/oversized rejection, cover after save) is deferred to the Slice 10 Kane pass.

@@ -368,3 +368,17 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Cover capture: `captureViewportCover()` downsizes the canvas to 640×360; autosave stores it as `coverDataUrl` on the project record, and project cards render it with the template cover as fallback.
 - `fflate` and `esbuild` were added as dependencies.
 - Acceptance is deferred at the user's request to the Slice 10 Kane run: no browser export/snapshot/share run has been performed. `docs/known-issues.md` records the unverified items.
+
+## Slice 9 — hardening and demo readiness (implementation; acceptance deferred)
+
+- Date: 2026-11-17
+- Commit: see this change set.
+- `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`: pass.
+- Added a route-level error boundary with a reload/back path; the editor retains its WebGL failure fallback, and Ship/snapshot/export paths render explicit error states.
+- Added the four-step first-run coach tour (`src/features/onboarding/CoachTour.tsx`, dismissible, stored in `localStorage`).
+- Neon Runner now seeds the intentional uncollectible Core B (inside the solid Ledge B body), with a generated 640×360 cover SVG. `?demoReset=1` deletes and reseeds it for Slice 10 rehearsals.
+- Project cards render captured covers with the template cover as fallback; autosave captures a 640×360 JPEG cover from the viewport.
+- Added `window.__clockwork` editor debug bridge (state, selection, undo/redo, agent open/close, workspace tab), documented in `docs/testing-hooks.md`.
+- Added `scripts/check-repo.mjs` and `pnpm check:repo`: rejects `reference/`, stray root Markdown, tracked `dist/`, generated `public/player/clockwork.js`, and missing ledgers/slice log entries. It passes after this entry is present.
+- README rewritten for the actual product: quick start, configuration, storage, architecture, scope and document links.
+- Acceptance is deferred at the user's request: no 1366/1440/1920 visual audit, keyboard-only pass, cold-start 5-minute run, or Kane run has been performed. `docs/known-issues.md` records the gap.

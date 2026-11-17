@@ -1,4 +1,4 @@
-import { FileUp, Layers, LayoutTemplate, PenLine, Sparkles } from "lucide-react";
+import { FileUp, Layers, LayoutTemplate, PenLine } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Modal, Select } from "../../components/ui";
 import type { TemplateId } from "../../engine/model/templates";
@@ -9,6 +9,7 @@ export interface CreatedProject {
   mode: CreationMode;
   name: string;
   template: TemplateId;
+  brief?: string;
   file?: File;
   settings?: {
     width: number;
@@ -23,19 +24,10 @@ const modes: Array<{
   label: string;
   description: string;
   icon: typeof Layers;
-  disabled?: boolean;
-  reason?: string;
 }> = [
   { key: "blank", label: "Blank", description: "An empty scene, one layer, and a clean start.", icon: Layers },
   { key: "template", label: "Template", description: "Start from a playable genre skeleton.", icon: LayoutTemplate },
-  {
-    key: "brief",
-    label: "From brief",
-    description: "Describe the game and let the agent build the first pass.",
-    icon: PenLine,
-    disabled: true,
-    reason: "Available in Slice 7, when the agent can write to the project.",
-  },
+  { key: "brief", label: "From brief", description: "Describe the game and let the agent build the first pass.", icon: PenLine },
   { key: "import", label: "Import", description: "Open an existing .clockwork.json project.", icon: FileUp },
 ];
 
@@ -86,11 +78,9 @@ export function NewProjectDialog({
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
-  const briefReason = modes.find((item) => item.key === "brief")?.reason;
-
   const canCreate = useMemo(() => {
     if (mode === "import") return Boolean(importFile);
-    if (mode === "brief") return false;
+    if (mode === "brief") return Boolean(name.trim() && brief.trim());
     if (!name.trim()) return false;
     if (mode === "template" || mode === "blank") {
       const width = resolution === "custom" ? Number(customWidth) : Number(resolution.split("x")[0]);
@@ -98,7 +88,7 @@ export function NewProjectDialog({
       return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
     }
     return true;
-  }, [customHeight, customWidth, importFile, mode, name, resolution]);
+  }, [brief, customHeight, customWidth, importFile, mode, name, resolution]);
 
   function reset() {
     setMode("template");
@@ -122,6 +112,7 @@ export function NewProjectDialog({
       mode,
       name: importFile ? importFile.name.replace(/\.clockwork\.json$/i, "").replace(/\.json$/i, "") : name.trim(),
       template: mode === "blank" ? "blank" : template,
+      brief: mode === "brief" ? brief.trim() : undefined,
       file: importFile ?? undefined,
       settings:
         mode === "import"
@@ -180,17 +171,13 @@ export function NewProjectDialog({
               key={item.key}
               className="mode-card"
               aria-pressed={mode === item.key}
-              aria-disabled={item.disabled || undefined}
-              onClick={() => {
-                if (!item.disabled) setMode(item.key);
-              }}
+              onClick={() => setMode(item.key)}
             >
               <span className="mode-title">
                 <Icon size={15} />
                 {item.label}
               </span>
               <span className="mode-desc">{item.description}</span>
-              {item.disabled && <span className="mode-reason">{item.reason}</span>}
             </button>
           );
         })}
@@ -200,30 +187,18 @@ export function NewProjectDialog({
         {mode !== "import" && (
           <label className="field">
             <span className="field-label">Project name</span>
-            <input
-              className="input"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Untitled project"
-              autoFocus
-            />
+            <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Untitled project" autoFocus />
           </label>
         )}
 
-        {mode === "template" && (
+        {(mode === "template" || mode === "brief") && (
           <div className="field">
-            <span className="field-label">Template</span>
+            <span className="field-label">{mode === "brief" ? "Style / template (optional base)" : "Template"}</span>
             <div className="template-list" role="group" aria-label="Template">
               {templates.map((item) => (
-                <button
-                  key={item.key}
-                  className="template-option"
-                  aria-pressed={template === item.key}
-                  onClick={() => setTemplate(item.key)}
-                >
-                  <span className="template-diagram" aria-hidden="true" />
-                  <strong>{item.name}</strong>
-                  <span>{item.description}</span>
+                <button key={item.key} className="template-option" aria-pressed={template === item.key} onClick={() => setTemplate(item.key)}>
+                  <span className="template-name">{item.name}</span>
+                  <span className="template-desc">{item.description}</span>
                 </button>
               ))}
             </div>
@@ -231,86 +206,61 @@ export function NewProjectDialog({
         )}
 
         {mode === "brief" && (
-          <>
-            <label className="field">
-              <span className="field-label">Brief</span>
-              <textarea
-                className="brief-textarea"
-                value={brief}
-                onChange={(event) => setBrief(event.target.value)}
-                placeholder="A dusk platformer with a double jump, drifting drones, and three coins…"
-              />
-            </label>
-            <div className="archived-banner" aria-live="polite">
-              <Sparkles size={14} />
-              {briefReason}
-            </div>
-          </>
+          <label className="field">
+            <span className="field-label">Brief</span>
+            <textarea
+              className="input"
+              rows={5}
+              value={brief}
+              onChange={(event) => setBrief(event.target.value)}
+              placeholder="Describe the game you want to start with: genre, goal, characters, mechanics, mood…"
+            />
+            <span className="muted" style={{ fontSize: 12 }}>Clockwork will create the project and ask the agent to build the first playable scene in one undoable turn.</span>
+          </label>
         )}
 
         {mode === "import" && (
           <div className="field">
             <span className="field-label">Project file</span>
             <label className="import-drop">
-              <FileUp size={21} />
-              <strong>{importFile ? importFile.name : "Drop a .clockwork.json file"}</strong>
-              <span className="field-hint">or click to browse · max 20 MB</span>
               <input
                 type="file"
-                accept=".json,.clockwork.json"
-                hidden
+                accept=".json,application/json"
                 onChange={(event) => handleFile(event.target.files?.[0])}
               />
+              <span>{importFile ? importFile.name : "Choose a .clockwork.json export"}</span>
             </label>
-            {importError && (
-              <span className="field-hint" style={{ color: "var(--red)" }} role="alert">
-                {importError}
-              </span>
-            )}
+            {importError && <span className="field-error">{importError}</span>}
           </div>
         )}
 
-        {(mode === "blank" || mode === "template") && (
-          <details className="disclosure">
+        {mode !== "import" && (
+          <details className="more-settings">
             <summary>More settings</summary>
-            <div className="disclosure-body">
+            <div className="more-settings-body">
               <label className="field">
-                <span className="field-label">Design resolution</span>
-                <Select
-                  value={resolution}
-                  onValueChange={setResolution}
-                  options={resolutionOptions}
-                  ariaLabel="Design resolution"
-                />
+                <span className="field-label">Resolution</span>
+                <Select value={resolution} onValueChange={setResolution} options={resolutionOptions} ariaLabel="Design resolution" />
               </label>
               {resolution === "custom" && (
-                <div className="field-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-                  <label className="field-row">
-                    <span>Width</span>
-                    <input className="input input-mono" type="number" min={64} value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} aria-label="Custom width" />
+                <div className="custom-res">
+                  <label className="field">
+                    <span className="field-label">Width</span>
+                    <input className="input" inputMode="numeric" value={customWidth} onChange={(e) => setCustomWidth(e.target.value)} />
                   </label>
-                  <label className="field-row">
-                    <span>Height</span>
-                    <input className="input input-mono" type="number" min={64} value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} aria-label="Custom height" />
+                  <label className="field">
+                    <span className="field-label">Height</span>
+                    <input className="input" inputMode="numeric" value={customHeight} onChange={(e) => setCustomHeight(e.target.value)} />
                   </label>
                 </div>
               )}
               <label className="field">
                 <span className="field-label">Gravity</span>
-                <Select
-                  value={gravity}
-                  onValueChange={setGravity}
-                  options={gravityOptions}
-                  ariaLabel="Gravity preset"
-                />
+                <Select value={gravity} onValueChange={setGravity} options={gravityOptions} ariaLabel="Gravity preset" />
               </label>
-              <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-                <input
-                  type="checkbox"
-                  checked={pixelArt}
-                  onChange={(event) => setPixelArt(event.target.checked)}
-                />
-                <span className="field-label">Pixel art rendering</span>
+              <label className="check-field">
+                <input type="checkbox" checked={pixelArt} onChange={(e) => setPixelArt(e.target.checked)} />
+                <span>Pixel art mode</span>
               </label>
             </div>
           </details>

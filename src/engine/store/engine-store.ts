@@ -400,17 +400,44 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
     }),
 }));
 
+const DEMO_COVER = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#10162a"/><stop offset="0.58" stop-color="#1d2340"/><stop offset="1" stop-color="#0b0d12"/></linearGradient></defs><rect width="640" height="360" fill="url(#sky)"/><circle cx="498" cy="86" r="38" fill="#f6e7c8" opacity="0.9"/><path d="M0 238 L120 168 L212 224 L320 150 L430 230 L520 184 L640 244 L640 360 L0 360 Z" fill="#252f4a"/><path d="M0 286 L170 226 L300 278 L430 238 L560 284 L640 266 L640 360 L0 360 Z" fill="#1a2137"/><rect y="318" width="640" height="42" fill="#29314b"/><rect x="84" y="282" width="42" height="36" rx="5" fill="#ff856f"/><rect x="238" y="262" width="18" height="18" rx="9" fill="#f4c56a"/><rect x="316" y="230" width="18" height="18" rx="9" fill="#f4c56a"/><rect x="392" y="274" width="18" height="18" rx="9" fill="#f4c56a"/><text x="24" y="42" fill="#f1f0ed" font-family="monospace" font-size="20" letter-spacing="4">NEON RUNNER</text><text x="24" y="62" fill="#a9b4ff" font-family="monospace" font-size="11" letter-spacing="2">CLOCKWORK DEMO</text></svg>`)}`;
+
+async function buildDemoProject(): Promise<ProjectDocument> {
+  const demo = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate("platformer", "Neon Runner")));
+  // Seeded defect for the Slice 10 negative control: Core B sits inside the
+  // solid Ledge B body, so manual play can reach the relay but cannot collect
+  // all three cores. `?demoReset=1` restores this exact state.
+  const scene = demo.scenes.find((candidate) => candidate.id === demo.startSceneId) ?? demo.scenes[0];
+  const coreB = scene?.objects.find((object) => object.name === "Core B");
+  if (coreB) {
+    coreB.transform.x = 1080;
+    coreB.transform.y = 566;
+  }
+  return demo;
+}
+
 export async function ensureDemoProject(): Promise<void> {
   try {
     const records = await listProjectRecords();
     if (records.length > 0) return;
     if (localStorage.getItem("clockwork:seeded:v1")) return;
-    const demo = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate("platformer", "Neon Runner")));
-    await saveProjectDocument(demo);
+    const demo = await buildDemoProject();
+    await saveProjectDocument(demo, DEMO_COVER);
     localStorage.setItem("clockwork:seeded:v1", "1");
   } catch {
     // The dashboard will show its own storage error if storage is unavailable.
   }
+}
+
+/** Restore the intentional Neon Runner defect for AI Play rehearsals. */
+export async function resetDemoProject(): Promise<void> {
+  const records = await listProjectRecords();
+  for (const record of records) {
+    if (record.name === "Neon Runner") await deleteProjectRecord(record.id);
+  }
+  const demo = await buildDemoProject();
+  await saveProjectDocument(demo, DEMO_COVER);
+  localStorage.setItem("clockwork:seeded:v1", "1");
 }
 
 export async function createAndSaveProject(

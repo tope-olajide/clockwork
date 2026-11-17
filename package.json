@@ -12,6 +12,7 @@
     "dev": "concurrently -n web,api \"vite\" \"tsx watch server/index.ts\"",
     "build": "tsc -b tsconfig.json tsconfig.node.json && vite build",
     "typecheck": "tsc -b tsconfig.json tsconfig.node.json",
+    "check:repo": "node scripts/check-repo.mjs",
     "preview": "vite preview",
     "start": "node --import tsx server/index.ts"
   },

@@ -30,7 +30,7 @@ import {
   StorageError,
 } from "../../engine/persistence/indexeddb";
 import { downloadProject, readProjectFile } from "../../engine/persistence/transfer";
-import { duplicateProjectRecord, ensureDemoProject } from "../../engine/store/engine-store";
+import { duplicateProjectRecord, ensureDemoProject, resetDemoProject } from "../../engine/store/engine-store";
 import {
   TEMPLATE_LABELS,
   toProjectSummary,
@@ -91,12 +91,16 @@ export function ProjectsPage() {
   const forcedEmpty = previewState === "empty";
   const forcedLoading = previewState === "loading";
   const forcedError = previewState === "error";
+  const demoReset = new URLSearchParams(location.search).get("demoReset") === "1";
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      if (!forcedEmpty) await ensureDemoProject();
+      if (!forcedEmpty) {
+        if (demoReset) await resetDemoProject();
+        else await ensureDemoProject();
+      }
       const records = await listProjectRecords();
       setProjects(records.map(toProjectSummary));
     } catch (loadError) {
@@ -104,7 +108,7 @@ export function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [forcedEmpty]);
+  }, [demoReset, forcedEmpty]);
 
   useEffect(() => {
     window.localStorage.setItem(FILTER_KEY, JSON.stringify(filters));

@@ -30,11 +30,8 @@ import { TopBar } from "../../shell/TopBar";
 import { useShellBreakpoints } from "../../lib/useMediaQuery";
 import { makeLayer, makeObject, makeScene } from "../../engine/model/factory";
 import { downloadProject } from "../../engine/persistence/transfer";
-import { useEngineStore } from "../../engine/store/engine-store";
-import {
-  EngineInspector,
-  EngineLeftDock,
-  EngineWorkspace,
+import { useEngineStore } from "../../engine/store/engine-store";import { CoachTour } from "../onboarding/CoachTour";
+import { EngineInspector, EngineLeftDock, EngineWorkspace,
   type InspectorTab,
   type PresentationTab,
   type WorkspaceTab,
@@ -344,6 +341,38 @@ export function EditorPage() {
     setAgentOpen(true);
   }
 
+  useEffect(() => {
+    const api = {
+      getState: () => {
+        const state = useEngineStore.getState();
+        return {
+          projectId: state.document?.id ?? null,
+          revision: state.document?.revision ?? 0,
+          sceneId: state.activeSceneId,
+          selection: state.selection,
+          historyLength: state.history.length,
+          futureLength: state.future.length,
+          saveState: state.saveState,
+          playtestRunning: state.playtestRunning,
+          agentOpen,
+          agentMode: agent.mode,
+          pendingPreview: Boolean(agent.pendingPreview),
+        };
+      },
+      select: (ids: string[]) => setSelection(ids),
+      undo,
+      redo,
+      openAgent: () => setAgentOpen(true),
+      closeAgent: () => setAgentOpen(false),
+      setTab: (next: WorkspaceTab) => setTab(next),
+    };
+    (window as unknown as { __clockwork?: typeof api }).__clockwork = api;
+    return () => {
+      const holder = window as unknown as { __clockwork?: typeof api };
+      if (holder.__clockwork === api) delete holder.__clockwork;
+    };
+  }, [agent.mode, agent.pendingPreview, agentOpen, redo, setSelection, undo]);
+
   const commands: PaletteCommand[] = buildStubCommands({
     onCreate: () => toast.push("New project", "Use Projects → New project."),
     onProjects: () => navigate("/"),
@@ -643,6 +672,7 @@ export function EditorPage() {
         lockedSelection={lockedSelection ? { id: lockedSelection.id, name: lockedSelection.name } : null}
         onUnlockSelection={() => setLockedSelectionId(null)}
       />
+      <CoachTour />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={commands} />
     </div>
   );
