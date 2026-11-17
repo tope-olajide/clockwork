@@ -25,6 +25,17 @@ writeFileSync(join(session, "evidence", "fixture.evidence"), "fake evidence pack
 const emit = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Models the "CLI could not start" path: exit 2 with no terminal run_end, which
+// is what an auth/URL/Chrome failure looks like on the wire.
+if (process.env.KANE_FIXTURE_NO_RUN_END === "1") {
+  emit({ type: "stream_start", cli_version: "fixture", surface: "run", pid: process.pid, v: 1, ts: new Date().toISOString() });
+  emit({ step: 1, status: "running", remark: "Opening the snapshot player" });
+  await sleep(60);
+  emit({ step: 1, status: "failed", remark: "Could not open the browser target" });
+  process.stderr.write("Error: could not start Chrome for this run.\n");
+  process.exit(Number(process.env.KANE_FIXTURE_EXIT ?? 2));
+}
+
 if (args[0] === "testmd") {
   const summary = { overall_status: result, duration_s: 1.1, steps: { total: 2, passed: result === "passed" ? 2 : 1, failed: result === "passed" ? 0 : 1, skipped: 0, replay_decisions: 2, author_decisions: 0 } };
   emit({ type: "stream_start", cli_version: "fixture", surface: "testmd", pid: process.pid, v: 1, ts: new Date().toISOString() });

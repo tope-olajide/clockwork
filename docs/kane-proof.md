@@ -70,6 +70,14 @@ Driven through the product UI (`?demoReset=1` → Neon Runner → AI Play), 2026
 - Fix: deterministic `repairAiPlayFailure` returned `Move Core A out of Ground` and applied one undoable `object.update`.
 - Attempt 2 run `646cff5f-7231-475d-8fa0-3297905d2956` (snapshot `OShWhY1HNpQo3A`): `run_end.status: "passed"`, `reason: "Objective completed"`, 66.6 s, final state `STATUS: "WON"`, `coins: "3"`, `last_error: "none"`. Panel shows `KANE VERIFIED` and both evidence links.
 
+### Exit-2 / unauthenticated rendering (fixture)
+
+`KANE_FIXTURE_NO_RUN_END=1` makes the fixture emit `stream_start`, one failed step and exit 2 with **no** `run_end` — the wire shape of an auth/URL/Chrome failure.
+
+- Runner: emits `error kane-auth` ("Kane CLI could not start (auth, URL or Chrome). Run kane-cli whoami and try again."), result `status: "error"`, `summary: "Kane could not start or finish the run."`, no evidence pack.
+- Panel (fixture server, 1366×768): header chip `KANE ERROR`, alert with the auth guidance, `Attempt 1 ERROR`, footer `0s · 1 step`. No pass verdict is shown.
+- Bug found and fixed while proving this: the attempt footer counted only `done` steps, so a failed or auth-failed run displayed `0 steps`. It now counts every settled step and pluralizes.
+
 ### AI Play objective extraction (`store ... as`)
 
 The objective now ends with the documented extraction form, then asserts on the stored values:

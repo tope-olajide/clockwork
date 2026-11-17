@@ -108,7 +108,10 @@ export function AiPlayPanel({ open, onClose, aiPlay, modelLabel, onUndoFix }: Ai
                 ))}
               </dl>
               <footer>
-                <span>{Math.round(result.durationMs / 1000)}s · {result.steps.filter((step) => step.status === "done").length} steps</span>
+                <span>{Math.round(result.durationMs / 1000)}s · {(() => {
+                  const count = result.steps.filter((step) => step.status !== "running").length;
+                  return `${count} ${count === 1 ? "step" : "steps"}`;
+                })()}</span>
                 {result.evidenceUrl && <a href={result.evidenceUrl} target="_blank" rel="noreferrer">evidence</a>}
               </footer>
             </article>
