@@ -1,5 +1,6 @@
 import { commandDefinitions, runCommand } from "../commands/registry";
 import { CommandError } from "../commands/validation";
+import { expectedArgsHint } from "./command-help";
 import type { ProjectDocument } from "../model/schema";
 
 export interface AgentCommand {
@@ -119,10 +120,17 @@ export function previewCommands(document: ProjectDocument, input: ApplyCommandsA
     const allPatches: any[] = [];
     const allInverse: any[] = [];
     for (const cmd of input.commands) {
-      const res = runCommand(current, cmd, { expectedRevision: current.revision });
-      current = res.document;
-      allPatches.push(...res.patches);
-      allInverse.push(...res.inversePatches);
+      try {
+        const res = runCommand(current, cmd, { expectedRevision: current.revision });
+        current = res.document;
+        allPatches.push(...res.patches);
+        allInverse.push(...res.inversePatches);
+      } catch (error) {
+        // Quote the real signature so the model's next attempt can be correct.
+        const message = error instanceof Error ? error.message : "Command failed.";
+        const code = error instanceof CommandError ? error.code : "SCHEMA";
+        throw new CommandError(code, `${message} ${expectedArgsHint(cmd?.type ?? "")}`);
+      }
     }
     const changeSet = buildChangeSet(document, current, allPatches, allInverse, "preview", input.summary || "Preview changes");
     const changedIds = changeSet.changes
@@ -163,7 +171,7 @@ export function applyCommandsInStore(
     const cmd = input.commands[i]!;
     const result = dispatch(cmd.type, cmd.args, { expectedRevision: expected, transactionId });
     if (!result.ok) {
-      return { ok: false, code: result.code, message: `Command ${i + 1}/${input.commands.length} failed: ${result.error}`, revision: getDocument()?.revision ?? expected };
+      return { ok: false, code: result.code, message: `Command ${i + 1}/${input.commands.length} failed: ${result.error} ${expectedArgsHint(cmd.type)}`, revision: getDocument()?.revision ?? expected };
     }
     expected = result.revision!;
   }

@@ -156,7 +156,21 @@ Verified locally (CDP mouse press on the stage): player x 160 → 911, `coins` 0
 
 The root cause is visible in the prompt and tool surface: `apply_commands` only tells the model that `commands` are `{type, args}` objects and that args is "Command arguments object". Nothing exposes the actual args — `object.update` needs `{sceneId, objectId, patch: {transform: …}}`, while moving an object has its own command, `object.updateTransform` (`{sceneId, objectId, transform}`). The Build prompt (`server/ai/system-prompt.ts`) also lists no command shapes and no tool returns them, so the model has to guess a nested structure and the first guess is rejected.
 
-**Fix direction:** expose the command reference (a `list_commands` read tool returning each type's arg keys, and/or a compact cheat-sheet in the Build prompt), and echo the expected args back in the failure message so one retry can succeed instead of four blind attempts.
+**Fix applied:**
+
+- `src/engine/ai/command-help.ts` derives each command's argument signature from the same zod schemas the app validates with — `commandReference()`, `signatureFor(type)`, `expectedArgsHint(type)`.
+- New read tool `list_commands` (in all modes) returns all 57 commands with argument names, types and required flags, so the model can look up `object.update` vs `object.updateTransform` instead of guessing.
+- A rejected command now carries `Expected args: object.update(sceneId: string, objectId: string, patch: object{…})` (trimmed to 600 chars) in both the preview and apply paths, and the Build prompt tells the model to read that hint and fix the args rather than resend the same batch (`PROMPT_VERSION` 3).
+
+**Verified locally (real agent turn, no Kane):** Build mode, "One coin … move it somewhere reachable" → `revision 0 → 1`, `Core A` y `860 → 790` (now reachable), Undo enabled with one entry. The agent used the reference and applied on the first try. One rough edge: its `preview_commands` call errored before the successful `apply_commands`; the apply path is what matters, but the preview rejection is worth a look.
+
+### K3e — agent repair applied, verdict spoiled by bifurcation
+
+`k3e.ndjson`: `failed`, 350.3 s, 61.6 credits, **`bifurcated: true`, `total_runs: 2`**. Flow 1 (repair) completed with `result_code 100 success.complete` — the build request was accepted, so the "edit shape" defect is gone. Flow 2 asserted undo/redo and reported `0 undo · 0 redo`.
+
+That second failure is a **test artifact, not a product bug**: split runs get a fresh browser context, so the project is re-seeded and carries no history from flow 1. Play never touches `history` (`PlayPage` only calls `setPlaytestRunning`), and the same repair produced one undo entry locally.
+
+**Next step for K3:** keep the objective to one flow — repair + play-to-win only — and check undo/redo in a separate objective that performs the edit and undo inside a single run.
 
 **Kane steerability probe** (`scripts/kane/objectives/k3-steer-probe.txt`, 199.4 s, 33.1 credits): `run_end.status: "passed"`, `final_state { player_moved: "true", coins_counter: "2" }`, summary "Clicked to the right of the player … The player moved, and the COINS counter reached 2". Click steering is therefore the input path K3 should use; `k3-agent-repair.txt` was rewritten to click the stage instead of pressing keys.
 - An earlier K3 attempt was killed by a 320 s wrapper mid-repair (no `run_end`, no verdict) and is not evidence either way.

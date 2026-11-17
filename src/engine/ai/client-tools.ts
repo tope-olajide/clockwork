@@ -1,5 +1,6 @@
 import type { ToolResult } from "@shared/protocol";
 import type { ProjectDocument } from "../model/schema";
+import { commandReference } from "./command-help";
 import { captureViewportImage } from "./viewport-capture";
 
 interface ToolExecInput {
@@ -25,6 +26,7 @@ export function executeClientTool(input: ToolExecInput): ExecutedTool {
   const fail = (error: string): ExecutedTool => ({ ok: false, error, revision, name, args });
 
   try {
+    if (name === "list_commands") return ok({ commands: commandReference() });
     if (name === "query_project") return executeClientTool({ ...input, name: "search_entities" });
     if (name === "inspect_entity") return executeClientTool({ ...input, name: "get_object" });
     if (name === "get_project_summary") {

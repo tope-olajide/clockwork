@@ -83,6 +83,15 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "list_commands",
+      description:
+        "List every project command with its argument names, types and required flags. Call this before apply_commands when you are not certain of a command's args.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "capture_viewport",
       description: "Capture the current editor viewport as a PNG image for visual inspection.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
