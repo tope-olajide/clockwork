@@ -145,6 +145,19 @@ Kane's clicks land reliably (it plays through drawers, toolbars and the stage); 
 
 Verified locally (CDP mouse press on the stage): player x 160 → 911, `coins` 0 → 2 on the untouched demo, i.e. the buried `Core A` is still the only thing stopping a win.
 
+### K3 reruns after click steering
+
+| Run | Result | What it proved |
+| --- | --- | --- |
+| `k3c.ndjson` | failed, 404 s, 37.4 credits | Kane opened the agent in **Ask** (read-only), so the repair request could only be described; the objective now says to switch to Build first. |
+| `k3d.ndjson` | failed, 196 s, 29.9 credits | Build mode was active and the agent did respond, but its `apply_commands` request was rejected and nothing was saved. |
+
+`k3d` is a **product finding**, not an environment one. Kane's verdict: "The Build agent generated an edit request in a shape the application would not accept. It retried the edit several times, then confirmed that nothing had been saved."
+
+The root cause is visible in the prompt and tool surface: `apply_commands` only tells the model that `commands` are `{type, args}` objects and that args is "Command arguments object". Nothing exposes the actual args — `object.update` needs `{sceneId, objectId, patch: {transform: …}}`, while moving an object has its own command, `object.updateTransform` (`{sceneId, objectId, transform}`). The Build prompt (`server/ai/system-prompt.ts`) also lists no command shapes and no tool returns them, so the model has to guess a nested structure and the first guess is rejected.
+
+**Fix direction:** expose the command reference (a `list_commands` read tool returning each type's arg keys, and/or a compact cheat-sheet in the Build prompt), and echo the expected args back in the failure message so one retry can succeed instead of four blind attempts.
+
 **Kane steerability probe** (`scripts/kane/objectives/k3-steer-probe.txt`, 199.4 s, 33.1 credits): `run_end.status: "passed"`, `final_state { player_moved: "true", coins_counter: "2" }`, summary "Clicked to the right of the player … The player moved, and the COINS counter reached 2". Click steering is therefore the input path K3 should use; `k3-agent-repair.txt` was rewritten to click the stage instead of pressing keys.
 - An earlier K3 attempt was killed by a 320 s wrapper mid-repair (no `run_end`, no verdict) and is not evidence either way.
 
