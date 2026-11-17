@@ -105,9 +105,9 @@ Cost and time notes from this pass:
 |---|---|---|
 | K1 editor smoke | **passed** | real run above |
 | K5 AI Play closed loop | **passed** | full Neon Runner fail → fix → pass, 151.6 s (above) |
-| K2 agent double jump | **failed** (product/config defect) | real run, see below |
-| K3 agent repair | not run | blocked by the K2 finding: no tool-capable model is configured in the app |
-| K4 agent ↔ Kane handshake | not run | same dependency |
+| K2 agent double jump | **failed** (environment, 3 attempts) | real runs, see below |
+| K3 agent repair | **failed** (Play input, after the agent path worked) | real run, see below |
+| K4 agent ↔ Kane handshake | not run | depends on a stable K2/K3 |
 
 ### K2 — agent double jump (real run, failed)
 
@@ -116,6 +116,24 @@ Cost and time notes from this pass:
 - Kane's summary: the panel showed "No model" and the run proceeded anyway; both attempts ended with a fetch failure rather than applying the change. Its recommendation: block the request when the panel shows "No model".
 - This is a **real defect caught by Kane**, not an environment crash: the app disables the Build/Plan tabs but still allows the request path to proceed, and a failed provider stream surfaces as a raw fetch failure instead of an actionable "connect a tool-capable model" message. The first K2 attempt also hit the same `environment_issue/platform_failure` (browser crashed during screenshot) seen in K1, and passed that point on retry after ~800 MB of memory was freed.
 - Consequence: K2's agent behaviour cannot be verified until a tool-capable model is configured in the app; K3 depends on the same capability, so it was not run rather than spending credits on a known block.
+
+#### Follow-up: the no-model defect is fixed
+
+- `server/ai/store.ts` now surfaces a single-provider `.env` setup (`LLM_MODEL` / `LLM_BASE_URL` / `LLM_API_KEY`) as a read-only `env` provider and `env:<model>` model with `tools: true`; the client auto-selects it when nothing else is chosen. Before this, the server could already answer with the env model while the app showed "No model", Build/Plan were disabled, and sends failed as raw fetch errors.
+- `src/features/agent/useAgentSession.ts` now blocks before the network when no model is selected, the provider has no key, or Build/Plan is used without a tool-capable model, with actionable guidance (choose a model / open settings). Provider/network failures are reworded to point at Settings → AI Models instead of a bare `fetch failed`.
+- Verified: `POST /api/ai/step` with `env:deepseek-v4.1-flash` streams `ready`; `/api/ai/providers` reports the env provider `configured: true, source: env`; `/api/ai/models` lists `deepseek-v4.1-flash (env)` with `tools: true`. (A wrong key in `.env.local` was replaced by the user during this pass; the endpoint was re-verified after the restart.)
+
+#### K2 after the fix: still an environment failure
+
+Three further real runs all ended the same way: `run_end.status: "failed"` at 51–60 s, reason "browser target stopped running during screenshot capture", immediately after selecting Player in the hierarchy. Cost 3.1–13.1 credits per attempt. The NDJSON shows no product error and no rejected request. This is the same `environment_issue/platform_failure` recorded in K1's evidence; it is a local Chrome/graphics stability limit, not a regression.
+
+### K3 — agent repair (real run, failed on Play input)
+
+- Objective: `scripts/kane/objectives/k3-agent-repair.txt`, `?demoReset=1`, 580 s cap, 40 steps.
+- The agent path worked with the env model: Kane opened the agent, sent the problem statement, waited for the change summary, switched to Build, sent the repair request, then went to Play.
+- Result: `run_end.status: "failed"`, 314.9 s, 47.92 credits. Kane's verdict: it pressed a key and clicked the game canvas, but the player stayed at the starting position and `COINS` stayed 0; its summary asks for the actual movement controls to be used and to stop only after the win message.
+- Not yet classified: whether Play ignored the synthetic key input (a real input/focus defect) or Kane mis-targeted the play surface. A direct probe of `/play/prj_…` opened on the **Win** scene already showing `WON` / `COINS 3`, so the project state after these runs needs checking before blaming the input path.
+- An earlier K3 attempt was killed by a 320 s wrapper mid-repair (no `run_end`, no verdict) and is not evidence either way.
 
 K1 exposed two real UI/accessibility defects (collapsed inspector; unsafe hierarchy-row semantics), both fixed before the passing run. That count is what the evidence supports, not a cap: engine QA runs with `--bug-detection continue`, so any further confirmed defect is recorded here too. The same evidence pack also contains one `environment_issue/platform_failure` (browser target crashed during a screenshot) which is not a product bug and is not counted. No product bug is claimed from the AI Play fixture.
 
