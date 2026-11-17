@@ -105,9 +105,17 @@ Cost and time notes from this pass:
 |---|---|---|
 | K1 editor smoke | **passed** | real run above |
 | K5 AI Play closed loop | **passed** | full Neon Runner fail → fix → pass, 151.6 s (above) |
-| K2 agent double jump | not run | agent/model path not driven with Kane in this pass |
-| K3 agent repair | not run | same |
-| K4 agent ↔ Kane handshake | not run | same |
+| K2 agent double jump | **failed** (product/config defect) | real run, see below |
+| K3 agent repair | not run | blocked by the K2 finding: no tool-capable model is configured in the app |
+| K4 agent ↔ Kane handshake | not run | same dependency |
+
+### K2 — agent double jump (real run, failed)
+
+- Objective: `scripts/kane/objectives/k2-agent-double-jump.txt`, 300 s cap, `--bug-detection continue`.
+- Result: `run_end.status: "failed"`, 265.7 s, 47.56 credits. Kane opened Neon Runner, selected Player, opened the agent, sent "Give the player a double jump", hit `No model` / "Build/Plan require a tool-capable model", retried, and both sends ended in a fetch failure.
+- Kane's summary: the panel showed "No model" and the run proceeded anyway; both attempts ended with a fetch failure rather than applying the change. Its recommendation: block the request when the panel shows "No model".
+- This is a **real defect caught by Kane**, not an environment crash: the app disables the Build/Plan tabs but still allows the request path to proceed, and a failed provider stream surfaces as a raw fetch failure instead of an actionable "connect a tool-capable model" message. The first K2 attempt also hit the same `environment_issue/platform_failure` (browser crashed during screenshot) seen in K1, and passed that point on retry after ~800 MB of memory was freed.
+- Consequence: K2's agent behaviour cannot be verified until a tool-capable model is configured in the app; K3 depends on the same capability, so it was not run rather than spending credits on a known block.
 
 K1 exposed two real UI/accessibility defects (collapsed inspector; unsafe hierarchy-row semantics), both fixed before the passing run. That count is what the evidence supports, not a cap: engine QA runs with `--bug-detection continue`, so any further confirmed defect is recorded here too. The same evidence pack also contains one `environment_issue/platform_failure` (browser target crashed during a screenshot) which is not a product bug and is not counted. No product bug is claimed from the AI Play fixture.
 
