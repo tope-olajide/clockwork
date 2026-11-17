@@ -15,6 +15,8 @@ import {
   type ViewportSize,
 } from "./camera";
 import { SceneRenderer, objectDims } from "./scene-renderer";
+import { ensureTexture, getTexture } from "./texture-cache";
+import { readAssetBlob } from "../persistence/indexeddb";
 
 type TransformPatch = {
   x?: number;
@@ -108,6 +110,7 @@ export function EngineViewport() {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [fps, setFps] = useState(0);
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
+  const [textureVersion, setTextureVersion] = useState(0);
 
   sceneRef.current = scene;
 
@@ -204,7 +207,7 @@ export function EngineViewport() {
     const renderer = rendererRef.current;
     const app = appRef.current;
     if (!ready || !renderer || !app || !scene || !document) return;
-    renderer.render(scene, document);
+    renderer.render(scene, document, textureVersion);
     renderer.applyCamera(scene, camera);
     renderer.root.position.set(viewport.width / 2 - camera.x * camera.zoom, viewport.height / 2 - camera.y * camera.zoom);
     renderer.root.scale.set(camera.zoom);
@@ -212,7 +215,29 @@ export function EngineViewport() {
 
     const overlay = overlayRef.current;
     if (overlay) drawOverlay(overlay, scene, camera, viewport, selection, hoverId, marquee, guides);
-  }, [ready, scene, document, camera, viewport, selection, hoverId, marquee, guides, preview]);
+  }, [ready, scene, document, camera, viewport, selection, hoverId, marquee, guides, preview, textureVersion]);
+
+  // Preload asset textures for the active scene/document so sprites and tilemaps can render real art.
+  useEffect(() => {
+    if (!document) return;
+    const imageAssets = document.assets.filter((asset) => asset.kind === "image" || asset.kind === "tileset");
+    if (imageAssets.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (const asset of imageAssets) {
+        if (cancelled) return;
+        const hadTexture = getTexture(asset.id) !== null;
+        const blob = await readAssetBlob(asset.id);
+        if (!blob || cancelled) continue;
+        const url = URL.createObjectURL(blob);
+        const texture = await ensureTexture(asset.id, url);
+        if (texture && !hadTexture && !cancelled) setTextureVersion((version) => version + 1);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [document?.id, document?.revision]);
 
   // Fit the scene when it changes or when the viewport first becomes measurable.
   useEffect(() => {

@@ -195,6 +195,7 @@ export const assetSchema = z.object({
   height: z.number().int().positive().optional(),
   size: z.number().int().nonnegative(),
   tags: z.array(z.string()).default([]),
+  thumbnail: z.string().optional(),
   slices: z
     .array(z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }))
     .optional(),

@@ -8,6 +8,7 @@ import {
   nowIso,
 } from "../model/factory";
 import {
+  assetSchema,
   behaviorInstanceSchema,
   bodySchema,
   gameObjectSchema,
@@ -534,7 +535,67 @@ const commands: CommandDefinition[] = [
       object.behaviors = object.behaviors.filter((behavior) => behavior.id !== args.behaviorId);
     },
   ),
+  definition(
+    "asset.add",
+    z.object({ asset: assetSchema }),
+    (args) => `Import ${args.asset.name}`,
+    (document, args) => {
+      if (document.assets.some((asset) => asset.id === args.asset.id)) {
+        throw new CommandError("INVARIANT", "That asset is already in the project.");
+      }
+      document.assets.push(args.asset);
+    },
+  ),
+  definition(
+    "asset.update",
+    z.object({
+      assetId: z.string().min(1),
+      patch: z.object({ name: z.string().min(1).max(120).optional(), tags: z.array(z.string()).optional() }),
+    }),
+    () => "Update asset",
+    (document, args) => {
+      const asset = document.assets.find((candidate) => candidate.id === args.assetId);
+      if (!asset) throw new CommandError("NOT_FOUND", "That asset does not exist.");
+      if (args.patch.name !== undefined) asset.name = args.patch.name;
+      if (args.patch.tags !== undefined) asset.tags = args.patch.tags;
+    },
+  ),
+  definition(
+    "asset.delete",
+    z.object({ assetId: z.string().min(1) }),
+    () => "Delete asset",
+    (document, args) => {
+      const asset = document.assets.find((candidate) => candidate.id === args.assetId);
+      if (!asset) throw new CommandError("NOT_FOUND", "That asset does not exist.");
+      const references = assetReferences(document, args.assetId);
+      if (references.length > 0) {
+        throw new CommandError("INVARIANT", `Asset is in use by ${references.join(", ")}.`);
+      }
+      document.assets = document.assets.filter((candidate) => candidate.id !== args.assetId);
+    },
+  ),
+  definition(
+    "asset.setSlices",
+    z.object({ assetId: z.string().min(1), slices: z.array(z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })) }),
+    () => "Slice asset",
+    (document, args) => {
+      const asset = document.assets.find((candidate) => candidate.id === args.assetId);
+      if (!asset) throw new CommandError("NOT_FOUND", "That asset does not exist.");
+      asset.slices = args.slices;
+    },
+  ),
 ];
+
+function assetReferences(document: ProjectDocument, assetId: string): string[] {
+  const references: string[] = [];
+  if (document.scenes.some((scene) => scene.background.assetId === assetId)) references.push("scene background");
+  if (document.scenes.some((scene) => scene.audio?.musicAssetId === assetId)) references.push("scene music");
+  if (document.scenes.some((scene) => scene.objects.some((object) => (object.visual?.kind === "sprite" && object.visual.assetId === assetId) || (object.visual?.kind === "tilemap" && object.visual.tilesetId === assetId)))) references.push("scene object");
+  if (document.prefabs.some((prefab) => prefab.root.visual && ((prefab.root.visual.kind === "sprite" && prefab.root.visual.assetId === assetId) || (prefab.root.visual.kind === "tilemap" && prefab.root.visual.tilesetId === assetId)))) references.push("prefab");
+  if (document.prefabs.some((prefab) => prefab.objects.some((object) => (object.visual?.kind === "sprite" && object.visual.assetId === assetId) || (object.visual?.kind === "tilemap" && object.visual.tilesetId === assetId)))) references.push("prefab");
+  if (document.scenes.some((scene) => scene.rules.some((rule) => rule.do.some((action) => action.kind === "play-sound" && action.assetId === assetId)))) references.push("rule");
+  return [...new Set(references)];
+}
 
 export const commandRegistry = new Map(commands.map((command) => [command.type, command]));
 

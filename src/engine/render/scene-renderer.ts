@@ -1,4 +1,6 @@
-import { Application, Container, Graphics, Sprite, Text, Texture, type ColorSource } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type ColorSource } from "pixi.js";
+import { getTexture } from "./texture-cache";
+import type { Asset } from "../model/schema";
 import type { GameObject, Layer, ProjectDocument, Scene } from "../model/schema";
 import type { CameraState } from "./camera";
 
@@ -21,6 +23,7 @@ interface ObjectNode {
   body: Container;
   kind: GameObject["visual"] extends undefined ? "rect" : string;
   signature: string;
+  textureVersion: number;
   bounds: ObjectBounds;
 }
 
@@ -89,7 +92,11 @@ function makeRect(width: number, height: number, color: string, alpha = 1): Spri
   return sprite;
 }
 
-function makeObjectVisual(object: GameObject): Container {
+function findAsset(document: ProjectDocument | null, assetId: string): Asset | undefined {
+  return document?.assets.find((asset) => asset.id === assetId);
+}
+
+function makeObjectVisual(object: GameObject, document: ProjectDocument | null = null): Container {
   const visual = object.visual;
   if (visual?.kind === "text") {
     const text = new Text({
@@ -119,29 +126,78 @@ function makeObjectVisual(object: GameObject): Container {
     return body;
   }
   if (visual?.kind === "sprite") {
-    // Textures arrive with the asset pipeline (Slice 3). Draw a placeholder block tinted by the sprite.
+    const asset = findAsset(document, visual.assetId);
+    const texture = getTexture(visual.assetId);
     const body = new Container();
-    body.addChild(makeRect(w, h, visual.tint ?? "#a9b4ff", 0.9));
-    body.addChild(makeRect(w, h, "#0b0d12", 0.12));
+    if (texture) {
+      let frameTexture = texture;
+      if (visual.frame !== undefined && asset?.slices?.[visual.frame]) {
+        const slice = asset.slices[visual.frame]!;
+        frameTexture = new Texture({ source: texture.source, frame: new Rectangle(slice.x, slice.y, slice.w, slice.h) });
+      }
+      const sprite = new Sprite(frameTexture);
+      if (visual.width) sprite.width = visual.width;
+      else if (!visual.frame) sprite.width = w;
+      if (visual.height) sprite.height = visual.height;
+      else if (!visual.frame) sprite.height = h;
+      if (visual.tint) sprite.tint = colorToNumber(visual.tint);
+      body.addChild(sprite);
+    } else {
+      body.addChild(makeRect(w, h, visual.tint ?? "#a9b4ff", 0.9));
+      body.addChild(makeRect(w, h, "#0b0d12", 0.12));
+    }
     return body;
   }
 
+  const container = new Container();
   const graphics = new Graphics();
   if (visual?.kind === "tilemap") {
     const { tileSize, cols, rows, data } = visual;
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < cols; col += 1) {
-        const tile = data[row * cols + col] ?? 0;
-        if (tile <= 0) continue;
-        graphics.rect(col * tileSize, row * tileSize, tileSize, tileSize).fill({ color: 0x39466a, alpha: 0.9 });
-        graphics.rect(col * tileSize, row * tileSize, tileSize, tileSize).stroke({ width: 1, color: 0x1a2238, alpha: 0.8 });
+    const asset = findAsset(document, visual.tilesetId);
+    const texture = getTexture(visual.tilesetId);
+    if (texture) {
+      const textureCols = Math.max(1, Math.floor(texture.width / tileSize));
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          const tile = data[row * cols + col] ?? 0;
+          if (tile <= 0) continue;
+          const slice = asset?.slices?.[tile - 1];
+          let frame: Rectangle;
+          if (slice) {
+            frame = new Rectangle(slice.x, slice.y, slice.w, slice.h);
+          } else {
+            const index = tile - 1;
+            const sourceCol = index % textureCols;
+            const sourceRow = Math.floor(index / textureCols);
+            frame = new Rectangle(sourceCol * tileSize, sourceRow * tileSize, tileSize, tileSize);
+          }
+          const frameTexture = new Texture({ source: texture.source, frame });
+          const sprite = new Sprite(frameTexture);
+          sprite.x = col * tileSize;
+          sprite.y = row * tileSize;
+          sprite.width = tileSize;
+          sprite.height = tileSize;
+          container.addChild(sprite);
+        }
       }
+    } else {
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          const tile = data[row * cols + col] ?? 0;
+          if (tile <= 0) continue;
+          graphics.rect(col * tileSize, row * tileSize, tileSize, tileSize).fill({ color: 0x39466a, alpha: 0.9 });
+          graphics.rect(col * tileSize, row * tileSize, tileSize, tileSize).stroke({ width: 1, color: 0x1a2238, alpha: 0.8 });
+        }
+      }
+      if (cols === 0 || rows === 0) graphics.rect(0, 0, w, h).fill({ color: 0x39466a });
+      container.addChild(graphics);
     }
-    if (cols === 0 || rows === 0) graphics.rect(0, 0, w, h).fill({ color: 0x39466a });
   } else {
     graphics.rect(0, 0, w, h).fill({ color: 0x8a94ad });
+    container.addChild(graphics);
   }
-  return graphics;
+  if (container.children.length === 0 && graphics.parent === null) container.addChild(graphics);
+  return container;
 }
 
 function applyObjectTransform(node: ObjectNode, object: GameObject): void {
@@ -192,7 +248,10 @@ export class SceneRenderer {
     return node;
   }
 
-  render(scene: Scene, document: ProjectDocument): void {
+  textureVersion = 0;
+
+  render(scene: Scene, document: ProjectDocument, textureVersion = 0): void {
+    this.textureVersion = textureVersion;
     const backgroundKey = `${scene.id}:${scene.size.w}x${scene.size.h}:${scene.background.color}`;
     if (backgroundKey !== this.backgroundKey) {
       this.backgroundKey = backgroundKey;
@@ -244,20 +303,21 @@ export class SceneRenderer {
         if (object.layerId !== layer.id) continue;
         let node = this.objectNodes.get(object.id);
         const signature = signatureOf(object);
+        const textureSensitive = object.visual?.kind === "sprite" || object.visual?.kind === "tilemap";
         if (!node) {
           const root = new Container();
-          const body = makeObjectVisual(object);
+          const body = makeObjectVisual(object, document);
           root.addChild(body as Container);
-          layerNode.root.addChild(root);
-          node = { root, body, kind: object.visual?.kind ?? "empty", signature, bounds: boundsOf(object) };
+          node = { root, body, kind: object.visual?.kind ?? "empty", signature, textureVersion, bounds: boundsOf(object) };
           this.objectNodes.set(object.id, node);
-        } else if (node.signature !== signature) {
+        } else if (node.signature !== signature || (textureSensitive && node.textureVersion !== textureVersion)) {
           node.root.removeChildren().forEach((child) => child.destroy({ children: true }));
-          const body = makeObjectVisual(object);
+          const body = makeObjectVisual(object, document);
           node.root.addChild(body as Container);
           node.body = body;
           node.signature = signature;
           node.kind = object.visual?.kind ?? "empty";
+          node.textureVersion = textureVersion;
         }
         if (node.root.parent !== layerNode.root) layerNode.root.addChild(node.root);
         node.root.zIndex = z;

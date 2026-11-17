@@ -3036,3 +3036,13 @@ a {
   overflow-y: auto;
   contain: content;
 }
+
+.assets-browser { padding: 24px; }
+.assets-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.assets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.asset-card { position: relative; border: 1px solid var(--line, #2a3142); border-radius: 8px; overflow: hidden; background: var(--panel, #171b26); }
+.asset-card img { width: 100%; height: 128px; object-fit: cover; display: block; background: repeating-conic-gradient(#222 0 25%, #2a2a2a 0 50%) 0 0 / 16px 16px; }
+.asset-thumb-placeholder { height: 128px; display: grid; place-items: center; color: var(--muted, #8a94ad); text-transform: uppercase; font-size: 12px; }
+.asset-card-body { padding: 8px; display: grid; gap: 2px; font-size: 12px; }
+.asset-card-body strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-card .icon-button { position: absolute; top: 6px; right: 6px; }

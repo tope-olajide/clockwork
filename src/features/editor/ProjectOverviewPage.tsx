@@ -20,6 +20,7 @@ import { makeLayer, makeScene } from "../../engine/model/factory";
 import type { ProjectDocument, ProjectSettings, Scene } from "../../engine/model/schema";
 import { downloadProject, readProjectFile } from "../../engine/persistence/transfer";
 import { useEngineStore } from "../../engine/store/engine-store";
+import { AssetBrowser } from "../assets/AssetBrowser";
 import { TEMPLATE_LABELS, formatEdited } from "../projects/project-view";
 
 const placeholderSections = {
@@ -283,6 +284,8 @@ export function ProjectOverviewPage() {
                 onExport={exportProject}
                 onImport={importIntoProject}
               />
+            ) : sectionKey === "assets" ? (
+              <AssetBrowser />
             ) : section ? (
               <div className="empty-state" style={{ minHeight: 300 }}>
                 <Settings2 size={22} />

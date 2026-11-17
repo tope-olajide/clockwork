@@ -96,6 +96,28 @@ export async function deleteProjectRecord(projectId: string): Promise<void> {
   await transactionDone(transaction);
 }
 
+export async function readAssetBlob(assetId: string): Promise<Blob | undefined> {
+  const db = await openDatabase();
+  const record = await requestToPromise(
+    db.transaction("assets", "readonly").objectStore("assets").get(assetId) as IDBRequest<{ id: string; blob: Blob } | undefined>,
+  );
+  return record?.blob;
+}
+
+export async function writeAssetBlob(assetId: string, blob: Blob): Promise<void> {
+  const db = await openDatabase();
+  const transaction = db.transaction("assets", "readwrite");
+  transaction.objectStore("assets").put({ id: assetId, blob });
+  await transactionDone(transaction);
+}
+
+export async function deleteAssetBlob(assetId: string): Promise<void> {
+  const db = await openDatabase();
+  const transaction = db.transaction("assets", "readwrite");
+  transaction.objectStore("assets").delete(assetId);
+  await transactionDone(transaction);
+}
+
 export async function readSetting<T>(key: string): Promise<T | undefined> {
   const db = await openDatabase();
   const record = await requestToPromise(
