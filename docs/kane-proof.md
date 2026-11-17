@@ -86,7 +86,7 @@ Cost and time notes from this pass:
 | K3 agent repair | not run | same |
 | K4 agent ↔ Kane handshake | not run | same |
 
-K1 exposed two real UI/accessibility defects (collapsed inspector; unsafe hierarchy-row semantics), both fixed before the passing run. No product bug is claimed from the AI Play fixture.
+K1 exposed two real UI/accessibility defects (collapsed inspector; unsafe hierarchy-row semantics), both fixed before the passing run. That count is what the evidence supports, not a cap: engine QA runs with `--bug-detection continue`, so any further confirmed defect is recorded here too. The same evidence pack also contains one `environment_issue/platform_failure` (browser target crashed during a screenshot) which is not a product bug and is not counted. No product bug is claimed from the AI Play fixture.
 
 ## Bar 3 — agent and Kane talked to each other
 
