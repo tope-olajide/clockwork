@@ -115,7 +115,10 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   useEffect(() => { void refreshAiMeta(); }, [refreshAiMeta]);
 
   const providerById = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
-  const effectiveModelId = selectedModelId ?? aiSettings?.defaultModelId ?? "";
+  // An env-only setup exposes a read-only "env" model; select it rather than
+  // showing "No model" while the agent endpoint could answer.
+  const envModelId = models.find((m) => m.providerId === "env")?.id ?? "";
+  const effectiveModelId = selectedModelId ?? aiSettings?.defaultModelId ?? envModelId;
   const effectiveModel = useMemo(() => models.find((m) => m.id === effectiveModelId) ?? null, [models, effectiveModelId]);
   const effectiveProvider = effectiveModel ? providerById.get(effectiveModel.providerId) : undefined;
   const mock = Boolean(aiSettings?.mock);
@@ -373,6 +376,38 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     const doc = store.document;
     if (!doc) return;
 
+    // Block before touching the network. Sending anyway produces a raw provider
+    // failure (Kane's K2 run caught this as "fetch failure" with "No model").
+    if (!mock) {
+      if (!effectiveModel) {
+        setError({
+          message: "No model is selected. Choose a model to use the agent; manual editing and Play keep working without one.",
+          code: "no-model",
+          action: "choose-model",
+        });
+        setStatus("error");
+        return;
+      }
+      if (!providerConfigured) {
+        setError({
+          message: `${effectiveModel.label} has no API key configured. Add a key in Settings → AI Models, or choose a model whose provider is connected.`,
+          code: "no-key",
+          action: "open-settings",
+        });
+        setStatus("error");
+        return;
+      }
+      if ((mode === "build" || mode === "plan") && !canUseTools) {
+        setError({
+          message: "Build and Plan need a tool-capable model. Choose one, or switch to Ask.",
+          code: "no-tools",
+          action: "choose-model",
+        });
+        setStatus("error");
+        return;
+      }
+    }
+
     setError(null);
     useAgentPresenceStore.getState().clearPresence();
     const userMsg: DisplayMessage = { id: nanoid(), role: "user", content: trimmed, createdAt: new Date().toISOString() };
@@ -495,13 +530,20 @@ export function useAgentSession(args: UseAgentSessionArgs) {
         setStatus("ready");
         return;
       }
-      const message = e instanceof Error ? e.message : "Agent request failed";
-      setError({ message, action: "retry" });
+      const raw = e instanceof Error ? e.message : "Agent request failed";
+      const unreachable = /fetch|network|load failed|ECONN|socket/i.test(raw);
+      setError({
+        message: unreachable
+          ? `Could not reach the model provider (${raw}). Check the provider key and connection in Settings → AI Models.`
+          : raw,
+        code: unreachable ? "provider-timeout" : undefined,
+        action: unreachable ? "open-settings" : "retry",
+      });
       setStatus("error");
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
     }
-  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, executeAgentTool, messages, mode]);
+  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModel, effectiveModelId, executeAgentTool, messages, mock, mode, providerConfigured, canUseTools]);
 
   const retry = useCallback(() => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
