@@ -55,6 +55,12 @@ interface EditorUiPrefs {
   inspectorOpen: boolean;
   tool: "select" | "hand";
   inspectorTab: InspectorTab;
+  leftDockWidth?: number;
+  rightDockWidth?: number;
+}
+
+function clampWidth(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(value)));
 }
 
 function loadEditorUi(): EditorUiPrefs {
@@ -66,6 +72,8 @@ function loadEditorUi(): EditorUiPrefs {
       inspectorOpen: Boolean(parsed.inspectorOpen),
       tool: parsed.tool === "hand" ? "hand" : "select",
       inspectorTab: parsed.inspectorTab === "object" ? "object" : "scene",
+      leftDockWidth: typeof parsed.leftDockWidth === "number" ? parsed.leftDockWidth : undefined,
+      rightDockWidth: typeof parsed.rightDockWidth === "number" ? parsed.rightDockWidth : undefined,
     };
   } catch {
     return { inspectorOpen: false, tool: "select", inspectorTab: "scene" };
@@ -126,13 +134,19 @@ export function EditorPage() {
   const [inspectorDrawer, setInspectorDrawer] = useState(false);
   const [tool, setTool] = useState<"select" | "hand">(prefs.tool);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [leftDockWidth, setLeftDockWidth] = useState(() =>
+    prefs.leftDockWidth ?? (window.innerWidth >= 1600 ? 304 : 280),
+  );
+  const [rightDockWidth, setRightDockWidth] = useState(() =>
+    prefs.rightDockWidth ?? (window.innerWidth >= 1600 ? 320 : 300),
+  );
 
   useEffect(() => {
     window.localStorage.setItem(
       EDITOR_UI_KEY,
-      JSON.stringify({ inspectorOpen, tool, inspectorTab } satisfies EditorUiPrefs),
+      JSON.stringify({ inspectorOpen, tool, inspectorTab, leftDockWidth, rightDockWidth } satisfies EditorUiPrefs),
     );
-  }, [inspectorOpen, tool, inspectorTab]);
+  }, [inspectorOpen, tool, inspectorTab, leftDockWidth, rightDockWidth]);
 
   useEffect(() => {
     if (activeProjectId !== projectId) void loadProject(projectId);
@@ -143,6 +157,7 @@ export function EditorPage() {
     const target = current.scenes.find((candidate) => candidate.id === sceneId);
     if (!target) {
       const next = new URLSearchParams(searchParams);
+      toast.push("Scene not found", `Opening ${current.name}'s start scene instead.`);
       navigate(
         {
           pathname: `/project/${current.id}/scene/${current.startSceneId}`,
@@ -153,7 +168,7 @@ export function EditorPage() {
       return;
     }
     if (activeSceneId !== sceneId) setActiveScene(sceneId);
-  }, [activeSceneId, current, navigate, sceneId, searchParams, setActiveScene]);
+  }, [activeSceneId, current, navigate, sceneId, searchParams, setActiveScene, toast]);
 
   useEffect(() => {
     if (selection.length > 0) {
@@ -321,6 +336,13 @@ export function EditorPage() {
         return;
       }
       if (event.key === "Escape" && !paletteOpen) {
+        const parent = selected?.parentId ? scene?.objects.find((object) => object.id === selected.parentId) : null;
+        if (parent) {
+          setSelection([parent.id]);
+          setInspectorTab("object");
+          setInspectorOpen(true);
+          return;
+        }
         setSelection([]);
         setInspectorTab("scene");
         if (!huge) setInspectorOpen(false);
@@ -396,7 +418,7 @@ export function EditorPage() {
     return (
       <div className="app">
         <TopBar crumbs={[{ label: "Projects", to: "/" }, { label: "Project unavailable" }]} onSearch={() => setPaletteOpen(true)} />
-        <div className="too-small">
+        <div className="too-small project-error">
           <div className="too-small-card">
             <h1>Project could not open</h1>
             <p>{storageError ?? "That project or scene is no longer in local storage."}</p>
@@ -604,9 +626,18 @@ export function EditorPage() {
 
           <div className="editor-body">
             {wide && (
-              <aside className="left-dock" aria-label="Hierarchy and layers">
+              <aside className="left-dock" style={{ width: leftDockWidth }} aria-label="Hierarchy and layers">
                 <EngineLeftDock />
               </aside>
+            )}
+            {wide && (
+              <DockResizer
+                side="left"
+                width={leftDockWidth}
+                min={200}
+                max={Math.max(240, window.innerWidth - rightDockWidth - 520)}
+                onChange={setLeftDockWidth}
+              />
             )}
             <main className="center-stage">
               <EngineWorkspace
@@ -617,7 +648,16 @@ export function EditorPage() {
               />
             </main>
             {wide && (
-              <aside className={`right-dock${inspectorOpen ? "" : " inspector-closed"}`} aria-label="Inspector">
+              <DockResizer
+                side="right"
+                width={rightDockWidth}
+                min={240}
+                max={Math.max(280, window.innerWidth - leftDockWidth - 520)}
+                onChange={setRightDockWidth}
+              />
+            )}
+            {wide && (
+              <aside className={`right-dock${inspectorOpen ? "" : " inspector-closed"}`} style={{ width: rightDockWidth }} aria-label="Inspector">
                 <EngineInspector tab={inspectorTab} onTab={setInspectorTab} />
               </aside>
             )}
@@ -645,6 +685,46 @@ export function EditorPage() {
       {debug && <DebugPanel navigate={navigate} onClose={() => setDebug(false)} />}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={commands} />
     </div>
+  );
+}
+
+function DockResizer({
+  side,
+  width,
+  min,
+  max,
+  onChange,
+}: {
+  side: "left" | "right";
+  width: number;
+  min: number;
+  max: number;
+  onChange: (width: number) => void;
+}) {
+  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = width;
+    const move = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      onChange(clampWidth(startWidth + delta, min, max));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
+
+  return (
+    <div
+      className="dock-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize ${side === "left" ? "hierarchy" : "inspector"} dock`}
+      onPointerDown={onPointerDown}
+    />
   );
 }
 

@@ -841,6 +841,9 @@ export function EngineViewport() {
           ref={canvasRef}
           className="viewport-canvas"
           data-viewport-canvas
+          data-guides={guides.x.length + guides.y.length}
+          data-marquee={marquee ? 1 : 0}
+          data-camera={`${camera.x},${camera.y},${camera.zoom}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

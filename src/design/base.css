@@ -512,6 +512,18 @@ a {
   border-left: 1px solid var(--border);
 }
 
+.dock-resizer {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.dock-resizer:hover,
+.dock-resizer:active {
+  background: var(--coral);
+}
+
 .right-dock.inspector-closed {
   display: none;
 }
@@ -2516,6 +2528,10 @@ a {
   background: var(--bg-0);
 }
 
+.project-error {
+  display: flex;
+}
+
 .too-small-card {
   width: min(460px, 100%);
   padding: 22px;
@@ -2822,6 +2838,7 @@ a {
 
 .ruler-corner {
   position: absolute;
+  pointer-events: none;
   left: 0;
   top: 0;
   width: 22px;
@@ -2840,6 +2857,7 @@ a {
   height: 22px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+  pointer-events: none;
   overflow: hidden;
   z-index: 2;
   color: var(--text-faint);
@@ -2848,6 +2866,7 @@ a {
 }
 
 .ruler-v {
+  pointer-events: none;
   position: absolute;
   left: 0;
   top: 22px;

@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text, type ColorSource } from "pixi.js";
+import { Application, Container, Graphics, Sprite, Text, Texture, type ColorSource } from "pixi.js";
 import type { GameObject, Layer, ProjectDocument, Scene } from "../model/schema";
 import type { CameraState } from "./camera";
 
@@ -18,7 +18,7 @@ export interface ObjectBounds {
 
 interface ObjectNode {
   root: Container;
-  body: Graphics | Text;
+  body: Container;
   kind: GameObject["visual"] extends undefined ? "rect" : string;
   signature: string;
   bounds: ObjectBounds;
@@ -80,7 +80,16 @@ function signatureOf(object: GameObject): string {
   });
 }
 
-function makeObjectVisual(object: GameObject): Graphics | Text {
+function makeRect(width: number, height: number, color: string, alpha = 1): Sprite {
+  const sprite = new Sprite(Texture.WHITE);
+  sprite.width = width;
+  sprite.height = height;
+  sprite.tint = color;
+  sprite.alpha = alpha;
+  return sprite;
+}
+
+function makeObjectVisual(object: GameObject): Container {
   const visual = object.visual;
   if (visual?.kind === "text") {
     const text = new Text({
@@ -97,17 +106,28 @@ function makeObjectVisual(object: GameObject): Graphics | Text {
   }
 
   const { w, h } = objectDims(object);
-  const graphics = new Graphics();
   if (visual?.kind === "rect") {
-    graphics.rect(0, 0, visual.width, visual.height).fill({ color: colorToNumber(visual.color) });
+    const body = new Container();
     if (visual.stroke) {
-      graphics.rect(0, 0, visual.width, visual.height).stroke({ width: 1, color: colorToNumber(visual.stroke), alignment: 0.5 });
+      body.addChild(makeRect(visual.width, visual.height, visual.stroke));
+      const inner = makeRect(Math.max(0, visual.width - 2), Math.max(0, visual.height - 2), visual.color);
+      inner.position.set(1, 1);
+      body.addChild(inner);
+    } else {
+      body.addChild(makeRect(visual.width, visual.height, visual.color));
     }
-  } else if (visual?.kind === "sprite") {
+    return body;
+  }
+  if (visual?.kind === "sprite") {
     // Textures arrive with the asset pipeline (Slice 3). Draw a placeholder block tinted by the sprite.
-    graphics.rect(0, 0, w, h).fill({ color: colorToNumber(visual.tint ?? "#a9b4ff"), alpha: 0.9 });
-    graphics.rect(0, 0, w, h).stroke({ width: 1, color: 0x0b0d12, alpha: 0.5 });
-  } else if (visual?.kind === "tilemap") {
+    const body = new Container();
+    body.addChild(makeRect(w, h, visual.tint ?? "#a9b4ff", 0.9));
+    body.addChild(makeRect(w, h, "#0b0d12", 0.12));
+    return body;
+  }
+
+  const graphics = new Graphics();
+  if (visual?.kind === "tilemap") {
     const { tileSize, cols, rows, data } = visual;
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {

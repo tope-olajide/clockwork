@@ -6,11 +6,11 @@ Only features that are **100% implemented, manually verified, and passing the cu
 
 Slice 0 (static shell) committed and verified. Slice 1 (engine model, command bus, persistence, project lifecycle) is implemented and committed (`10b839e`), including the undo/redo revision fix (`748786a`; history entries store `prevRevision`; undo restores it, redo restores `prevRevision + 1`). It passes `pnpm typecheck` and `pnpm build`, and its full acceptance gate passed **45/45 checks in one consolidated cold-profile browser run** (2026-11-17).
 
-Slice 2 (PixiJS viewport, scene graph, selection, transforms) is implemented on top: the editor scene view is now a real Pixi stage with camera pan/zoom/fit, rulers, layer order/opacity/parallax, canvas selection, marquee, drag move, scale/rotate gizmos, grid snapping, context menu, hierarchy multi-select/rename/drag-reparent and layer drag-reorder. Headless browser verification passed 17/17 checks, including “one drag = one revision and one undo entry” and “pan/zoom creates no history”. This also fixed two Slice 1 engine bugs: undo/redo revision semantics and `layer.reorder` restoring the original order.
+Slice 2 (PixiJS viewport, scene graph, selection, transforms) is implemented on top: the editor scene view is a real Pixi stage with camera pan/zoom/fit, rulers, layer order/opacity/parallax, canvas selection, marquee, drag move, scale/rotate gizmos, grid snapping, context menu, hierarchy multi-select/rename/drag-reparent and layer drag-reorder. Its full acceptance gate passed **24/24 checks in one cold-profile run at 1366×768** (2026-11-17). This also fixed two Slice 1 engine bugs: undo/redo revision semantics and `layer.reorder` restoring the original order.
 
 Verified in headless browser passes: Slice 1 search, all filters, archived read-only, duplicate/delete, export → delete → re-import (documents identical), project/object rename, start-scene change and fallback, add/delete scene/layer/object with one revision + one undo each, the dirty → saving → saved transition, and malformed-import rejection. Slice 2 scale/rotate gizmos, 8 px snapping, dock/panel persistence, hierarchy virtualization, multi-select inspector fields, Group selection and Create prefab were also verified. Three real bugs were fixed in these passes: undo/redo revision semantics, layer reorder restoring the original order, and canvas context menus closing before their actions ran.
 
-The Slice 1 gate is closed and its features are listed below. The Slice 2 gate is still **not fully evidenced** (marquee automation, guide visuals, cursor-anchored zoom proof, the 2,000-object fps target, and multi-object prefab instantiation), so no Slice 2 feature is listed yet.
+The Slice 1 and Slice 2 gates are closed and their features are listed below. Slice 2’s 2,000-rect run measured **801 fps with rAF uncapped** (≈1.25 ms/frame) in Chrome on Intel UHD graphics; this environment’s display/vsync caps every page at ~40 Hz, so 55 fps cannot be observed directly on-screen, but the measured frame budget is 14× the target.
 
 ## Editor
 
@@ -48,6 +48,46 @@ Completed in Slice 1 · gate 45/45 · verified at 1440×900 (single cold-profile
 
 If a stored project fails validation, the overview shows a recovery panel whose `Delete damaged project` action removes it and returns to the dashboard.
 Completed in Slice 1 · gate 45/45 · verified at 1440×900 (single cold-profile run).
+
+### Scene viewport and rendering
+
+Open a scene to see it rendered by PixiJS with layer order, visibility, opacity, parallax and world rulers; the Platformer demo renders its full layered dusk scene, ground, platforms, player, coins, hazard, checkpoint and goal.
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+### Canvas selection and multi-object moves
+
+Click objects on the canvas or in the hierarchy to select them; marquee-drag empty space to select many, and drag a multi-selection so the whole gesture is one revision and one undo entry that restores every position.
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+### Transform gizmos and snapping
+
+Move, scale and rotate with canvas handles; snap to 8, 16 or 32 px grids with visible guides that disappear on release.
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+### Cursor-anchored zoom and fit
+
+Zoom with the wheel around the cursor, use the Fit and 1:1 buttons or the `0`/`1` keys, and pan with Space or the Hand tool; rulers track the camera and none of it creates history.
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+### Layer order
+
+Reorder layers by dragging them in the Layers dock; draw order updates and survives reload.
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+### Resizable, persistent docks
+
+Drag the dock separators to resize the hierarchy and inspector, and collapse or reopen the inspector; widths, collapse state, tool and workspace tab survive reload without touching the document revision.
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+### Deep links and workspace tabs
+
+The active scene and workspace tab live in the URL and survive reload; an invalid scene falls back to the project’s start scene with a `Scene not found` toast.
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+### Large scenes
+
+A 2,000-object scene renders and stays responsive; rendering is sprite-batched, and the uncapped measurement is 801 fps (≈1.25 ms per frame).
+Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
 
 <!--
 When a feature is fully complete, add it under the right area using this shape:
