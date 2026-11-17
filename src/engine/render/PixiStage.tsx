@@ -2,6 +2,7 @@ import { Application, Graphics } from "pixi.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Copy, CornerDownRight, Layers, Sparkles, Trash2 } from "lucide-react";
 import { useToast } from "../../components/ui";
+import { registerViewportCapture } from "../ai/viewport-capture";
 import { makeTransform, newObjectId, newPrefabId } from "../model/factory";
 import type { GameObject, Prefab, Scene } from "../model/schema";
 import { useEngineStore } from "../store/engine-store";
@@ -156,6 +157,9 @@ export function EngineViewport() {
         appRef.current = app;
         rendererRef.current = renderer;
         overlayRef.current = overlay;
+        registerViewportCapture(() => {
+          try { return app.canvas.toDataURL("image/png"); } catch { return null; }
+        });
 
         const rect = host.getBoundingClientRect();
         const width = Math.max(1, Math.round(rect.width));
@@ -197,6 +201,7 @@ export function EngineViewport() {
     return () => {
       disposed = true;
       observer.disconnect();
+      registerViewportCapture(null);
       const current = appRef.current;
       const currentRenderer = rendererRef.current;
       if (current) {

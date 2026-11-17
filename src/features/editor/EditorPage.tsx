@@ -39,6 +39,8 @@ import {
   type PresentationTab,
   type WorkspaceTab,
 } from "./EngineDocks";
+import { AgentDrawer } from "../agent/AgentDrawer";
+import { useAgentSession } from "../agent/useAgentSession";
 
 const WORKSPACE_TABS: Array<{ key: WorkspaceTab; label: string }> = [
   { key: "scene", label: "Scene" },
@@ -129,6 +131,7 @@ export function EditorPage() {
 
   const [prefs] = useState(loadEditorUi);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>(prefs.inspectorTab);
+  const [agentOpen, setAgentOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(prefs.inspectorOpen);
   const [hierarchyDrawer, setHierarchyDrawer] = useState(false);
   const [inspectorDrawer, setInspectorDrawer] = useState(false);
@@ -308,6 +311,11 @@ export function EditorPage() {
         setPaletteOpen((open) => !open);
         return;
       }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        setAgentOpen((open) => !open);
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         void saveNow().then(() => toast.push("Saved", "Project saved to this browser."));
@@ -370,6 +378,12 @@ export function EditorPage() {
     onAiPlay: () => toast.push("AI Play", "AI Play arrives with Kane in Slice 10."),
     onSettings: () => toast.push("Settings", "AI settings arrive in Slice 6.5."),
     onToast: toast.push,
+  });
+
+  const agent = useAgentSession({
+    projectId: current?.id ?? projectId,
+    tab: activeTab,
+    tool,
   });
 
   if (tooSmall) {
@@ -588,9 +602,9 @@ export function EditorPage() {
               }
             >
               <MenuLabel>Game Director</MenuLabel>
-              <MenuItem onSelect={() => toast.push("Ask agent", "The live agent arrives in Slice 6.")}>Ask about this scene</MenuItem>
-              <MenuItem onSelect={() => toast.push("Plan a change", "Plan mode arrives in Slice 7.")}>Plan a change</MenuItem>
-              <MenuItem onSelect={() => toast.push("Open chat", "The agent drawer arrives in Slice 6.")}>Open chat</MenuItem>
+              <MenuItem onSelect={() => setAgentOpen(true)}>Ask about this scene</MenuItem>
+              <MenuItem onSelect={() => { agent.setMode("plan"); setAgentOpen(true); }}>Plan a change</MenuItem>
+              <MenuItem onSelect={() => setAgentOpen(true)} shortcut="⌘J">Open chat</MenuItem>
             </Menu>
             <TooltipPlayButtons onToast={toastSave} />
             <Menu
@@ -683,6 +697,25 @@ export function EditorPage() {
         <EngineInspector tab={inspectorTab} onTab={setInspectorTab} />
       </Drawer>
       {debug && <DebugPanel navigate={navigate} onClose={() => setDebug(false)} />}
+      <AgentDrawer
+        open={agentOpen}
+        onClose={() => setAgentOpen(false)}
+        projectName={current.name}
+        sceneName={scene.name}
+        revision={current.revision}
+        selectionCount={selection.length}
+        modelLabel={agent.modelId}
+        mode={agent.mode}
+        onModeChange={agent.setMode}
+        messages={agent.messages}
+        status={agent.status}
+        error={agent.error}
+        isBusy={agent.isBusy}
+        onSend={agent.send}
+        onStop={agent.stop}
+        onRetry={agent.retry}
+        onNewChat={agent.newChat}
+      />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={commands} />
     </div>
   );
