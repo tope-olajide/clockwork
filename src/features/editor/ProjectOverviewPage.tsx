@@ -21,6 +21,7 @@ import type { ProjectDocument, ProjectSettings, Scene } from "../../engine/model
 import { downloadProject, readProjectFile } from "../../engine/persistence/transfer";
 import { useEngineStore } from "../../engine/store/engine-store";
 import { AssetBrowser } from "../assets/AssetBrowser";
+import { AiSettingsPanel } from "../settings/AiSettingsPanel";
 import { TEMPLATE_LABELS, formatEdited } from "../projects/project-view";
 
 const placeholderSections = {
@@ -286,6 +287,8 @@ export function ProjectOverviewPage() {
               />
             ) : sectionKey === "assets" ? (
               <AssetBrowser />
+            ) : sectionKey === "ai" ? (
+              <AiSettingsPanel />
             ) : section ? (
               <div className="empty-state" style={{ minHeight: 300 }}>
                 <Settings2 size={22} />
@@ -369,8 +372,8 @@ export function ProjectOverviewPage() {
 
                 <div className="section-heading-row">
                   <h2>Project</h2>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/project/${current.id}?section=project`)}>
-                    Settings
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/project/${current.id}?section=ai`)}>
+                    AI Settings
                   </Button>
                 </div>
                 <div className="overview-cards">

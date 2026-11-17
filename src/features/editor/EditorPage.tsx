@@ -376,7 +376,7 @@ export function EditorPage() {
     onInspector: openInspector,
     onPlay: () => navigate(`/play/${current?.id ?? projectId}`),
     onAiPlay: () => toast.push("AI Play", "AI Play arrives with Kane in Slice 10."),
-    onSettings: () => toast.push("Settings", "AI settings arrive in Slice 6.5."),
+    onSettings: () => navigate(`/project/${current?.id ?? projectId}?section=ai`),
     onToast: toast.push,
   });
 
