@@ -135,6 +135,17 @@ Three further real runs all ended the same way: `run_end.status: "failed"` at 51
 - Classified: **Play input is not at fault.** Driving the Play page over CDP (real key events, no focus step) on a freshly reset demo moved the player from x=160 to x≈890 and collected 2 of 3 cores. The seeded defect behaves as designed: `Core A` sits at (280, 860) below the floor and stays unreachable, so `coins` stops at 2 and the win rule never fires without a repair. Kane's session recorded the player at the start position with `COINS 0` for its whole Play phase, i.e. none of its key taps reached the page — a limitation of its own browser input path, not of `/play`.
 - The earlier `/play/prj_…` probe that opened on the **Win** scene already `WON` was a *different, stale project copy*. `?demoReset=1` ran twice concurrently (the reset effect mounts twice in development), both runs saw no existing project and both saved one, leaving two identical `Neon Runner` records — one of which had since been edited, and its `startSceneId` pointed at the `Win` scene (`project.setStartScene` is the only command that writes it). Which actor set it is unrecoverable: the reset deleted that copy. A reload of a current project always starts on `Dusk Run` with `coins: 0`, so Play itself does not restore state.
 - Fixed: `resetDemoProject()` now shares one in-flight run, so `?demoReset=1` leaves exactly one `Neon Runner` (verified twice: 1 record, start `Dusk Run`, defect intact — holding right yields `coins: 2`, `won: false`).
+
+### Click-to-move Play (the input path Kane can actually deliver)
+
+Kane's clicks land reliably (it plays through drawers, toolbars and the stage); its `press_key` taps do not reach the page at all. Rather than keep paying for runs that cannot move the player, Play now also steers on click:
+
+- Clicking anywhere on the stage sets a world-space target, and Play holds left/right until the player reaches it, so a single click produces a full run instead of one frame of movement. Any real key press cancels the target, so keyboard play is unchanged.
+- `PlayPage` shows the hint "Click the stage to move" next to the read-only chip.
+
+Verified locally (CDP mouse press on the stage): player x 160 → 911, `coins` 0 → 2 on the untouched demo, i.e. the buried `Core A` is still the only thing stopping a win.
+
+**Kane steerability probe** (`scripts/kane/objectives/k3-steer-probe.txt`, 199.4 s, 33.1 credits): `run_end.status: "passed"`, `final_state { player_moved: "true", coins_counter: "2" }`, summary "Clicked to the right of the player … The player moved, and the COINS counter reached 2". Click steering is therefore the input path K3 should use; `k3-agent-repair.txt` was rewritten to click the stage instead of pressing keys.
 - An earlier K3 attempt was killed by a 320 s wrapper mid-repair (no `run_end`, no verdict) and is not evidence either way.
 
 K1 exposed two real UI/accessibility defects (collapsed inspector; unsafe hierarchy-row semantics), both fixed before the passing run. That count is what the evidence supports, not a cap: engine QA runs with `--bug-detection continue`, so any further confirmed defect is recorded here too. The same evidence pack also contains one `environment_issue/platform_failure` (browser target crashed during a screenshot) which is not a product bug and is not counted. No product bug is claimed from the AI Play fixture.
