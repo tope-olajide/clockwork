@@ -58,7 +58,7 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 - **Prompt presets are implemented but not browser-verified.** `src/engine/ai/prompts.ts` exports the seven presets and `suggestionsFor`, the empty state renders them as cards, and `/` opens the preset list. `docs/golden-prompts.md` records expected tools and success; real-model runs are deferred.
 - **No golden-prompt verification.** The seven prompts and expected tool calls are documented in `docs/golden-prompts.md`, but no real-model run has been performed; task 12 remains unverified.
 - **Revision-conflict auto re-plan is implemented but unverified.** A failed tool with code `revision` appends a synthetic re-read/re-plan message and continues once per failure, at most twice per turn; conflicts never auto-apply. No forced-conflict browser run has been performed.
-- **No Build-mode changed-object pulse/toast/undo affordance** beyond the generic undo history (task 4).
+- **Build-mode feedback is partial.** Changed objects pulse via agent presence, but there is no dedicated toast or agent-undo action beyond the generic undo history (task 4); unverified in the browser.
 
 ## Product limitations by design (v1)
 
