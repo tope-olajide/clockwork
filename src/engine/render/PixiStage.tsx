@@ -17,6 +17,8 @@ import {
 import { SceneRenderer, objectDims } from "./scene-renderer";
 import { ensureTexture, getTexture } from "./texture-cache";
 import { readAssetBlob } from "../persistence/indexeddb";
+import { importAssetFile } from "../assets/asset-store";
+import { fitColliderToAsset } from "../assets/collider";
 
 type TransformPatch = {
   x?: number;
@@ -88,6 +90,9 @@ export function EngineViewport() {
 
   const scene: Scene | null =
     document?.scenes.find((candidate) => candidate.id === activeSceneId) ?? document?.scenes[0] ?? null;
+  const selectedTilemap =
+    scene?.objects.find((object) => object.id === selection[0] && object.visual?.kind === "tilemap") ?? null;
+  const selectedObject = scene?.objects.find((object) => object.id === selection[0]) ?? null;
   const readOnly = Boolean(document?.archivedAt);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -111,6 +116,10 @@ export function EngineViewport() {
   const [fps, setFps] = useState(0);
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
   const [textureVersion, setTextureVersion] = useState(0);
+  const [tilemapMode, setTilemapMode] = useState<"paint" | "erase" | "fill" | "pick">("paint");
+  const [tilemapBrush, setTilemapBrush] = useState(1);
+  const [tilemapTileIndex, setTilemapTileIndex] = useState(1);
+  const tileStrokeRef = useRef<{ objectId: string; mode: "paint" | "erase"; transactionId: string } | null>(null);
 
   sceneRef.current = scene;
 
@@ -394,6 +403,46 @@ export function EngineViewport() {
     if (event.button !== 0 || !scene) return;
     if (readOnly) return;
 
+    const selectedObject = scene.objects.find((object) => object.id === selection[0]);
+    if (selectedObject?.visual?.kind === "tilemap") {
+      const visual = selectedObject.visual;
+      const world = pointToWorld(local);
+      const col = Math.floor((world.x - selectedObject.transform.x) / visual.tileSize);
+      const row = Math.floor((world.y - selectedObject.transform.y) / visual.tileSize);
+      if (col >= 0 && row >= 0 && col < visual.cols && row < visual.rows) {
+        const brushCells = (centerCol: number, centerRow: number) => {
+          const cells: { x: number; y: number }[] = [];
+          const offset = Math.floor(tilemapBrush / 2);
+          for (let dy = -offset; dy <= offset; dy += 1) {
+            for (let dx = -offset; dx <= offset; dx += 1) {
+              const x = centerCol + dx;
+              const y = centerRow + dy;
+              if (x >= 0 && y >= 0 && x < visual.cols && y < visual.rows) cells.push({ x, y });
+            }
+          }
+          return cells;
+        };
+        if (tilemapMode === "fill") {
+          dispatch("tilemap.fill", { sceneId: scene.id, objectId: selectedObject.id, tileIndex: tilemapTileIndex });
+          return;
+        }
+        if (tilemapMode === "pick") {
+          setTilemapTileIndex(visual.data[row * visual.cols + col] ?? 0);
+          setTilemapMode("paint");
+          return;
+        }
+        const cells = brushCells(col, row);
+        const transactionId = `tile-stroke-${Date.now()}`;
+        tileStrokeRef.current = { objectId: selectedObject.id, mode: tilemapMode === "erase" ? "erase" : "paint", transactionId };
+        if (tilemapMode === "erase") {
+          dispatch("tilemap.erase", { sceneId: scene.id, objectId: selectedObject.id, cells }, { transactionId });
+        } else {
+          dispatch("tilemap.paint", { sceneId: scene.id, objectId: selectedObject.id, cells, tileIndex: tilemapTileIndex }, { transactionId });
+        }
+      }
+      return;
+    }
+
     const selectionState = useEngineStore.getState().selection;
     if (selectionState.length === 1) {
       const only = scene.objects.find((object) => object.id === selectionState[0]);
@@ -470,6 +519,32 @@ export function EngineViewport() {
     const local = localPoint(event);
     const world = pointToWorld(local);
     setCursorWorld(world);
+    const stroke = tileStrokeRef.current;
+    if (stroke && scene) {
+      const object = scene.objects.find((candidate) => candidate.id === stroke.objectId);
+      if (object?.visual?.kind === "tilemap") {
+        const visual = object.visual;
+        const col = Math.floor((world.x - object.transform.x) / visual.tileSize);
+        const row = Math.floor((world.y - object.transform.y) / visual.tileSize);
+        if (col >= 0 && row >= 0 && col < visual.cols && row < visual.rows) {
+          const offset = Math.floor(tilemapBrush / 2);
+          const cells: { x: number; y: number }[] = [];
+          for (let dy = -offset; dy <= offset; dy += 1) {
+            for (let dx = -offset; dx <= offset; dx += 1) {
+              const x = col + dx;
+              const y = row + dy;
+              if (x >= 0 && y >= 0 && x < visual.cols && y < visual.rows) cells.push({ x, y });
+            }
+          }
+          if (stroke.mode === "erase") {
+            dispatch("tilemap.erase", { sceneId: scene.id, objectId: object.id, cells }, { transactionId: stroke.transactionId });
+          } else {
+            dispatch("tilemap.paint", { sceneId: scene.id, objectId: object.id, cells, tileIndex: tilemapTileIndex }, { transactionId: stroke.transactionId });
+          }
+        }
+      }
+      return;
+    }
     const gesture = gestureRef.current;
 
     if (!gesture) {
@@ -560,6 +635,7 @@ export function EngineViewport() {
     if (host) host.style.cursor = spaceRef.current ? "grab" : "";
     const gesture = gestureRef.current;
     gestureRef.current = null;
+    tileStrokeRef.current = null;
     if (!gesture || !scene) return;
 
     if (gesture.kind === "marquee") {
@@ -778,6 +854,37 @@ export function EngineViewport() {
     }
   }
 
+  async function fitBodyToArt(asset: { id: string; width?: number; height?: number; slices?: { x: number; y: number; w: number; h: number }[] }, objectId: string) {
+    if (!scene || !document) return;
+    const object = scene.objects.find((candidate) => candidate.id === objectId);
+    if (!object || object.visual?.kind !== "sprite") return;
+    const bounds = await fitColliderToAsset(asset as never, object.visual.frame ?? 0);
+    if (!bounds) {
+      toast.push("Fit failed", "Could not read that asset.");
+      return;
+    }
+    const dims = object.visual.width ?? asset.width ?? 32;
+    const height = object.visual.height ?? asset.height ?? 32;
+    const offsetX = bounds.x + bounds.width / 2 - dims / 2;
+    const offsetY = bounds.y + bounds.height / 2 - height / 2;
+    const outcome = dispatch("object.setBody", {
+      sceneId: scene.id,
+      objectId: object.id,
+      body: {
+        type: object.body?.type ?? "static",
+        width: bounds.width,
+        height: bounds.height,
+        offsetX,
+        offsetY,
+        gravityScale: object.body?.gravityScale ?? 1,
+        collideWorldBounds: object.body?.collideWorldBounds ?? false,
+        oneWay: object.body?.oneWay ?? false,
+      },
+    });
+    if (!outcome.ok) toast.push("Fit failed", outcome.error);
+    else toast.push("Body fitted", asset.id);
+  }
+
   const debug = new URLSearchParams(window.location.search).get("debug") === "1";
   const zoomLabel = `${Math.round(camera.zoom * 100)}%`;
 
@@ -833,6 +940,41 @@ export function EngineViewport() {
             1:1
           </button>
         </div>
+        {selectedObject?.visual?.kind === "sprite" && (
+          <button
+            className="icon-button"
+            title="Fit body to art"
+            onClick={() => {
+              const assetId = selectedObject.visual?.kind === "sprite" ? selectedObject.visual.assetId : undefined;
+              const asset = assetId ? document?.assets.find((candidate) => candidate.id === assetId) : undefined;
+              if (asset) void fitBodyToArt(asset, selectedObject.id);
+            }}
+          >
+            Fit
+          </button>
+        )}
+        {selectedTilemap && (
+          <>
+            <select value={tilemapMode} onChange={(event) => setTilemapMode(event.target.value as typeof tilemapMode)}>
+              <option value="paint">Paint</option>
+              <option value="erase">Erase</option>
+              <option value="fill">Fill</option>
+              <option value="pick">Pick</option>
+            </select>
+            <select value={tilemapBrush} onChange={(event) => setTilemapBrush(Number(event.target.value))}>
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={3}>3</option>
+            </select>
+            <input
+              type="number"
+              min={0}
+              value={tilemapTileIndex}
+              onChange={(event) => setTilemapTileIndex(Number(event.target.value))}
+              style={{ width: 56 }}
+            />
+          </>
+        )}
         <span className="viewport-coords input-mono">
           {cursorWorld ? `${Math.round(cursorWorld.x)}, ${Math.round(cursorWorld.y)}` : "—"}
         </span>
@@ -873,6 +1015,55 @@ export function EngineViewport() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerLeave={() => setHoverId(null)}
+          onDragOver={(event) => {
+            if (event.dataTransfer?.types?.includes("Files")) {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const file = event.dataTransfer?.files?.[0];
+            if (!file) return;
+            const state = useEngineStore.getState();
+            const document = state.document;
+            const scene = document?.scenes.find((candidate) => candidate.id === state.activeSceneId) ?? document?.scenes[0] ?? null;
+            const layerId = scene?.layers[0]?.id;
+            if (!document || !scene || !layerId || document.archivedAt) return;
+            const local = localPoint(event);
+            const world = pointToWorld(local);
+            void (async () => {
+              try {
+                const result = await importAssetFile(file, document);
+                if (result.reused) toast.push("Already in project", result.asset.name);
+                else {
+                  const assetOutcome = state.dispatch("asset.add", { asset: result.asset });
+                  if (!assetOutcome.ok) {
+                    toast.push("Import rejected", assetOutcome.error);
+                    return;
+                  }
+                }
+                const objectId = newObjectId();
+                const object = {
+                  id: objectId,
+                  name: result.asset.name,
+                  layerId,
+                  transform: makeTransform(world.x, world.y),
+                  visual: { kind: "sprite" as const, assetId: result.asset.id },
+                  behaviors: [],
+                  properties: {},
+                  tags: [],
+                };
+                const outcome = state.dispatch("object.create", { sceneId: scene.id, object });
+                if (outcome.ok) {
+                  setSelection([objectId]);
+                  toast.push("Sprite added", result.asset.name);
+                } else toast.push("Sprite failed", outcome.error);
+              } catch (error) {
+                toast.push("Import failed", error instanceof Error ? error.message : "Could not import that file.");
+              }
+            })();
+          }}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenu}
         />

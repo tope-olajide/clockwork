@@ -584,6 +584,112 @@ const commands: CommandDefinition[] = [
       asset.slices = args.slices;
     },
   ),
+  definition(
+    "tilemap.create",
+    z.object({
+      sceneId,
+      layerId,
+      tilesetId: z.string().min(1),
+      cols: z.number().int().positive(),
+      rows: z.number().int().positive(),
+      tileSize: z.number().int().positive(),
+      name: z.string().min(1).max(80).optional(),
+    }),
+    () => "Create tilemap",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      layerOf(scene, args.layerId);
+      const asset = document.assets.find((candidate) => candidate.id === args.tilesetId);
+      if (!asset) throw new CommandError("NOT_FOUND", "That tileset does not exist.");
+      const object: GameObject = {
+        id: `obj_${Math.random().toString(36).slice(2, 12)}`,
+        name: args.name ?? "Tilemap",
+        layerId: args.layerId,
+        transform: makeTransform(0, 0),
+        visual: {
+          kind: "tilemap",
+          tilesetId: args.tilesetId,
+          tileSize: args.tileSize,
+          cols: args.cols,
+          rows: args.rows,
+          data: new Array(args.cols * args.rows).fill(0),
+        },
+        behaviors: [],
+        properties: {},
+        tags: [],
+      };
+      scene.objects.push(object);
+    },
+  ),
+  definition(
+    "tilemap.paint",
+    z.object({
+      sceneId,
+      objectId,
+      cells: z.array(z.object({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative() })),
+      tileIndex: z.number().int().nonnegative(),
+    }),
+    () => "Paint tilemap",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      const object = objectOf(scene, args.objectId);
+      if (object.visual?.kind !== "tilemap") throw new CommandError("INVARIANT", "That object is not a tilemap.");
+      const visual = object.visual;
+      for (const cell of args.cells) {
+        if (cell.x < 0 || cell.y < 0 || cell.x >= visual.cols || cell.y >= visual.rows) continue;
+        visual.data[cell.y * visual.cols + cell.x] = args.tileIndex;
+      }
+    },
+  ),
+  definition(
+    "tilemap.erase",
+    z.object({
+      sceneId,
+      objectId,
+      cells: z.array(z.object({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative() })),
+    }),
+    () => "Erase tilemap",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      const object = objectOf(scene, args.objectId);
+      if (object.visual?.kind !== "tilemap") throw new CommandError("INVARIANT", "That object is not a tilemap.");
+      const visual = object.visual;
+      for (const cell of args.cells) {
+        if (cell.x < 0 || cell.y < 0 || cell.x >= visual.cols || cell.y >= visual.rows) continue;
+        visual.data[cell.y * visual.cols + cell.x] = 0;
+      }
+    },
+  ),
+  definition(
+    "tilemap.fill",
+    z.object({ sceneId, objectId, tileIndex: z.number().int().nonnegative() }),
+    () => "Fill tilemap",
+    (document, args) => {
+      const scene = sceneOf(document, args.sceneId);
+      const object = objectOf(scene, args.objectId);
+      if (object.visual?.kind !== "tilemap") throw new CommandError("INVARIANT", "That object is not a tilemap.");
+      object.visual.data = object.visual.data.map(() => args.tileIndex);
+    },
+  ),
+  definition(
+    "asset.addAnimation",
+    z.object({
+      assetId: z.string().min(1),
+      animation: z.object({
+        id: z.string().min(1),
+        name: z.string().min(1).max(80),
+        frameIndices: z.array(z.number().int().nonnegative()),
+        fps: z.number().positive(),
+        loop: z.boolean(),
+      }),
+    }),
+    () => "Add animation",
+    (document, args) => {
+      const asset = document.assets.find((candidate) => candidate.id === args.assetId);
+      if (!asset) throw new CommandError("NOT_FOUND", "That asset does not exist.");
+      asset.animations = [...(asset.animations ?? []), args.animation];
+    },
+  ),
 ];
 
 function assetReferences(document: ProjectDocument, assetId: string): string[] {
