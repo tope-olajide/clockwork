@@ -12,6 +12,7 @@ interface EditorContextInput {
   history: Array<{ label: string; timestamp: number; prevRevision: number }>;
   camera?: { x: number; y: number; zoom: number };
   viewportSize?: { w: number; h: number };
+  includeViewportCapture?: boolean;
 }
 
 function sceneSummary(scene: Scene) {
@@ -28,11 +29,11 @@ function sceneSummary(scene: Scene) {
       layerId: o.layerId,
       x: Math.round(o.transform.x),
       y: Math.round(o.transform.y),
-      w: o.visual && "width" in o.visual ? Number(o.visual.width) : undefined,
-      h: o.visual && "height" in o.visual ? Number(o.visual.height) : undefined,
+      w: o.visual && "width" in o.visual ? Number((o.visual as any).width) : undefined,
+      h: o.visual && "height" in o.visual ? Number((o.visual as any).height) : undefined,
       behaviors: o.behaviors.map((b) => b.type),
-      tags: o.tags ?? [],
-      prefabId: o.prefabId,
+      tags: (o as any).tags ?? [],
+      prefabId: (o as any).prefabId,
     })),
     rules: scene.rules.map((r) => ({
       id: r.id,
@@ -45,10 +46,21 @@ function sceneSummary(scene: Scene) {
 
 export function buildContextPacket(input: EditorContextInput): ContextPacket {
   const { document, activeSceneId, activeLayerId, selection, tab, tool, playtestRunning, history } = input;
+  const includeViewportCapture = input.includeViewportCapture !== false;
   const scene = document.scenes.find((s) => s.id === activeSceneId) ?? document.scenes.find((s) => s.id === document.startSceneId) ?? null;
   const layerNames = new Map(scene?.layers.map((l) => [l.id, l.name]) ?? []);
   const selectionObjects = scene ? scene.objects.filter((o) => selection.includes(o.id)) : [];
   const settingsAny = document.settings as any;
+
+  const availableCommands = [
+    "list_scenes (read)",
+    "get_scene (read)",
+    "search_entities (read)",
+    "get_object (read)",
+    "get_variables (read)",
+    "get_selection (read)",
+    ...(includeViewportCapture ? ["capture_viewport (read)"] : []),
+  ];
 
   return {
     app: { name: "Clockwork", schemaVersion: 1 },
@@ -66,7 +78,7 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
       settings: {
         gravity: document.settings.gravity,
         background: document.settings.background,
-        audio: document.settings.audio,
+        audio: (document.settings as any).audio,
       },
     },
     editor: {
@@ -74,7 +86,7 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
       activeSceneId: scene?.id ?? null,
       activeSceneName: scene?.name ?? null,
       activeLayerId,
-      selection: selectionObjects.map((o) => ({ id: o.id, name: o.name, type: o.visual?.kind, layerName: layerNames.get(o.layerId) })),
+      selection: selectionObjects.map((o) => ({ id: o.id, name: o.name, type: (o.visual as any)?.kind, layerName: layerNames.get(o.layerId) })),
       tool,
       playtest: playtestRunning ? "running" : "off",
       camera: input.camera ?? { x: 0, y: 0, zoom: 1 },
@@ -89,14 +101,14 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
       visual: o.visual,
       body: o.body,
       behaviors: o.behaviors,
-      animations: o.animations,
-      properties: o.properties,
-      tags: o.tags,
-      prefabId: o.prefabId,
-      prefabOverrides: o.prefabOverrides,
+      animations: (o as any).animations,
+      properties: (o as any).properties,
+      tags: (o as any).tags,
+      prefabId: (o as any).prefabId,
+      prefabOverrides: (o as any).prefabOverrides,
     })),
-    assets: document.assets.slice(0, 200).map((a) => ({ id: a.id, name: a.name, kind: a.kind, type: a.kind })),
-    prefabs: document.prefabs.map((p) => ({ id: p.id, name: p.name, objectCount: 1 + (p.objects?.length ?? 0) })),
+    assets: document.assets.slice(0, 200).map((a) => ({ id: a.id, name: a.name, kind: (a as any).kind, type: (a as any).kind })),
+    prefabs: document.prefabs.map((p) => ({ id: p.id, name: p.name, objectCount: 1 + ((p as any).objects?.length ?? 0) })),
     variables: document.variables.map((v) => ({ name: v.name, type: v.type, initial: v.initial })),
     recentActions: history.slice(-8).map((h) => ({
       label: h.label,
@@ -104,15 +116,7 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
       revision: h.prevRevision + 1,
       at: new Date(h.timestamp).toISOString(),
     })),
-    availableCommands: [
-      "list_scenes (read)",
-      "get_scene (read)",
-      "search_entities (read)",
-      "get_object (read)",
-      "get_variables (read)",
-      "get_selection (read)",
-      "capture_viewport (read)",
-    ],
-    warnings: [],
+    availableCommands,
+    warnings: includeViewportCapture ? [] : ["Viewport capture is unavailable for this model (vision not supported)."],
   };
 }

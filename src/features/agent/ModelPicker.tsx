@@ -1,34 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
-import { fetchAiSettings, fetchModels, fetchProviders, type ModelInfo, type ProviderInfo } from "../../engine/ai/api";
+import { useMemo, useState } from "react";
+import type { ModelInfo, ProviderInfo } from "../../engine/ai/api";
 
 interface Props {
   value: string | null;
   onChange: (modelId: string | null) => void;
   onOpenSettings?: () => void;
+  models: ModelInfo[];
+  providers: ProviderInfo[];
+  settings: { defaultModelId: string | null; mock: boolean } | null;
+  label?: string;
 }
 
-export function ModelPicker({ value, onChange, onOpenSettings }: Props) {
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [settings, setSettings] = useState<{ defaultModelId: string | null; mock: boolean } | null>(null);
+export function ModelPicker({ value, onChange, onOpenSettings, models, providers, settings, label }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const [m, p, s] = await Promise.all([fetchModels(), fetchProviders(), fetchAiSettings()]);
-        if (!alive) return;
-        setModels(m.models);
-        setProviders(p.providers);
-        setSettings(s.settings);
-      } catch {
-        // ignore; agent can still work in mock/env mode
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
 
   const providerById = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
   const filtered = useMemo(() => {
@@ -38,12 +23,12 @@ export function ModelPicker({ value, onChange, onOpenSettings }: Props) {
 
   const effective = value ?? settings?.defaultModelId ?? null;
   const selected = effective ? models.find((m) => m.id === effective) : null;
-  const label = settings?.mock ? "MOCK" : (selected?.label ?? (effective ? effective : "Select model"));
+  const resolvedLabel = label ?? (settings?.mock ? "MOCK" : (selected?.label ?? (effective ? effective : "Select model")));
 
   return (
     <div style={{ position: "relative" }}>
       <button type="button" className="agent-model" onClick={() => setOpen((v) => !v)} title="Model picker">
-        {label}
+        {resolvedLabel}
       </button>
       {open && (
         <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 80, width: 360, maxHeight: 360, overflow: "auto", background: "var(--bg-1, #16181d)", border: "1px solid var(--border, #2a2f3a)", borderRadius: 8, padding: 8, boxShadow: "0 12px 30px rgba(0,0,0,.35)" }}>
@@ -56,11 +41,11 @@ export function ModelPicker({ value, onChange, onOpenSettings }: Props) {
                 <button className="agent-suggestion" onClick={() => { onChange(null); setOpen(false); }}>Use default {settings?.defaultModelId ? `(${settings.defaultModelId})` : "(none)"}</button>
                 {filtered.map((m) => {
                   const p = providerById.get(m.providerId);
-                  const configured = p?.key.configured || p?.id === "ollama";
+                  const configured = Boolean(p?.key.configured || p?.local);
                   return (
-                    <button key={m.id} className="agent-suggestion" disabled={!configured} onClick={() => { onChange(m.id); setOpen(false); }} title={!configured ? "No key configured for this provider" : m.id} style={{ opacity: configured ? 1 : 0.5 }}>
+                    <button key={m.id} className="agent-suggestion" disabled={!configured} onClick={() => { onChange(m.id); setOpen(false); }} title={!configured ? "No key configured for this provider" : m.id} style={{ opacity: configured ? 1 : 0.5, textAlign: "left" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <span>{m.label}</span>
+                        <span>{m.label}{m.recommended ? " ★" : ""}</span>
                         <span className="muted" style={{ fontSize: 11 }}>{m.providerId}</span>
                       </div>
                       <div className="muted" style={{ fontSize: 11 }}>

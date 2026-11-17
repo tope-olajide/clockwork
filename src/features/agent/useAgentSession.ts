@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nanoid } from "nanoid";
 import type { AgentChatMessage, AgentMode, ToolResult } from "@shared/protocol";
 import { buildContextPacket } from "../../engine/ai/context";
 import { executeClientTool } from "../../engine/ai/client-tools";
 import { streamAgentStep } from "../../engine/ai/transport";
+import { fetchAiSettings, fetchModels, fetchProviders, type ModelInfo, type ProviderInfo } from "../../engine/ai/api";
 import { useEngineStore } from "../../engine/store/engine-store";
 
 export type AgentStatus = "ready" | "thinking" | "streaming" | "tool" | "error";
@@ -21,6 +22,12 @@ export interface DisplayMessage extends AgentChatMessage {
   toolCard?: AgentToolCard;
 }
 
+export interface AgentUiError {
+  message: string;
+  code?: string;
+  action?: "open-settings" | "choose-model" | "retry";
+}
+
 interface UseAgentSessionArgs {
   projectId: string;
   tab: string;
@@ -29,16 +36,86 @@ interface UseAgentSessionArgs {
   viewportSize?: { w: number; h: number };
 }
 
+const storageKey = (projectId: string) => `clockwork:agent-model:${projectId}`;
+
+function actionForCode(code?: string): AgentUiError["action"] {
+  if (!code) return "retry";
+  if (code === "no-key" || code === "invalid-key" || code === "provider-timeout") return "open-settings";
+  if (code === "no-model" || code === "model-unavailable" || code === "no-tools" || code === "no-vision") return "choose-model";
+  return "retry";
+}
+
 export function useAgentSession(args: UseAgentSessionArgs) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [status, setStatus] = useState<AgentStatus>("ready");
-  const [mode, setMode] = useState<AgentMode>("build");
-  const [error, setError] = useState<string | null>(null);
+  const [mode, setModeState] = useState<AgentMode>("ask");
+  const [error, setError] = useState<AgentUiError | null>(null);
+  const [selectedModelId, setSelectedModelIdState] = useState<string | null>(() => {
+    try { return window.localStorage.getItem(storageKey(args.projectId)) || null; } catch { return null; }
+  });
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [aiSettings, setAiSettings] = useState<{ defaultModelId: string | null; mock: boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const modelId = (import.meta as any).env?.VITE_AI_MODEL_LABEL
-    ? String((import.meta as any).env.VITE_AI_MODEL_LABEL)
-    : "env";
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(storageKey(args.projectId));
+      setSelectedModelIdState(v || null);
+    } catch {
+      setSelectedModelIdState(null);
+    }
+  }, [args.projectId]);
+
+  const refreshAiMeta = useCallback(async () => {
+    try {
+      const [m, p, s] = await Promise.all([fetchModels(), fetchProviders(), fetchAiSettings()]);
+      setModels(m.models);
+      setProviders(p.providers);
+      setAiSettings(s.settings);
+    } catch {
+      // keep previous; mock/env-only sessions may still function
+    }
+  }, []);
+
+  useEffect(() => { void refreshAiMeta(); }, [refreshAiMeta]);
+
+  const providerById = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
+  const effectiveModelId = selectedModelId ?? aiSettings?.defaultModelId ?? "";
+  const effectiveModel = useMemo(() => models.find((m) => m.id === effectiveModelId) ?? null, [models, effectiveModelId]);
+  const effectiveProvider = effectiveModel ? providerById.get(effectiveModel.providerId) : undefined;
+  const mock = Boolean(aiSettings?.mock);
+  const providerConfigured = effectiveProvider ? (effectiveProvider.key.configured || effectiveProvider.local) : false;
+  const capabilities = {
+    tools: mock ? true : Boolean(effectiveModel?.tools),
+    vision: mock ? true : Boolean(effectiveModel?.vision),
+  };
+  const modelLabel = mock ? "MOCK" : (effectiveModel?.label ?? (effectiveModelId || "No model"));
+  const canUseTools = mock || (Boolean(effectiveModel) && capabilities.tools && providerConfigured);
+  const canBuildPlan = canUseTools;
+
+  useEffect(() => {
+    if (!canBuildPlan && mode !== "ask") setModeState("ask");
+  }, [canBuildPlan, mode]);
+
+  const setSelectedModelId = useCallback((id: string | null) => {
+    setSelectedModelIdState(id);
+    try {
+      const k = storageKey(args.projectId);
+      if (id) window.localStorage.setItem(k, id);
+      else window.localStorage.removeItem(k);
+    } catch { /* ignore */ }
+    setError(null);
+  }, [args.projectId]);
+
+  const setMode = useCallback((next: AgentMode) => {
+    if ((next === "build" || next === "plan") && !canBuildPlan) {
+      setError({ message: "This model does not support tool use, so Build and Plan are unavailable. Choose a tool-capable model or use Ask.", code: "no-tools", action: "choose-model" });
+      setModeState("ask");
+      return;
+    }
+    setModeState(next);
+  }, [canBuildPlan]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -72,7 +149,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       let conversation: AgentChatMessage[] = [...messages.filter((m) => !m.streaming), userMsg].map(({ streaming, toolCard, ...m }) => m);
       for (let step = 0; step < 8; step++) {
         if (abort.signal.aborted) return;
-        setStatus(step === 0 ? "thinking" : "thinking");
+        setStatus("thinking");
         const fresh = useEngineStore.getState();
         const currentDoc = fresh.document;
         if (!currentDoc) throw new Error("No project open");
@@ -87,15 +164,16 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           history: fresh.history,
           camera: args.camera,
           viewportSize: args.viewportSize,
+          includeViewportCapture: capabilities.vision,
         });
 
         const assistantId = nanoid();
         setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "", createdAt: new Date().toISOString(), streaming: true }]);
         let assistantText = "";
         const toolCalls: Array<{ callId: string; name: string; args: unknown }> = [];
-        let gotError: string | null = null;
+        let gotError: { message: string; code?: string } | null = null;
 
-        for await (const event of streamAgentStep({ projectId: args.projectId, modelId, mode, messages: conversation, context, signal: abort.signal })) {
+        for await (const event of streamAgentStep({ projectId: args.projectId, modelId: effectiveModelId, mode, messages: conversation, context, signal: abort.signal })) {
           if (abort.signal.aborted) return;
           if (event.type === "text_delta") {
             setStatus("streaming");
@@ -104,15 +182,13 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           } else if (event.type === "tool_call") {
             toolCalls.push({ callId: event.callId, name: event.name, args: event.args });
           } else if (event.type === "error") {
-            gotError = event.message;
+            gotError = { message: event.message, code: event.code };
           }
         }
 
         setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: assistantText || (gotError ? "" : m.content), streaming: false } : m));
         if (gotError) {
-          const errMsg: DisplayMessage = { id: nanoid(), role: "assistant", content: "", createdAt: new Date().toISOString() };
-          setMessages((prev) => [...prev, { ...errMsg, content: `Error: ${gotError}` } as any]);
-          setError(gotError);
+          setError({ message: gotError.message, code: gotError.code, action: actionForCode(gotError.code) });
           setStatus("error");
           return;
         }
@@ -137,7 +213,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           const fresh2 = useEngineStore.getState();
           const doc2 = fresh2.document;
           const executed = doc2
-            ? executeClientTool({ document: doc2, activeSceneId: fresh2.activeSceneId, selection: fresh2.selection, name: call.name, args: (call.args as Record<string, unknown>) ?? {} })
+            ? executeClientTool({ document: doc2, activeSceneId: fresh2.activeSceneId, selection: fresh2.selection, name: call.name, args: (call.args as Record<string, unknown>) ?? {}, allowViewportCapture: capabilities.vision })
             : { ok: false, error: "No project open", revision: 0, name: call.name, args: call.args } as any;
           const toolResult: ToolResult & { imageDataUrl?: string } = { ok: executed.ok, data: executed.data, error: executed.error, revision: executed.revision, imageDataUrl: executed.imageDataUrl };
           setMessages((prev) => prev.map((m) => m.toolCallId === card.id ? { ...m, toolCard: { ...card, status: executed.ok ? "done" : "error", result: toolResult }, toolResult, content: JSON.stringify(executed.imageDataUrl ? { ...toolResult, imageDataUrl: "[image attached]" } : toolResult) } : m));
@@ -151,7 +227,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
             toolArgs: call.args,
             toolResult,
           } as any;
-          (toolMsg as any).imageDataUrl = executed.imageDataUrl;
+          (toolMsg as any).imageDataUrl = capabilities.vision ? executed.imageDataUrl : undefined;
           conversation = [...conversation, toolMsg];
         }
       }
@@ -166,12 +242,12 @@ export function useAgentSession(args: UseAgentSessionArgs) {
         return;
       }
       const message = e instanceof Error ? e.message : "Agent request failed";
-      setError(message);
+      setError({ message, action: "retry" });
       setStatus("error");
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
     }
-  }, [args.camera, args.projectId, args.tab, args.tool, args.viewportSize, messages, mode, modelId]);
+  }, [args.camera, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, messages, mode]);
 
   const retry = useCallback(() => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
@@ -186,11 +262,23 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     mode,
     setMode,
     error,
-    modelId,
+    setError,
+    selectedModelId,
+    setSelectedModelId,
+    effectiveModelId,
+    effectiveModel,
+    models,
+    providers,
+    aiSettings,
+    mock,
+    capabilities,
+    canBuildPlan,
+    modelLabel,
     isBusy,
     send,
     stop,
     retry,
     newChat,
-  }), [messages, status, mode, error, modelId, isBusy, send, stop, retry, newChat]);
+    refreshAiMeta,
+  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, stop, retry, newChat, refreshAiMeta]);
 }

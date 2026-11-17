@@ -11,7 +11,6 @@ import {
   getKeyStatus,
   getModel,
   getProvider,
-  listAllModels,
   removeCustomModel,
   removeCustomProvider,
   removeProviderKey,
@@ -29,8 +28,7 @@ function isSafeBaseUrl(urlStr: string): boolean {
     const local = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
     if (local) return u.protocol === "http:" || u.protocol === "https:";
     if (u.protocol !== "https:") return false;
-    // basic SSRF guard: block obvious private/link-local literals
-    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|169\.254\.|0\.|127\.|::1|fc|fd|fe80)/i.test(host)) return false;
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|169\.254\.|0\.|127\.|::1$|^fc|^fd|^fe80)/i.test(host)) return false;
     return true;
   } catch {
     return false;
@@ -94,24 +92,21 @@ app.post("/providers/:id/test", async (c) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    // lightweight OpenAI-compatible models/list probe when possible
     const url = provider.apiStyle === "openai-compatible" ? `${provider.baseUrl.replace(/\/$/, "")}/models` : provider.baseUrl;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (apiKey) {
       if (provider.apiStyle === "anthropic") headers["x-api-key"] = apiKey;
-      else if (provider.apiStyle === "google") { /* google uses query key usually; skip deep test */ }
+      else if (provider.apiStyle === "google") { /* skip */ }
       else headers["Authorization"] = `Bearer ${apiKey}`;
     }
     if (provider.apiStyle === "anthropic") headers["anthropic-version"] = "2023-06-01";
     if (provider.apiStyle === "google") {
-      // best-effort: don't fail for google with simple reachability skip
       clearTimeout(timeout);
       return c.json({ ok: true, result: "reachable" });
     }
     const res = await fetch(url, { method: "GET", headers, signal: controller.signal });
     clearTimeout(timeout);
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
       const msg = res.status === 401 || res.status === 403 ? "Invalid API key or unauthorized." : `Connection test failed (${res.status}).`;
       return jsonError(c, msg, res.status === 401 || res.status === 403 ? "invalid-key" : "provider-timeout", 400);
     }
@@ -174,7 +169,6 @@ app.post("/step", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  // Never accept key/base URL from client
   if ((body as any).apiKey || (body as any).baseUrl) {
     return c.json({ error: "Client-supplied credentials are not allowed." }, 400);
   }
@@ -195,6 +189,11 @@ app.post("/step", async (c) => {
       await write({ type: "step_end", finishReason: "error" });
       return;
     }
+    if ((body.mode === "build" || body.mode === "plan") && !resolved.tools) {
+      await write({ type: "error", message: "This model does not support tool use, so Build and Plan are unavailable. Choose a tool-capable model or use Ask.", code: "no-tools" });
+      await write({ type: "step_end", finishReason: "error" });
+      return;
+    }
     if (resolved.apiStyle !== "openai-compatible") {
       await write({ type: "error", message: `Provider API style "${resolved.apiStyle}" is not supported for streaming in this build. Use an OpenAI-compatible provider.`, code: "model-unavailable" });
       await write({ type: "step_end", finishReason: "error" });
@@ -206,6 +205,9 @@ app.post("/step", async (c) => {
         apiKey: resolved.apiKey,
         model: resolved.model,
         req: body,
+        toolsEnabled: resolved.tools,
+        visionEnabled: resolved.vision,
+        contextWindow: resolved.contextWindow,
       })) {
         await stream.write(chunk);
       }

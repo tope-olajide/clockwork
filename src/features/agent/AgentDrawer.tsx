@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Bot, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, Send, Square, X } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, Send, Settings, Square, X } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
 import type { AgentMode } from "@shared/protocol";
-import type { DisplayMessage } from "./useAgentSession";
+import type { DisplayMessage, AgentUiError } from "./useAgentSession";
+import { ModelPicker } from "./ModelPicker";
+import type { ModelInfo, ProviderInfo } from "../../engine/ai/api";
 
 interface AgentDrawerProps {
   open: boolean;
@@ -11,17 +13,24 @@ interface AgentDrawerProps {
   sceneName: string | null;
   revision: number;
   selectionCount: number;
-  modelLabel: string;
   mode: AgentMode;
   onModeChange: (mode: AgentMode) => void;
   messages: DisplayMessage[];
   status: "ready" | "thinking" | "streaming" | "tool" | "error";
-  error: string | null;
+  error: AgentUiError | null;
   isBusy: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
   onRetry: () => void;
   onNewChat: () => void;
+  selectedModelId: string | null;
+  onSelectModel: (id: string | null) => void;
+  models: ModelInfo[];
+  providers: ProviderInfo[];
+  aiSettings: { defaultModelId: string | null; mock: boolean } | null;
+  modelLabel: string;
+  canBuildPlan: boolean;
+  onOpenSettings: () => void;
 }
 
 const SUGGESTIONS = [
@@ -40,7 +49,7 @@ function statusLabel(status: AgentDrawerProps["status"]) {
 }
 
 export function AgentDrawer(props: AgentDrawerProps) {
-  const { open, onClose, projectName, sceneName, revision, selectionCount, modelLabel, mode, onModeChange, messages, status, error, isBusy, onSend, onStop, onRetry, onNewChat } = props;
+  const { open, onClose, projectName, sceneName, revision, selectionCount, mode, onModeChange, messages, status, error, isBusy, onSend, onStop, onRetry, onNewChat, selectedModelId, onSelectModel, models, providers, aiSettings, modelLabel, canBuildPlan, onOpenSettings } = props;
   const [input, setInput] = useState("");
   const [showJump, setShowJump] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -78,6 +87,8 @@ export function AgentDrawer(props: AgentDrawerProps) {
 
   if (!open) return null;
 
+  const modeDisabledReason = !canBuildPlan ? "This model does not support tools, so Build and Plan are unavailable. Ask is read-only." : null;
+
   return (
     <aside className="agent-drawer" aria-label="Agent drawer">
       <div className="agent-header">
@@ -86,7 +97,15 @@ export function AgentDrawer(props: AgentDrawerProps) {
           <span className={`agent-status agent-status-${status}`}><span className="dot" /> {statusLabel(status)}</span>
         </div>
         <div className="agent-header-right">
-          <span className="agent-model" title="Read-only model label (Slice 6)">{modelLabel}</span>
+          <ModelPicker
+            value={selectedModelId}
+            onChange={onSelectModel}
+            onOpenSettings={onOpenSettings}
+            models={models}
+            providers={providers}
+            settings={aiSettings}
+            label={modelLabel}
+          />
           <Button variant="ghost" size="sm" onClick={onNewChat} aria-label="New chat">+ Chat</Button>
           <IconButton label="Close agent" onClick={onClose}><X size={14} /></IconButton>
         </div>
@@ -99,33 +118,54 @@ export function AgentDrawer(props: AgentDrawerProps) {
       </div>
 
       <div className="agent-mode-row" role="tablist" aria-label="Agent mode">
-        {(["ask", "build", "plan"] as AgentMode[]).map((m) => (
-          <button key={m} role="tab" aria-selected={mode === m} className={`agent-mode ${mode === m ? "active" : ""}`} onClick={() => onModeChange(m)}>
-            {m.charAt(0).toUpperCase() + m.slice(1)}
-          </button>
-        ))}
-        {mode !== "ask" && <span className="agent-mode-note">Read-only tools in Slice 6</span>}
+        {(["ask", "build", "plan"] as AgentMode[]).map((m) => {
+          const disabled = (m === "build" || m === "plan") && !canBuildPlan;
+          return (
+            <button key={m} role="tab" aria-selected={mode === m} aria-disabled={disabled} disabled={disabled} className={`agent-mode ${mode === m ? "active" : ""}`} onClick={() => onModeChange(m)} title={disabled ? modeDisabledReason ?? undefined : undefined}>
+              {m.charAt(0).toUpperCase() + m.slice(1)}
+            </button>
+          );
+        })}
+        {!canBuildPlan && <span className="agent-mode-note">Build/Plan require a tool-capable model</span>}
       </div>
 
       <div className="agent-messages" ref={listRef} onScroll={onScroll}>
         {messages.length === 0 ? (
           <div className="agent-empty">
             <h3>What are we building?</h3>
-            <p>Ask about the project, scenes, objects, or variables. I can inspect the live editor state (read-only in this slice).</p>
+            <p>Ask about the project, scenes, objects, or variables. I can inspect the live editor state and use read-only tools when supported by the selected model.</p>
             <div className="agent-suggestions">
               {SUGGESTIONS.map((s) => (
                 <button key={s} className="agent-suggestion" onClick={() => submit(s)}>{s}</button>
               ))}
             </div>
+            {!aiSettings?.mock && !models.some((m) => {
+              const p = providers.find((pr) => pr.id === m.providerId);
+              return p?.key.configured || p?.local;
+            }) && (
+              <div className="agent-error-card" role="status" style={{ marginTop: 12 }}>
+                <div className="agent-error-title"><Settings size={14} /> Set up an AI model</div>
+                <div className="agent-error-body">No provider key is configured. Add a key or choose a local model in Settings to start chatting.</div>
+                <div className="agent-error-actions"><Button variant="secondary" size="sm" onClick={onOpenSettings}>Open settings</Button></div>
+              </div>
+            )}
           </div>
         ) : (
           messages.map((m) => <MessageView key={m.id} message={m} />)
         )}
         {error && status === "error" && (
           <div className="agent-error-card" role="alert">
-            <div className="agent-error-title"><AlertTriangle size={14} /> Agent error</div>
-            <div className="agent-error-body">{error}</div>
-            <div className="agent-error-actions"><Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button></div>
+            <div className="agent-error-title"><AlertTriangle size={14} /> {errorTitle(error.code)}</div>
+            <div className="agent-error-body">{error.message}</div>
+            <div className="agent-error-actions">
+              {(error.action === "open-settings" || error.code === "no-key" || error.code === "invalid-key" || error.code === "provider-timeout") && (
+                <Button variant="secondary" size="sm" onClick={onOpenSettings}><Settings size={12} /> Open settings</Button>
+              )}
+              {(error.action === "choose-model" || error.code === "no-model" || error.code === "model-unavailable" || error.code === "no-tools" || error.code === "no-vision") && (
+                <Button variant="secondary" size="sm" onClick={() => { /* focus picker by opening settings-less choice is implicit */ (document.querySelector('.agent-model') as HTMLButtonElement | null)?.click(); }}>Choose another model</Button>
+              )}
+              <Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button>
+            </div>
           </div>
         )}
         <div ref={bottomRef} />
@@ -161,6 +201,18 @@ export function AgentDrawer(props: AgentDrawerProps) {
   );
 }
 
+function errorTitle(code?: string) {
+  if (code === "no-key") return "No API key configured";
+  if (code === "invalid-key") return "Invalid API key";
+  if (code === "no-model") return "No model selected";
+  if (code === "model-unavailable") return "Model unavailable";
+  if (code === "no-tools") return "Model does not support tools";
+  if (code === "no-vision") return "Model does not support vision";
+  if (code === "rate-limit") return "Rate limited";
+  if (code === "provider-timeout") return "Provider timeout";
+  return "Agent error";
+}
+
 function MessageView({ message }: { message: DisplayMessage }) {
   if (message.role === "user") {
     return <div className="agent-msg agent-msg-user"><div className="agent-msg-content">{message.content}</div></div>;
@@ -178,7 +230,7 @@ function MessageView({ message }: { message: DisplayMessage }) {
 
 function ToolCardView({ name, args, status, result }: { name: string; args: unknown; status: string; result?: any }) {
   const [open, setOpen] = useState(false);
-  const label = {
+  const label: Record<string, string> = {
     list_scenes: "Listing scenes",
     get_scene: "Inspecting scene",
     search_entities: "Searching entities",
@@ -186,12 +238,12 @@ function ToolCardView({ name, args, status, result }: { name: string; args: unkn
     get_variables: "Reading variables",
     get_selection: "Reading selection",
     capture_viewport: "Capturing viewport",
-  }[name] ?? name;
+  };
   return (
     <div className={`agent-tool-card ${status}`}>
       <button className="agent-tool-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <span className="agent-tool-label">{label}</span>
+        <span className="agent-tool-label">{label[name] ?? name}</span>
         <span className="agent-tool-status">
           {status === "running" ? <><Loader2 size={12} className="spin" /> running</> : status === "done" ? "done" : status === "error" ? "error" : status}
         </span>
