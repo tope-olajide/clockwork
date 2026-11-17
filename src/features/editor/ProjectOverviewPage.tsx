@@ -233,9 +233,9 @@ export function ProjectOverviewPage() {
               </Button>
               <Button
                 variant="secondary"
-                disabled
-                title="Manual Play arrives in Slice 4"
-                aria-label="Play (available in Slice 4)"
+                icon={<Play size={14} />}
+                onClick={() => navigate(`/play/${current.id}`)}
+                aria-label="Play start scene"
               >
                 Play
               </Button>
@@ -379,7 +379,7 @@ export function ProjectOverviewPage() {
                     <strong>Assets</strong>
                     <span>Project-wide library</span>
                   </button>
-                  <button className="overview-card" onClick={() => navigate(`/project/${current.id}?section=playtest`)}>
+                  <button className="overview-card" onClick={() => navigate(`/play/${current.id}`)}>
                     <Play size={17} />
                     <strong>Playtest</strong>
                     <span>Run and inspect</span>

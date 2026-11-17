@@ -159,3 +159,47 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
   - Rects/sprites now render as tinted `Texture.WHITE` sprites instead of one `Graphics` per object, so large scenes batch their draw calls. The 2,000-object scene went from 40 fps (display cap) to **801 fps with rAF uncapped** in the same environment.
 - **Performance method and caveat:** headless Chrome reports Intel UHD hardware ANGLE (`Direct3D11`). This machine/display caps rAF at ~40.9 fps even on a blank page, so a 55 fps on-screen reading is not observable here. With `--disable-frame-rate-limit --disable-gpu-vsync`, 2,000 rect objects rendered at 801 fps (2,405 frames / 3.0 s), about 1.25 ms per frame, and the in-app `?debug=1` counter read 835 fps. The target of ≥55 fps (18.2 ms/frame) has ~14× headroom; the on-screen cap is environmental.
 - **Gate status:** every Slice 2 acceptance checkbox is evidenced. Slice 2 features are listed in `features.md`.
+
+## Slice 4 — Runtime, manual Play, physics, rules, telemetry, replay
+
+- Date: 2026-11-17
+- Commit: this commit
+- `pnpm typecheck`: pass (`tsc -b`, exit 0).
+- `pnpm build`: pass (Vite 7.3.8; chunk-size warning only).
+- **Runtime harness: 13/13 pass.** The temporary Node/esbuild harness loaded the real Platformer template and Runtime:
+  - player settles on the ground at y=796 and reports `grounded`;
+  - jump launches at vy=-623.67;
+  - configured double jump fires a `double-jump` event and relaunches at vy=-623.67;
+  - coyote jump works after leaving the ground;
+  - a buffered jump fires on landing;
+  - collecting a core increments `coins` and deactivates the collectible;
+  - hazard respawn returns to the checkpoint;
+  - the goal rule sets `won=true` and status `won`;
+  - camera stays inside world bounds (x 1204.7, y 616 at 1366×768);
+  - camera deadzone ignores a 40 px move (1000 → 1000) and follows a 200 px move (→1024);
+  - identical seed + 300 input frames produce identical snapshots (887 chars);
+  - a synthetic runtime failure reports `Dusk Run (scene-id) · Player (object-id)` and stops without throwing;
+  - document `dispatch` returns `{ok:false, code:"READ_ONLY"}` while `playtestRunning`.
+- **Renderer check: pass.** `SceneRenderer.applyCamera` at camera x=1600 produced sky=380, far=280, play=0, UI=400 px, matching each layer’s configured parallax factor.
+- **Browser evidence — cold profile, 1366×768, production preview, CDP-driven:**
+  - Overview `Play start scene` navigated to `/play/:projectId`, loaded the start scene (`scn_Odt_j-svgs`), showed `PLAYING`, `READ-ONLY`, HUD `CORES 0`, and the runtime console.
+  - Pause froze the frame counter (270 → 270 over 700 ms); Step advanced exactly one frame (270 → 271); Reset restored frame/time and player position.
+  - A keyboard run (right + timed jumps) reached the relay at frame 442/447, fired `Reach the relay`, set `won=true`, and changed the chip to `WON`; the run then stopped instead of falling off the world.
+  - `Escape` returned to `/project/:projectId`; the rail `Playtest` item opened `/play/:projectId` with status `running`.
+  - F1 opened the debug overlay (FPS/avg, entities 15, bodies 6, camera, frame); zero console exceptions across the runs.
+  - Screenshot inspected: layered dusk scene, player, ground, ledges, cores, hazard, checkpoint, relay, HUD and centered win message all render.
+- **Performance method:** headless Chrome reports Intel UHD hardware ANGLE (D3D11). The environment’s display/vsync still caps pages at ~40 Hz. With `--disable-frame-rate-limit --disable-gpu-vsync`, Play averaged **655 fps over 20 samples / 10 s** (560–858 fps), with the fixed loop still stepping at 60 Hz. The ≥59 fps telemetry target is met with large headroom; the on-screen cap is environmental.
+- **Bugs fixed this pass:**
+  - Keyboard input threw when a `KeyboardEvent` target was `window` (`target.matches` is not a function); input is now guarded and browser movement/jump work.
+  - Camera clamp used the project’s settings dimensions instead of the actual play viewport; `Runtime.setViewport` now clamps to the rendered size.
+  - HUD/debug/error overlays were painted under the Pixi canvas; canvas/HUD/debug/error now have explicit z-indexes.
+  - Setting `won=true` did not stop the run; it now freezes the runtime as `WON` and the win message remains visible.
+  - Checkpoints logged every frame while overlapping; they now log once per checkpoint.
+  - Parallax forced the first layer to factor 1; all layers now use their configured factors.
+  - Static-body collision now honors `body.offsetX/offsetY`, matching dynamic-body collision.
+- **Viewports checked:** 1366×768 (cold profile). 1440×900 and other sizes were not re-run for this slice.
+- **Console:** no page-level exceptions in the final browser passes.
+- **Acceptance: 10/10 checked.** Platformer flow, configured double jump/coyote/buffer, camera/parallax, pause/step/reset, scoped runtime errors, deterministic traces, ≥59 fps telemetry, read-only dispatch plus rail/Overview entry, no-model manual Play (the Play route has no AI/Kane dependency), and typecheck/build.
+- **Features completed:** four Runtime features added to `features.md` (Manual Play, Platformer run, Camera/HUD/messages, Play controls/telemetry/determinism).
+- **New known issues:** Play is a separate route; replay has no UI control; audio/music paths were not exercised because the template has no audio assets; telemetry is not yet exposed to the agent; the Slice 3 gate remains unlogged.
+- **Known limitations:** runtime physics is deterministic single-player AABB with static bodies and tilemap tiles; no rotation collision or rigid-body solver.

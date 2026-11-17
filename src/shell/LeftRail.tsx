@@ -35,7 +35,7 @@ export function LeftRail({
             <Tooltip key={item.key} content={item.label} side="right">
               <button
                 className={`rail-item${active === item.key ? " active" : ""}`}
-                onClick={() => navigate(`/project/${projectId}?section=${item.key}`)}
+                onClick={() => navigate(item.key === "playtest" ? `/play/${projectId}` : `/project/${projectId}?section=${item.key}`)}
                 aria-current={active === item.key ? "page" : undefined}
                 aria-label={item.label}
               >

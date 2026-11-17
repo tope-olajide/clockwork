@@ -336,8 +336,8 @@ export class SceneRenderer {
     for (const layer of scene.layers) {
       const node = this.layerNodes.get(layer.id);
       if (!node) continue;
-      const factorX = layer.id === scene.layers[0]?.id ? 1 : layer.parallax.x;
-      const factorY = layer.id === scene.layers[0]?.id ? 1 : layer.parallax.y;
+      const factorX = layer.parallax.x;
+      const factorY = layer.parallax.y;
       const dx = (camera.x - centerX) * (1 - factorX);
       const dy = (camera.y - centerY) * (1 - factorY);
       node.root.position.set(dx, dy);

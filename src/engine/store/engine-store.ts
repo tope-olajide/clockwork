@@ -45,8 +45,10 @@ interface EngineStore {
   history: HistoryEntry[];
   future: HistoryEntry[];
   snapGrid: 0 | 8 | 16 | 32;
+  playtestRunning: boolean;
 
   setSnapGrid: (size: 0 | 8 | 16 | 32) => void;
+  setPlaytestRunning: (running: boolean) => void;
   loadProject: (projectId: string) => Promise<boolean>;
   createFromTemplate: (template: Exclude<TemplateOrigin, "brief" | "import">, name: string) => Promise<ProjectDocument>;
   importProject: (document: ProjectDocument) => Promise<ProjectDocument>;
@@ -115,8 +117,10 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
   history: [],
   future: [],
   snapGrid: 8,
+  playtestRunning: false,
 
   setSnapGrid: (size) => set({ snapGrid: size }),
+  setPlaytestRunning: (running) => set({ playtestRunning: running }),
 
   loadProject: async (projectId) => {
     set({ isLoading: true, storageError: null, activeProjectId: projectId });
@@ -242,6 +246,7 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
   dispatch: (type, args, options = {}) => {
     const current = get().document;
     if (!current) return { ok: false, error: "No project is open." };
+    if (get().playtestRunning) return { ok: false, error: "The project is read-only while playtesting.", code: "READ_ONLY" };
     try {
       const result = runCommand(current, { type, args }, { expectedRevision: options.expectedRevision });
       const editor = editorAfterDocument(result.document, get().activeSceneId, get().activeLayerId, get().selection);

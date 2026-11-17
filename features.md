@@ -12,6 +12,8 @@ Verified in headless browser passes: Slice 1 search, all filters, archived read-
 
 The Slice 1 and Slice 2 gates are closed and their features are listed below. Slice 2’s 2,000-rect run measured **801 fps with rAF uncapped** (≈1.25 ms/frame) in Chrome on Intel UHD graphics; this environment’s display/vsync caps every page at ~40 Hz, so 55 fps cannot be observed directly on-screen, but the measured frame budget is 14× the target.
 
+Slice 4 (runtime and manual Play) is implemented and verified. A runtime harness passed **13/13 checks**, the renderer’s per-layer parallax passed a separate check, and a cold-profile browser pass at 1366×768 verified Play entry from the rail and Overview, pause/step/reset, read-only state, F1 telemetry, goal completion, and zero console errors. With rAF uncapped, Play measured **655 fps average** over 10 seconds (individual samples 560–858 fps). The Slice 3 asset pipeline is committed but its acceptance gate has not been logged in `docs/implementation-log.md`, so no Slice 3 features are listed here.
+
 ## Editor
 
 ### Project dashboard
@@ -88,6 +90,28 @@ Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
 
 A 2,000-object scene renders and stays responsive; rendering is sprite-batched, and the uncapped measurement is 801 fps (≈1.25 ms per frame).
 Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
+
+## Runtime
+
+### Manual Play from the project
+
+Start the project’s start scene from either the Playtest rail item or the Overview Play button; Play runs in a dedicated read-only route with a scene/seed/time chip, and Escape returns to the project.
+Completed in Slice 4 · verified at 1366×768 (cold-profile run).
+
+### Platformer run
+
+The Platformer template can be played end to end: move, jump, collect cores, hit the hazard, respawn at the checkpoint, and reach the relay to win. Double jump, coyote time and jump buffering work when configured on the controller.
+Completed in Slice 4 · 13/13 runtime checks plus browser goal run.
+
+### Camera, HUD and messages
+
+The camera follows with a deadzone, lerps, clamps to the world, and applies each layer’s parallax factor; HUD widgets bind to variables and rule messages appear over the scene.
+Completed in Slice 4 · verified at 1366×768 (cold-profile run).
+
+### Play controls, telemetry and determinism
+
+Pause freezes the fixed-step loop, Step advances exactly one 1/60 s step, Reset restores variables and positions, and Stop/Escape leave Play. F1 shows FPS, entities, bodies and camera; the console lists rule, jump, checkpoint, variable and error events with object ids. The same seed and input trace replay identically.
+Completed in Slice 4 · 13/13 runtime checks plus browser pause/step/reset.
 
 <!--
 When a feature is fully complete, add it under the right area using this shape:
