@@ -36,9 +36,8 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 
 ### Slice 4 — Runtime, play mode, telemetry
 
-- **Pointer/tap and gamepad input are not implemented.** `src/engine/runtime/input.ts` only handles keyboard events; there is no pointer or gamepad source and no per-step `released` set (task 2). Keyboard-only input was what the logged acceptance run exercised.
-- **No sub-stepping.** Collision resolves once per fixed step; the task explicitly calls for sub-stepping.
-- **Tilemap collision uses one solid per tile**, not merged contiguous row spans (task 3). Behaviour is correct but the broadphase is not the specified shape and has no large-tilemap performance test.
+- Residual input/sub-stepping/tilemap-span gaps are fixed and verified (see `docs/implementation-log.md`, “Slice 4 residuals”); the only remaining inputs caveat is that pointer maps to the action button only and gamepad support uses the first standard pad.
+
 
 ### Slice 5 — Logic authoring, prefabs, presentation
 

@@ -23,14 +23,25 @@ function platformerTemplate(name: string): ProjectDocument {
   const play = makeLayer("Play", 2);
   const ui = makeLayer("UI", 3, { parallax: { x: 0, y: 0 } });
 
+  const skyBackdrop = makeObject({
+    name: "Sky gradient",
+    layerId: sky.id,
+    x: 1200,
+    y: 500,
+    width: 2400,
+    height: 1000,
+    color: "#10162a",
+    tags: ["sky"],
+  });
   const moon = makeObject({
     name: "Moon",
     layerId: sky.id,
     x: 1840,
     y: 150,
-    width: 86,
-    height: 86,
+    width: 128,
+    height: 128,
     color: "#f6e7c8",
+    tags: ["moon"],
   });
   const ridge = makeObject({
     name: "Ridge",
@@ -38,17 +49,26 @@ function platformerTemplate(name: string): ProjectDocument {
     x: 900,
     y: 560,
     width: 1900,
-    height: 460,
+    height: 475,
     color: "#1e263d",
   });
   const ridgeTwo = makeObject({
     name: "Ridge detail",
     layerId: far.id,
-    x: 1560,
+    x: 1480,
     y: 690,
-    width: 1250,
-    height: 380,
+    width: 1400,
+    height: 350,
     color: "#252f4a",
+  });
+  const ridgeForeground = makeObject({
+    name: "Ridge foreground",
+    layerId: far.id,
+    x: 1700,
+    y: 630,
+    width: 1600,
+    height: 400,
+    color: "#2b3654",
   });
 
   const player = makeObject({
@@ -239,7 +259,7 @@ function platformerTemplate(name: string): ProjectDocument {
     height: 1000,
     background: "#10162a",
     layers: [sky, far, play, ui],
-    objects: [moon, ridge, ridgeTwo, ground, ledge, ledgeB, ledgeC, player, coinA, coinB, coinC, hazard, checkpoint, goal, hint],
+    objects: [skyBackdrop, moon, ridge, ridgeTwo, ridgeForeground, ground, ledge, ledgeB, ledgeC, player, coinA, coinB, coinC, hazard, checkpoint, goal, hint],
     rules: [
       {
         id: "rul_win_scene",

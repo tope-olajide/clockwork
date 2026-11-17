@@ -77,22 +77,25 @@ const spark = svg(96, 48, `
 `);
 
 // --------------------------------------------------------------------- ground
-const ground = svg(256, 96, `
-  <rect x="0" y="0" width="256" height="96" fill="#242d44"/>
-  <rect x="0" y="0" width="256" height="16" fill="#384562"/>
-  <rect x="0" y="0" width="256" height="6" fill="#4d5c7f"/>
-  <g fill="#1b2338">
-    <rect x="18" y="30" width="26" height="10" rx="3"/>
-    <rect x="74" y="48" width="34" height="12" rx="3"/>
-    <rect x="140" y="26" width="20" height="9" rx="3"/>
-    <rect x="196" y="56" width="30" height="10" rx="3"/>
-    <rect x="112" y="70" width="22" height="8" rx="3"/>
-  </g>
-  <g fill="#39466a">
-    <rect x="44" y="22" width="10" height="6" rx="2"/>
-    <rect x="168" y="42" width="12" height="6" rx="2"/>
-    <rect x="228" y="34" width="9" height="6" rx="2"/>
-  </g>
+// Wide and short so the 2200x100 template ground is not stretched into mush.
+let groundStones = "";
+for (let i = 0; i < 40; i += 1) {
+  const x = 16 + ((i * 137) % 2000);
+  const y = 30 + ((i * 53) % 54);
+  const w = 18 + ((i * 29) % 34);
+  const h = 7 + ((i * 17) % 9);
+  groundStones += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#1b2338"/>`;
+}
+for (let i = 0; i < 22; i += 1) {
+  const x = 24 + ((i * 211) % 1980);
+  const y = 22 + ((i * 37) % 64);
+  groundStones += `<rect x="${x}" y="${y}" width="${8 + ((i * 13) % 9)}" height="5" rx="2" fill="#39466a"/>`;
+}
+const ground = svg(2048, 100, `
+  <rect x="0" y="0" width="2048" height="100" fill="#242d44"/>
+  <rect x="0" y="0" width="2048" height="16" fill="#384562"/>
+  <rect x="0" y="0" width="2048" height="6" fill="#4d5c7f"/>
+  ${groundStones}
 `);
 
 // ------------------------------------------------------------------- platform
@@ -105,18 +108,50 @@ const platform = svg(256, 32, `
   <rect x="156" y="14" width="26" height="5" rx="2" fill="#2a3350"/>
 `);
 
-// ---------------------------------------------------------------------- hills
-const hill = (fill, accent, path) => svg(1024, 512, `
-  <path d="${path}" fill="${fill}"/>
-  <path d="${path}" fill="none" stroke="${accent}" stroke-width="2" opacity="0.5"/>
-  <circle cx="150" cy="90" r="3" fill="#f6e7c8" opacity="0.5"/>
-  <circle cx="320" cy="150" r="2" fill="#f6e7c8" opacity="0.4"/>
-  <circle cx="820" cy="70" r="3" fill="#f6e7c8" opacity="0.55"/>
-  <circle cx="700" cy="200" r="2" fill="#f6e7c8" opacity="0.3"/>
+// ---------------------------------------------------------------------- sky
+const stars = Array.from({ length: 48 }, (_, i) => {
+  const x = (i * 197 + 83) % 2048;
+  const y = 40 + ((i * 131) % 620);
+  const r = i % 9 === 0 ? 2.6 : i % 3 === 0 ? 1.8 : 1.1;
+  const o = (0.25 + ((i * 17) % 40) / 100).toFixed(2);
+  return `<circle cx="${x}" cy="${y}" r="${r}" fill="#dce4ff" opacity="${o}"/>`;
+}).join("");
+const sky = svg(2048, 1024, `
+  <defs>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="0.55" stop-color="#1a2340"/>
+      <stop offset="0.82" stop-color="#33436e"/>
+      <stop offset="1" stop-color="#10162a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f6e7c8" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#f6e7c8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="2048" height="1024" fill="url(#dusk)"/>
+  ${stars}
+  <circle cx="1540" cy="210" r="210" fill="url(#glow)"/>
+  <path d="M0 780 Q420 690 850 760 T2048 730 L2048 1024 L0 1024 Z" fill="#1a2238" opacity="0.55"/>
 `);
-const hillFar = hill("#1b2236", "#2a3350", "M0 380 L120 300 L230 350 L360 250 L500 330 L640 260 L780 340 L900 290 L1024 350 L1024 512 L0 512 Z");
-const hillMid = hill("#202a42", "#39466a", "M0 430 L110 360 L240 410 L380 330 L520 400 L660 340 L800 410 L930 360 L1024 420 L1024 512 L0 512 Z");
-const hillNear = hill("#27324d", "#4d5c7f", "M0 470 L140 420 L280 460 L420 400 L560 455 L700 410 L840 460 L960 430 L1024 460 L1024 512 L0 512 Z");
+
+const moon = svg(128, 128, `
+  <circle cx="64" cy="64" r="46" fill="#f6e7c8"/>
+  <circle cx="48" cy="50" r="7" fill="#e2d0ac" opacity="0.7"/>
+  <circle cx="76" cy="78" r="10" fill="#e2d0ac" opacity="0.55"/>
+  <circle cx="82" cy="46" r="5" fill="#e2d0ac" opacity="0.6"/>
+  <circle cx="52" cy="82" r="4" fill="#e2d0ac" opacity="0.5"/>
+`);
+
+// ---------------------------------------------------------------------- hills
+// 4:1 silhouettes sized to the template ridge objects; stars live in the sky asset.
+const hill = (fill, accent, path) => svg(2048, 512, `
+  <path d="${path}" fill="${fill}"/>
+  <path d="${path}" fill="none" stroke="${accent}" stroke-width="3" opacity="0.45"/>
+`);
+const hillFar = hill("#1b2236", "#2a3350", "M0 380 L240 300 L460 350 L720 250 L1000 330 L1280 260 L1560 340 L1800 290 L2048 350 L2048 512 L0 512 Z");
+const hillMid = hill("#202a42", "#39466a", "M0 430 L220 360 L480 410 L760 330 L1040 400 L1320 340 L1600 410 L1860 360 L2048 420 L2048 512 L0 512 Z");
+const hillNear = hill("#27324d", "#4d5c7f", "M0 470 L280 420 L560 460 L840 400 L1120 455 L1400 410 L1680 460 L1920 430 L2048 460 L2048 512 L0 512 Z");
 
 // ---------------------------------------------------------------------- panel
 const panel = svg(256, 128, `
@@ -196,6 +231,8 @@ const files = {
   "coin.svg": coin,
   "flag.svg": flag,
   "spark.svg": spark,
+  "sky.svg": sky,
+  "moon.svg": moon,
   "ground.svg": ground,
   "platform.svg": platform,
   "hill-far.svg": hillFar,

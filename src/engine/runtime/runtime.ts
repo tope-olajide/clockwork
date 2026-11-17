@@ -55,7 +55,7 @@ export interface RuntimeSnapshot {
   camera: { x: number; y: number; zoom: number };
 }
 
-interface Solid {
+export interface Solid {
   left: number;
   top: number;
   right: number;
@@ -105,6 +105,31 @@ function overlaps(a: RuntimeObject, b: RuntimeObject): boolean {
   const boxA = boxOf(a);
   const boxB = boxOf(b);
   return boxA.left < boxB.right && boxA.right > boxB.left && boxA.top < boxB.bottom && boxA.bottom > boxB.top;
+}
+
+export function tilemapRowSpans(object: GameObject, x = object.transform.x, y = object.transform.y): Solid[] {
+  if (object.visual?.kind !== "tilemap") return [];
+  const visual = object.visual;
+  const spans: Solid[] = [];
+  for (let row = 0; row < visual.rows; row += 1) {
+    let spanStart = -1;
+    for (let col = 0; col <= visual.cols; col += 1) {
+      const filled = col < visual.cols && (visual.data[row * visual.cols + col] ?? 0) !== 0;
+      if (filled && spanStart < 0) {
+        spanStart = col;
+      } else if (!filled && spanStart >= 0) {
+        spans.push({
+          left: x + spanStart * visual.tileSize,
+          top: y + row * visual.tileSize,
+          right: x + col * visual.tileSize,
+          bottom: y + (row + 1) * visual.tileSize,
+          oneWay: false,
+        });
+        spanStart = -1;
+      }
+    }
+  }
+  return spans;
 }
 
 function hasBehavior(object: GameObject, type: string): boolean {
@@ -234,21 +259,7 @@ export class Runtime {
           oneWay: object.source.body.oneWay,
         });
       }
-      if (object.source.visual?.kind === "tilemap") {
-        const visual = object.source.visual;
-        for (let row = 0; row < visual.rows; row += 1) {
-          for (let col = 0; col < visual.cols; col += 1) {
-            if ((visual.data[row * visual.cols + col] ?? 0) === 0) continue;
-            result.push({
-              left: object.x + col * visual.tileSize,
-              top: object.y + row * visual.tileSize,
-              right: object.x + (col + 1) * visual.tileSize,
-              bottom: object.y + (row + 1) * visual.tileSize,
-              oneWay: false,
-            });
-          }
-        }
-      }
+      result.push(...tilemapRowSpans(object.source, object.x, object.y));
     }
     return result;
   }
@@ -382,30 +393,48 @@ export class Runtime {
       const offsetY = object.source.body.offsetY;
       object.grounded = false;
 
-      object.x += object.vx * FIXED_DT;
-      for (const solid of solids) {
-        if (solid.oneWay) continue;
-        const box = boxOf(object);
-        if (box.left < solid.right && box.right > solid.left && box.top < solid.bottom && box.bottom > solid.top) {
-          if (object.vx > 0) object.x = solid.left - offsetX - dims.w / 2;
-          else if (object.vx < 0) object.x = solid.right - offsetX + dims.w / 2;
-          object.vx = 0;
-        }
-      }
+      // Split fast movement into small steps so a body cannot tunnel through a
+      // thin collider between two fixed steps. Deterministic from velocities.
+      const maxSpeed = Math.max(Math.abs(object.vx), Math.abs(object.vy));
+      const minCollider = Math.max(4, Math.min(dims.w, dims.h) * 0.5);
+      const substeps = Math.max(1, Math.min(8, Math.ceil((maxSpeed * FIXED_DT) / minCollider)));
+      let stepX = (object.vx * FIXED_DT) / substeps;
+      let stepY = (object.vy * FIXED_DT) / substeps;
 
-      const previousBottom = boxOf(object).bottom;
-      object.y += object.vy * FIXED_DT;
-      for (const solid of solids) {
-        const box = boxOf(object);
-        if (box.left < solid.right && box.right > solid.left && box.top < solid.bottom && box.bottom > solid.top) {
-          if (solid.oneWay && (object.vy <= 0 || previousBottom > solid.top + 1)) continue;
-          if (object.vy > 0) {
-            object.y = solid.top - offsetY - dims.h / 2;
-            object.vy = 0;
-            object.grounded = true;
-          } else if (object.vy < 0) {
-            object.y = solid.bottom - offsetY + dims.h / 2;
-            object.vy = 0;
+      for (let substep = 0; substep < substeps; substep += 1) {
+        if (stepX !== 0) {
+          object.x += stepX;
+          for (const solid of solids) {
+            if (solid.oneWay) continue;
+            const box = boxOf(object);
+            if (box.left < solid.right && box.right > solid.left && box.top < solid.bottom && box.bottom > solid.top) {
+              if (stepX > 0) object.x = solid.left - offsetX - dims.w / 2;
+              else object.x = solid.right - offsetX + dims.w / 2;
+              object.vx = 0;
+              stepX = 0;
+              break;
+            }
+          }
+        }
+
+        if (stepY !== 0) {
+          const previousBottom = boxOf(object).bottom;
+          object.y += stepY;
+          for (const solid of solids) {
+            const box = boxOf(object);
+            if (box.left < solid.right && box.right > solid.left && box.top < solid.bottom && box.bottom > solid.top) {
+              if (solid.oneWay && (stepY <= 0 || previousBottom > solid.top + 1)) continue;
+              if (stepY > 0) {
+                object.y = solid.top - offsetY - dims.h / 2;
+                object.vy = 0;
+                object.grounded = true;
+              } else {
+                object.y = solid.bottom - offsetY + dims.h / 2;
+                object.vy = 0;
+              }
+              stepY = 0;
+              break;
+            }
           }
         }
       }

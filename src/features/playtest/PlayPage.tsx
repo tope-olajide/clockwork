@@ -91,6 +91,7 @@ export function PlayPage() {
       app.canvas.style.height = "100%";
       app.canvas.style.display = "block";
       host.appendChild(app.canvas);
+      inputRef.current?.attachPointer(app.canvas);
       renderer.attach(app);
       appRef.current = app;
       rendererRef.current = renderer;

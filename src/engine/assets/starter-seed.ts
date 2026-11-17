@@ -95,6 +95,14 @@ function upgradeObject(object: GameObject): void {
   const tags = object.tags;
   const name = object.name.toLowerCase();
 
+  if (tags.includes("sky")) {
+    sprite(object, STARTER_ASSET_IDS.sky, width, height);
+    return;
+  }
+  if (name.includes("moon")) {
+    sprite(object, STARTER_ASSET_IDS.moon, width, height);
+    return;
+  }
   if (tags.includes("player")) {
     sprite(object, STARTER_ASSET_IDS.player, width, height);
     object.animations = { idle: "starter-idle", run: "starter-run", jump: "starter-jump" };
@@ -125,8 +133,12 @@ function upgradeObject(object: GameObject): void {
     return;
   }
   if (tags.includes("ui")) return;
-  if (name.includes("ridge detail")) {
+  if (name.includes("ridge foreground")) {
     sprite(object, STARTER_ASSET_IDS.hillNear, width, height);
+    return;
+  }
+  if (name.includes("ridge detail")) {
+    sprite(object, STARTER_ASSET_IDS.hillMid, width, height);
     return;
   }
   if (name.includes("ridge")) {

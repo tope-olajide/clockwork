@@ -95,7 +95,7 @@ Completed in Slice 2 · gate 24/24 · verified at 1366×768 (cold-profile run).
 
 ### Starter art and audio
 
-Every new project (and the built-in demo) seeds 11 original sprite/background images and three SFX WAVs into local storage with stable asset ids. Platformer objects reference the art automatically, so a new project opens with real player, coin, enemy, hazard, flag, ground and parallax visuals instead of flat rectangles.
+Every new project (and the built-in demo) seeds 13 original sprite/background images (including a dusk sky gradient and moon) and three SFX WAVs into local storage with stable asset ids. Platformer objects reference the art automatically, so a new project opens with a composed gradient sky, layered hills, ground and gameplay sprites instead of flat rectangles.
 Completed in Slice 3 · verified at 1366×768 (cold-profile run).
 
 ### Asset browser
@@ -129,6 +129,16 @@ Completed in Slice 4 · 13/13 runtime checks plus browser goal run.
 
 The camera follows with a deadzone, lerps, clamps to the world, and applies each layer’s parallax factor; HUD widgets bind to variables and rule messages appear over the scene.
 Completed in Slice 4 · verified at 1366×768 (cold-profile run).
+
+### Pointer, tap and gamepad input
+
+Play accepts keyboard, pointer/tap on the play canvas, and the first standard-mapping gamepad (left stick/d-pad to move, A to jump, X to action) with a deadzone. Pressed and released edges are consumed once per fixed step.
+Completed in Slice 4 residual pass · verified with the runtime harness.
+
+### Sub-stepping and merged tilemap collision
+
+Fast dynamic bodies move in up to eight deterministic physics substeps so they cannot tunnel through thin colliders, and tilemap rows merge contiguous filled tiles into single solid spans. A 100×100 tilemap yields 100 row solids instead of 10,000.
+Completed in Slice 4 residual pass · verified with the runtime harness.
 
 ### Play controls, telemetry and determinism
 

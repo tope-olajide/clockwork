@@ -288,3 +288,20 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Acceptance: **closed** for the Slice 3 list in `docs/slice-3-7-fixes.md` §S3-5.
 - Features added: `features.md` → Assets.
 - Known limitations: starter assets are generated original art, not hand-authored final art; the seeded PNG rasterization path requires canvas 2D (no-WebGL still allows editing); tilemap hover/paint pixel mapping was exercised with synthetic pointer events; manual frame rows use number inputs (no drag-handles in the modal).
+
+## Slice 4 residuals — pointer/gamepad, sub-stepping, tilemap spans (gate already closed)
+
+- Date: 2026-11-17
+- Commit: see this change set.
+- `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`: pass.
+- `./node_modules/.bin/vite build`: pass (13.07 s, chunk-size warnings only).
+- `./node_modules/.bin/tsx .data/runtime-check.ts`: **13/13 pass** (`.data` harness is uncommitted).
+  - Pointer: down → `action` + `actionPressed`; held snapshot clears the pressed edge; up → `actionReleased`.
+  - Gamepad: A → `jump` + `jumpPressed`; held clears the edge; release → `jumpReleased`. Left stick/d-pad/A/X with a 0.35 deadzone.
+  - Sub-stepping: a 6000 px/s body stopped before a 6 px static wall (`x=360`, wall left 377) instead of tunnelling.
+  - Tilemap spans: full 100×100 tilemap produces 100 row solids; `[1,1,0,1]` produces two spans (widths 16 and 8).
+  - Determinism: 300-frame keyboard trace replayed identically in two fresh runtimes; no runtime errors.
+  - Baseline: platformer player settles (`grounded`, y=796) and Space still jumps (y=785.6).
+- Implementation: `InputManager` now exposes `jumpReleased`/`actionReleased`, tracks pointer handlers scoped to the Play canvas, and polls the first standard gamepad; `PlayPage` attaches the canvas to the input manager after Pixi init. Physics movement is split into up to 8 deterministic substeps using half the smallest collider dimension, resolving X and Y per substep. `tilemapRowSpans()` merges contiguous filled tiles per row and is used by `solids()`.
+- Starter composition follow-up: added a dusk sky gradient with stars (`sky.svg`) and a moon sprite (`moon.svg`), widened the ridge art to 4:1 at 2048×512, widened the ground strip to 2048×100 to avoid extreme stretching, and added a sky backdrop plus a near-ridge layer to the Platformer template. Cold-profile screenshot at 1366×768 shows the gradient sky, stars, layered hills and seeded assets (16 assets, 17 scene objects).
+- Known limitations: pointer input maps only to the `action` logical action (no per-pointer coordinates exposed to rules); gamepad support uses the first connected standard-mapping pad only.
