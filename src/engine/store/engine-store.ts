@@ -413,6 +413,8 @@ async function buildDemoProject(): Promise<ProjectDocument> {
     coreB.transform.x = 1080;
     coreB.transform.y = 566;
   }
+  const coinWidget = demo.settings.ui.hud.find((widget) => widget.variable === "coins");
+  if (coinWidget) coinWidget.label = "COINS";
   return demo;
 }
 

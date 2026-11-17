@@ -10,6 +10,8 @@ import { useEngineStore } from "../../engine/store/engine-store";
 import { deleteChat, readChat, saveChat } from "../../engine/persistence/indexeddb";
 import { runHeadlessPlaytest, type PlaytestInput } from "../../engine/runtime/playtest";
 import { useAgentPresenceStore } from "../../engine/store/agent-presence";
+import { collectProjectAssets, createSnapshot } from "../../engine/io/snapshot";
+import { streamAiPlay, verifyWithKane } from "../../engine/ai/kane-api";
 
 export type AgentStatus = "ready" | "thinking" | "streaming" | "tool" | "error";
 
@@ -173,6 +175,40 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     const revision = doc?.revision ?? 0;
     const ok = (data: unknown, extra?: any) => ({ ok: true as const, data, revision: store.document?.revision ?? revision, name, args: callArgs, ...extra });
     const fail = (error: string, code?: string) => ({ ok: false as const, error, code, revision: store.document?.revision ?? revision, name, args: callArgs });
+
+    if (name === "verify_with_kane" || name === "run_ai_play") {
+      if (!doc) return fail("No project open.");
+      try {
+        const assets = await collectProjectAssets(doc);
+        const snapshot = await createSnapshot(doc, { assets, ttlHours: 1 });
+        const result = name === "verify_with_kane"
+          ? await verifyWithKane({
+            snapshotId: snapshot.id,
+            objective: String(callArgs.objective ?? "Verify the current project in the snapshot player."),
+            seed: 1234,
+          })
+          : await streamAiPlay({
+            snapshotId: snapshot.id,
+            projectId: args.projectId,
+            seed: 1234,
+            goal: typeof callArgs.goal === "string" ? callArgs.goal : undefined,
+          });
+        return ok({
+          status: result.status,
+          summary: result.summary,
+          finalState: result.finalState,
+          steps: result.steps.slice(-12),
+          runtimeErrors: result.runtimeErrors,
+          evidencePath: result.evidencePath,
+          evidenceUrl: result.evidenceUrl,
+          testUrl: result.testUrl,
+          snapshotId: snapshot.id,
+          objective: result.objective,
+        });
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "Kane run failed.");
+      }
+    }
 
     if (name === "select_entities") {
       const ids = Array.isArray(callArgs.ids) ? callArgs.ids.filter((x): x is string => typeof x === "string") : [];

@@ -1,0 +1,1 @@
+Open the Neon Runner demo project. In the agent chat ask: "Verify in a real browser that the level loads and the player can collect a coin." Wait for the verification card to finish. Verify it shows a passed verdict, at least three executed steps, a duration, and an evidence link. Verify the agent's reply references the Kane result.

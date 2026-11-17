@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Application } from "pixi.js";
 import { RotateCcw } from "lucide-react";
 import { Button } from "../../components/ui";
@@ -9,6 +9,7 @@ import { ensureTexture } from "../../engine/render/texture-cache";
 import { SceneRenderer } from "../../engine/render/scene-renderer";
 import { InputManager } from "../../engine/runtime/input";
 import { FIXED_DT, Runtime } from "../../engine/runtime/runtime";
+import { AiPlayHud } from "../../play/ai/AiPlayHud";
 
 interface LoadState {
   document: ProjectDocument | null;
@@ -17,11 +18,27 @@ interface LoadState {
 
 export function SnapshotPlayerPage() {
   const { snapshotId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const aiMode = searchParams.get("ai") === "1";
+  const seed = Number(searchParams.get("seed") ?? 1234) || 1234;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<Runtime | null>(null);
+  const inputRef = useRef<InputManager | null>(null);
   const documentRef = useRef<ProjectDocument | null>(null);
   const [state, setState] = useState<LoadState>({ document: null, error: null });
   const [tick, setTick] = useState(0);
+  const aiStop = () => {
+    const runtime = runtimeRef.current;
+    inputRef.current?.clearVirtual();
+    if (!runtime) return;
+    if (runtime.status === "running") runtime.status = "paused";
+    setTick((value) => value + 1);
+  };
+  const aiRestart = () => {
+    inputRef.current?.clearVirtual();
+    runtimeRef.current?.reset();
+    setTick((value) => value + 1);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -50,9 +67,10 @@ export function SnapshotPlayerPage() {
     let disposed = false;
     const app = new Application();
     const renderer = new SceneRenderer();
-    const runtime = new Runtime(document, undefined, 1234);
+    const runtime = new Runtime(document, undefined, seed);
     runtimeRef.current = runtime;
     const input = new InputManager(document.settings.inputMap);
+    inputRef.current = input;
     input.attach();
     let accumulator = 0;
     let last = performance.now();
@@ -125,13 +143,14 @@ export function SnapshotPlayerPage() {
     return () => {
       disposed = true;
       input.detach();
+      inputRef.current = null;
       window.removeEventListener("keydown", onKey);
       (app as unknown as { __cleanup?: () => void }).__cleanup?.();
       app.destroy(true, { children: true });
       renderer.destroy();
       runtimeRef.current = null;
     };
-  }, [state.document]);
+  }, [state.document, seed]);
 
   const document = state.document;
   const runtime = runtimeRef.current;
@@ -164,6 +183,7 @@ export function SnapshotPlayerPage() {
     <div
       className="player-page snapshot-player"
       data-playtest={pausedLabel(snapshot?.status)}
+      data-ai-play={aiMode ? "on" : "off"}
       data-scene-id={scene?.id ?? ""}
       data-frame={snapshot?.frame ?? 0}
       data-variables={JSON.stringify(snapshot?.variables ?? {})}
@@ -191,6 +211,19 @@ export function SnapshotPlayerPage() {
             </div>
           ))}
         </div>
+        {aiMode && runtime ? (
+          <AiPlayHud
+            document={document}
+            runtime={runtime}
+            sceneName={scene?.name ?? ""}
+            seed={seed}
+            onMove={(direction, held) => { inputRef.current?.setAction(direction, held); setTick((value) => value + 1); }}
+            onJump={() => { inputRef.current?.tapAction("jump"); setTick((value) => value + 1); }}
+            onAction={() => { inputRef.current?.tapAction("action"); setTick((value) => value + 1); }}
+            onStop={aiStop}
+            onRestart={aiRestart}
+          />
+        ) : null}
       </div>
       <div className="snapshot-controls">
         <span className="player-state">{pausedLabel(snapshot?.status)}</span>

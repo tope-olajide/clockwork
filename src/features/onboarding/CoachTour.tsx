@@ -45,15 +45,15 @@ export function CoachTour() {
   const last = step === STEPS.length - 1;
 
   return (
-    <div className="coach-tour" role="dialog" aria-modal="false" aria-labelledby="coach-title" aria-describedby="coach-body">
+    <div className="coach-tour" role="dialog" aria-modal="false" aria-labelledby="coach-title" aria-describedby="coach-body" data-testid="coach-tour">
       <div className="coach-tour-head">
         <span className="coach-tour-step">Step {step + 1} of {STEPS.length}</span>
-        <button className="tiny-icon" aria-label="Skip tour" onClick={finish}><X size={13} /></button>
+        <button className="tiny-icon" aria-label="Skip tour" data-testid="coach-skip" onClick={finish}><X size={13} /></button>
       </div>
       <h2 id="coach-title">{current.title}</h2>
       <p id="coach-body">{current.body}</p>
       <div className="coach-tour-actions">
-        <Button variant="ghost" size="sm" onClick={finish}>Skip</Button>
+        <Button variant="ghost" size="sm" onClick={finish} data-testid="coach-skip-button">Skip</Button>
         <Button
           variant="primary"
           size="sm"

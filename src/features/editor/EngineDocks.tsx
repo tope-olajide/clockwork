@@ -50,17 +50,20 @@ function TinyButton({
   icon,
   onClick,
   disabled,
+  dataTestId,
 }: {
   label: string;
   icon: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
+  dataTestId?: string;
 }) {
   return (
     <Tooltip content={label}>
       <button
         className="tiny-icon"
         aria-label={label}
+        data-testid={dataTestId}
         disabled={disabled}
         onClick={(event) => {
           event.stopPropagation();
@@ -432,6 +435,8 @@ export function EngineLeftDock() {
         </div>
         <div
           className={`dock-list${virtualized ? " virtualized" : ""}`}
+          role="tree"
+          aria-label="Scene hierarchy"
           ref={hierarchyListRef}
           onScroll={(event) => {
             if (virtualized) setHierarchyScroll(event.currentTarget.scrollTop);
@@ -445,8 +450,9 @@ export function EngineLeftDock() {
               <div
                 key={object.id}
                 data-object-id={object.id}
+                data-testid={`hierarchy-row-${object.id}`}
                 className={`object-row${selection.includes(object.id) ? " selected" : ""}${draggingObjectId === object.id ? " dragging" : ""}`}
-                role="button"
+                role="treeitem"
                 tabIndex={0}
                 draggable={!readOnly && editingObjectId !== object.id}
                 onDragStart={(event) => {
@@ -480,7 +486,9 @@ export function EngineLeftDock() {
                     toggleSelect(object.id, event.shiftKey);
                   }
                 }}
-                aria-pressed={selection.includes(object.id)}
+                aria-selected={selection.includes(object.id)}
+                aria-label={`Select ${object.name}`}
+                data-selected={selection.includes(object.id) ? "true" : "false"}
               >
                 <Icon size={12} className="row-icon" />
                 {editingObjectId === object.id ? (
@@ -504,8 +512,9 @@ export function EngineLeftDock() {
                 <span className="row-meta">{layer?.name ?? "No layer"} · {object.visual?.kind ?? "empty"}</span>
                 <span className="row-actions">
                   <TinyButton
-                    label={`Delete ${object.name}`}
+                    label={`Delete object ${object.name}`}
                     icon={<Trash2 size={10} />}
+                    dataTestId={`hierarchy-delete-${object.id}`}
                     disabled={readOnly}
                     onClick={() => deleteObject(object)}
                   />
@@ -844,7 +853,7 @@ function ObjectInspector({
       <section className="inspector-section">
         <div className="inspector-section-title">Identity</div>
         <div className="field-grid">
-          <label className="field-row full"><span>Name</span><Input value={name} onChange={(event) => setName(event.target.value)} aria-label="Object name" disabled={readOnly} /></label>
+          <label className="field-row full"><span>Name</span><Input value={name} onChange={(event) => setName(event.target.value)} aria-label="Object name" data-testid="inspector-name" disabled={readOnly} /></label>
           <label className="field-row full"><span>Tags</span><Input value={tags} onChange={(event) => setTags(event.target.value)} aria-label="Object tags" disabled={readOnly} /></label>
           <label className="field-row full">
             <span>Layer</span>
@@ -857,8 +866,8 @@ function ObjectInspector({
       <section className="inspector-section">
         <div className="inspector-section-title">Transform</div>
         <div className="field-grid">
-          <label className="field-row"><span>X</span><NumberInput value={x} onChange={(event) => setX(event.target.value)} aria-label="Object X" disabled={readOnly} /></label>
-          <label className="field-row"><span>Y</span><NumberInput value={y} onChange={(event) => setY(event.target.value)} aria-label="Object Y" disabled={readOnly} /></label>
+          <label className="field-row"><span>X</span><NumberInput value={x} onChange={(event) => setX(event.target.value)} aria-label="Object X" data-testid="inspector-x" disabled={readOnly} /></label>
+          <label className="field-row"><span>Y</span><NumberInput value={y} onChange={(event) => setY(event.target.value)} aria-label="Object Y" data-testid="inspector-y" disabled={readOnly} /></label>
           <label className="field-row"><span>Width</span><NumberInput value={width} onChange={(event) => setWidth(event.target.value)} aria-label="Object width" disabled={readOnly} /></label>
           <label className="field-row"><span>Height</span><NumberInput value={height} onChange={(event) => setHeight(event.target.value)} aria-label="Object height" disabled={readOnly} /></label>
           <label className="field-row"><span>Rotation</span><NumberInput value={rotation} onChange={(event) => setRotation(event.target.value)} aria-label="Object rotation" disabled={readOnly} /></label>
