@@ -319,7 +319,7 @@ export function EditorPage() {
       return;
     }
     if (p === "ship" || p === "share") {
-      toast.push("Ship", "Ship/share flow arrives in Slice 8.");
+      navigate(`/project/${current?.id ?? projectId}?section=ship`);
       return;
     }
     toast.push("Panel", `Opened request: ${panel}`);

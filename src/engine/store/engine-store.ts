@@ -5,6 +5,7 @@ import { CommandError, validateDocument } from "../commands/validation";
 import { duplicateProjectDocument } from "../model/clone";
 import { createProjectFromTemplate } from "../model/templates";
 import { applyStarterVisuals, seedStarterAssets } from "../assets/starter-seed";
+import { captureViewportCover } from "../ai/viewport-capture";
 import type { ProjectDocument, ProjectRecord, TemplateOrigin } from "../model/schema";
 import {
   deleteProjectRecord,
@@ -225,7 +226,8 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
     set({ saveState: "saving" });
     savePromise = (async () => {
       try {
-        await saveProjectDocument(current);
+        const cover = await captureViewportCover();
+        await saveProjectDocument(current, cover ?? undefined);
         if (get().document?.id === current.id && get().document?.revision === revision) {
           set({ saveState: "saved", lastSavedAt: new Date().toISOString(), storageError: null });
         } else {

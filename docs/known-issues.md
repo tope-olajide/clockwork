@@ -49,6 +49,12 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 - **Read-tool names deviate from §5.4.** The implementation exposes `list_scenes`, `get_scene`, `search_entities`, `get_object`, `get_variables`, `get_selection`, `capture_viewport`. §5.4 aliases `get_project_summary`, `query_project` and `inspect_entity` are accepted by the client and listed in the server tool definitions; the original names remain for compatibility.
 - **Hardening is in-memory only.** Rate limiting (60 POST/min per IP and route) lives in server memory and resets on restart; body limit is 1 MB for `/api/*`. Adequate for the local single-user v1, not a multi-instance deployment.
 
+### Slice 8 — Ship, export, share
+
+- **Implemented but not browser-verified.** Static zip export, snapshot creation/read/delete, `/s/:id` snapshot player, the Ship panel and cover capture all typecheck, and the standalone player bundles with esbuild. The acceptance run (unzip and serve offline, same physics, share link input/restart, malformed/oversized rejection, cover after save) is deferred to the Slice 10 Kane pass.
+- **Snapshot storage is local SQLite.** `.data/snapshots.sqlite` is single-instance local storage; a deployed multi-instance server needs a shared store. Snapshot URLs expire after 1–168 hours and are purged lazily.
+- **Exported builds embed assets as data URLs** inside `project.json` (plus an `assets/` folder). The player bundle is built on demand by the Node server with esbuild, so exporting requires the local API server; the resulting zip itself does not.
+
 ### Slice 7 — Agent writes, workflows, presence
 
 - **Agent presence is implemented but not browser-verified.** A transient `useAgentPresenceStore` now drives violet outlines, an `AGENT` pill, a 350 ms camera ease, hierarchy row scrolling and a 2.5 s clear; it deliberately never changes the user's selection. Slice 7's browser gate is deferred to the Slice 10 Kane run, so this is unverified evidence.

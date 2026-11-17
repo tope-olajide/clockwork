@@ -76,8 +76,11 @@ export async function readProjectDocument(projectId: string): Promise<ProjectDoc
 
 export async function saveProjectDocument(document: ProjectDocument, coverDataUrl?: string): Promise<ProjectRecord> {
   const db = await openDatabase();
+  const existing = await requestToPromise(
+    db.transaction("projects", "readonly").objectStore("projects").get(document.id) as IDBRequest<ProjectRecord | undefined>,
+  );
   const transaction = db.transaction(["projects", "documents"], "readwrite");
-  const record = toProjectRecord(document, coverDataUrl);
+  const record = toProjectRecord(document, coverDataUrl ?? existing?.coverDataUrl);
   transaction.objectStore("projects").put(record);
   transaction.objectStore("documents").put({
     id: document.id,

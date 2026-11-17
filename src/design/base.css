@@ -3487,3 +3487,23 @@ a {
 .agent-preset-menu button:hover { background: rgba(143, 107, 255, 0.12); }
 .agent-preset-menu span { color: var(--text-3, #8b93a7); font-size: 11px; }
 .agent-suggestion span { display: block; margin-top: 2px; color: var(--text-3, #8b93a7); font-size: 11px; }
+
+/* Slice 8 — ship, share and snapshot player */
+.ship-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.ship-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.ship-stats > div { border: 1px solid var(--border, #2a2f3a); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
+.ship-stats strong { font-size: 15px; }
+.ship-share-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.ship-share-row > *:first-child { min-width: 190px; }
+.ship-link-card { margin-top: 12px; border: 1px solid #3a3560; background: #19162a; border-radius: 8px; padding: 10px; }
+.ship-link-url { font-size: 11px; word-break: break-all; color: #dcd4ff; }
+.ship-link-meta { margin-top: 4px; font-size: 11px; color: var(--text-3, #8b93a7); }
+.ship-error { margin-top: 12px; border: 1px solid #5b3030; background: #2a1a1a; color: #f2caca; border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.snapshot-player { position: fixed; inset: 0; background: #0b0c0f; }
+.snapshot-viewport { position: absolute; inset: 0; }
+.snapshot-badge { position: fixed; top: 12px; left: 12px; z-index: 5; background: rgba(12, 14, 20, .76); border: 1px solid rgba(143, 107, 255, .45); border-radius: 999px; padding: 5px 9px; color: #d9d5ff; font-size: 11px; letter-spacing: .04em; text-decoration: none; }
+.snapshot-controls { position: fixed; top: 12px; right: 12px; z-index: 5; display: flex; align-items: center; gap: 8px; background: rgba(12, 14, 20, .76); border: 1px solid rgba(255, 255, 255, .12); border-radius: 999px; padding: 5px 7px 5px 12px; color: #e8ecf4; }
+.snapshot-controls .player-state { font-size: 11px; letter-spacing: .06em; }
+@media (max-width: 900px) { .ship-grid { grid-template-columns: 1fr; } .ship-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.project-cover-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; opacity: .92; }
+.project-cover-art { z-index: 1; }

@@ -354,3 +354,17 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - S7-6: seven presets and contextual suggestions (`src/engine/ai/prompts.ts`), preset cards in the empty state, `/` preset filtering, and `docs/golden-prompts.md`.
 - S7-7: a `revision` tool failure appends a re-read/re-plan message and continues, at most twice per turn; it never auto-applies after a conflict.
 - Verification deferred at the user's request until the Slice 10 Kane run. No browser acceptance evidence is claimed; `docs/known-issues.md` marks each implemented item as unverified.
+
+## Slice 8 — ship, export, share (implementation; acceptance deferred)
+
+- Date: 2026-11-17
+- Commit: see this change set.
+- `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`: pass. The standalone player bundle also builds with esbuild (1.08 MB IIFE).
+- Export: `src/engine/io/build.ts` produces `index.html`, `clockwork.js`, `project.json`, `README.txt` and `assets/*`, zipped with fflate. The player bundle is built on demand by `GET /api/build/player.js` from `src/play/player.ts`, so no generated artifact is committed.
+- `src/play/player.ts` loads the exported project and embedded data-URL assets, runs the same `Runtime`/`SceneRenderer`/`InputManager`, renders HUD/messages, exposes `data-playtest`, `data-scene-id`, `data-frame`, `data-variables` and `data-player`, and restarts on `R`.
+- Snapshots: SQLite table `.data/snapshots.sqlite`; `POST /api/snapshots` validates a Clockwork document, assets are data URLs, max 20 MB, TTL clamped to 1 h–7 d; `GET /api/snapshots/:id` returns the immutable payload; `DELETE` removes it. Expired rows are purged on access.
+- `src/features/ship/ShipPanel.tsx` adds build summary, `.zip`/`.clockwork.json` export, share link creation with expiry, copy/open/delete. It flushes the project and reads asset blobs before sharing/exporting. The Overview `Share` button and Ship card/rail open it.
+- `src/features/playtest/SnapshotPlayerPage.tsx` serves `/s/:snapshotId` as a chrome-free read-only player with HUD, messages, restart and the `Made with Clockwork` badge.
+- Cover capture: `captureViewportCover()` downsizes the canvas to 640×360; autosave stores it as `coverDataUrl` on the project record, and project cards render it with the template cover as fallback.
+- `fflate` and `esbuild` were added as dependencies.
+- Acceptance is deferred at the user's request to the Slice 10 Kane run: no browser export/snapshot/share run has been performed. `docs/known-issues.md` records the unverified items.

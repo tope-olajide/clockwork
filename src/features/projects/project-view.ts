@@ -8,6 +8,7 @@ export type ProjectSummary = {
   editedLabel: string;
   archived: boolean;
   cover: "dusk" | "puzzle" | "blank";
+  coverDataUrl?: string;
   updatedAt: string;
 };
 
@@ -50,6 +51,7 @@ export function toProjectSummary(record: ProjectRecord): ProjectSummary {
     editedLabel: formatEdited(record.updatedAt),
     archived: Boolean(record.archivedAt),
     cover: coverFor(record.template),
+    coverDataUrl: record.coverDataUrl,
     updatedAt: record.updatedAt,
   };
 }

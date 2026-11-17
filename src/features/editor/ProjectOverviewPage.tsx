@@ -22,6 +22,7 @@ import { downloadProject, readProjectFile } from "../../engine/persistence/trans
 import { useEngineStore } from "../../engine/store/engine-store";
 import { AssetBrowser } from "../assets/AssetBrowser";
 import { AiSettingsPanel } from "../settings/AiSettingsPanel";
+import { ShipPanel } from "../ship/ShipPanel";
 import { TEMPLATE_LABELS, formatEdited } from "../projects/project-view";
 
 const placeholderSections = {
@@ -32,10 +33,6 @@ const placeholderSections = {
   playtest: {
     title: "Playtest",
     body: "Manual Play and runtime telemetry arrive in Slice 4. AI Play with Kane arrives in Slice 10.",
-  },
-  ship: {
-    title: "Ship",
-    body: "Share links and playable exports arrive in Slice 8.",
   },
 } as const;
 
@@ -242,10 +239,9 @@ export function ProjectOverviewPage() {
               </Button>
               <Button
                 variant="ghost"
-                disabled
                 icon={<Share2 size={14} />}
-                title="Share links arrive in Slice 8"
-                aria-label="Share (available in Slice 8)"
+                onClick={() => navigate(`/project/${current.id}?section=ship`)}
+                aria-label="Share project"
               >
                 Share
               </Button>
@@ -289,6 +285,8 @@ export function ProjectOverviewPage() {
               <AssetBrowser />
             ) : sectionKey === "ai" ? (
               <AiSettingsPanel />
+            ) : sectionKey === "ship" ? (
+              <ShipPanel document={current} />
             ) : section ? (
               <div className="empty-state" style={{ minHeight: 300 }}>
                 <Settings2 size={22} />

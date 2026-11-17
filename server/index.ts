@@ -5,6 +5,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { aiRoutes } from "./routes/ai";
+import { snapshotRoutes } from "./routes/snapshots";
+import { buildRoutes } from "./routes/build";
 import { env } from "./env";
 
 const app = new Hono();
@@ -12,7 +14,7 @@ const app = new Hono();
 app.use("*", logger());
 app.use("/api/*", cors());
 app.use(
-  "/api/*",
+  "/api/ai/*",
   bodyLimit({
     maxSize: 1024 * 1024,
     onError: (c) => c.json({ ok: false, error: "Request body is too large.", code: "payload-too-large" }, 413),
@@ -40,6 +42,8 @@ app.use("/api/ai/*", async (c, next) => {
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "clockwork" }));
 app.route("/api/ai", aiRoutes);
+app.route("/api/snapshots", snapshotRoutes);
+app.route("/api/build", buildRoutes);
 
 if (env.nodeEnv === "production") {
   app.use("/*", serveStatic({ root: "./dist" }));

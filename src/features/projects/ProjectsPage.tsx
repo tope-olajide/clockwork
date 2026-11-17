@@ -160,7 +160,11 @@ export function ProjectsPage() {
         document = parsed.document;
         document.updatedAt = new Date().toISOString();
       } else {
-        document = createProjectFromTemplate(created.template, created.name || "Untitled project");
+        const baseTemplate = created.mode === "brief" ? created.template : created.template;
+        document = createProjectFromTemplate(baseTemplate, created.name || "Untitled project");
+        if (created.mode === "brief") {
+          document.templateOrigin = "brief";
+        }
         if (created.settings) {
           document.settings = {
             ...document.settings,
@@ -174,8 +178,15 @@ export function ProjectsPage() {
         document = await seedStarterAssets(document);
       }
       await saveProjectDocument(document);
-      navigate(`/project/${document.id}/scene/${document.startSceneId}`);
-      toast.push("Project created", `${document.name} is ready in the editor.`);
+      if (created.mode === "brief" && created.brief) {
+        navigate(`/project/${document.id}/scene/${document.startSceneId}`, {
+          state: { agentBrief: created.brief, agentMode: "build" },
+        });
+        toast.push("Project created", "Opening the editor and asking the agent to build the first draft.");
+      } else {
+        navigate(`/project/${document.id}/scene/${document.startSceneId}`);
+        toast.push("Project created", `${document.name} is ready in the editor.`);
+      }
     } catch (createError) {
       toast.push(
         created.mode === "import" ? "Import failed" : "Project could not be created",
@@ -430,6 +441,7 @@ export function ProjectsPage() {
                     onClick={() => void openProject(project)}
                     aria-label={`Open ${project.name}`}
                   >
+                    {project.coverDataUrl && <img className="project-cover-image" src={project.coverDataUrl} alt="" />}
                     {project.archived && <span className="chip archived card-archived-chip">Archived</span>}
                     <span className="project-cover-art">{project.name}</span>
                   </button>

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { EditorPage } from "./features/editor/EditorPage";
 import { ProjectOverviewPage } from "./features/editor/ProjectOverviewPage";
 import { PlayPage } from "./features/playtest/PlayPage";
+import { SnapshotPlayerPage } from "./features/playtest/SnapshotPlayerPage";
 import { ProjectsPage } from "./features/projects/ProjectsPage";
 
 export function AppRoutes() {
@@ -11,6 +12,7 @@ export function AppRoutes() {
       <Route path="/project/:projectId" element={<ProjectOverviewPage />} />
       <Route path="/project/:projectId/scene/:sceneId" element={<EditorPage />} />
       <Route path="/play/:projectId" element={<PlayPage />} />
+      <Route path="/s/:snapshotId" element={<SnapshotPlayerPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
