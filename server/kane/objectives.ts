@@ -108,11 +108,17 @@ export function buildAiPlayObjective(input: ObjectiveInput): string {
     ? `Click "MOVE RIGHT" once.`
     : `Click "MOVE RIGHT" once. Click "JUMP" only when the player is on the ground, up to 6 times.`;
 
+  // Vague verbs do not persist anything: the documented `store ... as` form is
+  // what lands these values in run_end.final_state.
+  const extract = coinTotal > 0
+    ? `Store the STATUS value from the AI state panel as 'status', store the ${coinsLabel} value as 'coins', store the LAST ERROR value as 'last_error'.`
+    : `Store the STATUS value from the AI state panel as 'status', store the ${winName} value as 'won', store the LAST ERROR value as 'last_error'.`;
   const outcome = coinTotal > 0
-    ? `Assert the AI state panel shows STATUS "WON", ${coinsLabel} "${coinTotal}" and LAST ERROR "none".`
-    : `Assert the AI state panel shows STATUS "WON", ${winName} "true" and LAST ERROR "none".`;
+    ? `Assert the stored status is "WON", the stored coins is "${coinTotal}" and the stored last_error is "none".`
+    : `Assert the stored status is "WON", the stored won is "true" and the stored last_error is "none".`;
   return [
     `${goal} ${movement} Wait 3 seconds.`,
+    extract,
     outcome,
   ].join("\n");
 }

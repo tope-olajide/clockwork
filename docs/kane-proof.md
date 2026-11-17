@@ -70,6 +70,21 @@ Driven through the product UI (`?demoReset=1` → Neon Runner → AI Play), 2026
 - Fix: deterministic `repairAiPlayFailure` returned `Move Core A out of Ground` and applied one undoable `object.update`.
 - Attempt 2 run `646cff5f-7231-475d-8fa0-3297905d2956` (snapshot `OShWhY1HNpQo3A`): `run_end.status: "passed"`, `reason: "Objective completed"`, 66.6 s, final state `STATUS: "WON"`, `coins: "3"`, `last_error: "none"`. Panel shows `KANE VERIFIED` and both evidence links.
 
+### AI Play objective extraction (`store ... as`)
+
+The objective now ends with the documented extraction form, then asserts on the stored values:
+
+```text
+Run the scene once from its start state. Do not press RESTART or retry. Click "MOVE RIGHT" once. Wait 3 seconds.
+Store the STATUS value from the AI state panel as 'status', store the COINS value as 'coins', store the LAST ERROR value as 'last_error'.
+Assert the stored status is "WON", the stored coins is "3" and the stored last_error is "none".
+```
+
+- Real proof run `2ff85c36-9bc7-4b77-a50d-de59fe6d8e77` (snapshot `OShWhY1HNpQo3A`, repaired scene, attempt 2): `run_end.status: "passed"`, `reason: "Objective completed"`, **86.8 s**, **24.73 credits**.
+- `final_state`: `status: "WON"`, `coins: "3"`, `last_error: "none"` — captured by the store clauses, not inferred.
+- The stream shows the extraction explicitly: `analyze: ANALYZE(textual_visual, 'the LAST ERROR value from the AI state panel is stored …')`, then `analyze: {{last_error}} is "none"`, then `assert: {{status}} is "WON", {{coins}} is "3" and {{last_error}} is "none"`.
+- Cost of the requirement: two extra analyze steps, ~+20 s and ~+9 credits versus the assert-only pass (66.6 s / 15.63 credits). A two-attempt loop with extraction is ~172 s, so the 180 s budget is now effectively at its limit.
+
 Cost and time notes from this pass:
 
 - The earlier 50 s / 6-step clamp was killing runs that were on track (both attempts died at ~55 s mid-assertion, reported as a 0 s "cancelled"). The AI Play ceiling is now 140 s / 8 steps, and a timeout is reported as `Kane run timed out after Ns without a run_end; the verdict is unknown.` with the real elapsed duration rather than as a user cancel.
@@ -110,7 +125,7 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 
 ## Limitations
 
-- The full Neon Runner AI Play loop is verified as fail → fix → pass in 151.6 s (85.0 s + 66.6 s), excluding snapshot creation and UI overhead. It is close to the 180 s budget: at Kane's ~30 s fixed startup, a slower attempt can exceed it. The saved-test replay path is the intended margin.
+- The full Neon Runner AI Play loop is verified as fail → fix → pass in 151.6 s (85.0 s + 66.6 s) with the assert-only objective. With the required `store ... as` extraction the passing attempt measured 86.8 s, so the same loop is ~172 s — only 8 s of headroom against the 180 s budget. The saved-test replay path is the margin, and it is still unmeasured.
 - K2–K5 were not executed against real Kane in this pass. Their objectives remain in `scripts/kane/objectives/`.
 - The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
 - The independent negative control (unreachable goal rather than the seeded coin) has not been run.
