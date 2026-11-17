@@ -113,6 +113,28 @@ Completed in Slice 3 · verified at 1366×768 (cold-profile run).
 A 20×10 tilemap can be created from a tileset image. Selecting it shows Paint/Erase/Fill/Pick, a brush size and tile index; the canvas draws a tile grid and hover cell, and each drag stroke is one undo entry (verified paint, erase, fill and one-undo revert).
 Completed in Slice 3 · verified at 1366×768 (cold-profile run).
 
+## Logic
+
+### Rules and variables
+
+Logic lets you author variable- and overlap-driven rules with plain-language previews, flags references to deleted objects in the editor, and skips blocked rules at runtime with a `rule-blocked` event. The Platformer “coins ≥ 3 → Win” rule fires exactly once.
+Completed in Slice 5 · verified in the runtime harness.
+
+### Prefabs, overrides and detach
+
+Coin prefabs instantiate in bulk, receive prefab edits across every instance, keep per-instance overrides through an update, and stop following the prefab once detached. Fixed a duplicate-id bug in prefab refresh found by the gate.
+Completed in Slice 5 · verified in the runtime harness.
+
+### Presentation controls
+
+Presentation shows one of Look, Animation, Audio or Game UI at a time, persists the active subtab in `?ptab=`, and edits gravity, input bindings, volumes, HUD widgets and messages used by Play. Duplicate bindings warn (for example `KeyW (up, jump)`).
+Completed in Slice 5 · verified at 1366×768 in a cold profile.
+
+### HUD bars and visibility
+
+HUD widgets bind to variables in Play; bar widgets respect their max (`Coins 0 of 7`) and hiding a widget removes it from the runtime HUD.
+Completed in Slice 5 · verified at 1366×768 in a cold profile.
+
 ## Runtime
 
 ### Manual Play from the project

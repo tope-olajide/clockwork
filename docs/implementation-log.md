@@ -305,3 +305,24 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Implementation: `InputManager` now exposes `jumpReleased`/`actionReleased`, tracks pointer handlers scoped to the Play canvas, and polls the first standard gamepad; `PlayPage` attaches the canvas to the input manager after Pixi init. Physics movement is split into up to 8 deterministic substeps using half the smallest collider dimension, resolving X and Y per substep. `tilemapRowSpans()` merges contiguous filled tiles per row and is used by `solids()`.
 - Starter composition follow-up: added a dusk sky gradient with stars (`sky.svg`) and a moon sprite (`moon.svg`), widened the ridge art to 4:1 at 2048×512, widened the ground strip to 2048×100 to avoid extreme stretching, and added a sky backdrop plus a near-ridge layer to the Platformer template. Cold-profile screenshot at 1366×768 shows the gradient sky, stars, layered hills and seeded assets (16 assets, 17 scene objects).
 - Known limitations: pointer input maps only to the `action` logical action (no per-pointer coordinates exposed to rules); gamepad support uses the first connected standard-mapping pad only.
+
+## Slice 5 — Logic authoring, prefabs, presentation (gate closed)
+
+- Date: 2026-11-17
+- Commit: see this change set.
+- `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`: pass.
+- `./node_modules/.bin/vite build`: pass (chunk-size warnings only).
+- Runtime harness (`./node_modules/.bin/tsx .data/slice5-check.ts`, 13/13 pass):
+  - `coins >= 3` transitioned to Win exactly once (`scene=Win events=1`).
+  - A rule referencing a missing object produced 2 validation issues and a `rule-blocked` event; its log action never ran.
+  - Doubling gravity and raising jump to 1100 changed jump apex from 203.7 to 299.6.
+  - Coin prefab instantiate ×10 grew roots 3 → 13; prefab update changed all 13 roots; an instance rename override survived; a detached instance stayed at width 30 while the prefab moved to 44.
+  - Rebound `KeyW` produced `jumpPressed` through `InputManager`; HUD-bound `coins` 0 → 2; `show-message` displayed “Hello gate” and cleared after 200 ms; an assigned animation clip advanced 2 frames; scene music loop/volume persisted.
+- Browser harness (cold profile, 1366×768, production preview; 10/10 pass):
+  - Only one workspace root mounted at a time; Scene canvas and `100%` zoom were identical after Content → Logic → Presentation → Scene.
+  - Presentation rendered exactly one sub-tab; Audio set `?ptab=audio`, showed Master/Music/SFX controls and the no-track state, and survived reload.
+  - Duplicate bindings showed `Conflicts: KeyW (up, jump)`.
+  - Adding a bar HUD widget with max 7 showed `/ 7` in the live preview; Play rendered `Coins 0 of 7`; hiding the widget removed the bar from Play.
+- Bug fixed: `refreshPrefabInstances` kept existing instance objects and then reinserted refreshed copies with the same ids, producing duplicate object ids when updating a prefab. It now removes the old instance objects before inserting the refreshed set.
+- Known limitations: music/SFX audibility was not measured in headless Chrome; verification covers persisted loop/volume settings, the Audio panel controls and the no-asset state. The runtime harness is uncommitted.
+- Acceptance: **closed** for the Slice 5 list in `docs/clockwork-implementation-plan.md` §Slice 5, with the audio-audibility caveat above.

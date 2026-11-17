@@ -135,10 +135,10 @@ export function refreshPrefabInstances(document: ProjectDocument, prefab: Prefab
         return clone;
       });
 
-      const keep = new Set([nextRoot.id, ...nextObjects.map((object) => object.id)]);
-      scene.objects = scene.objects.filter((object) => object.prefabInstanceId !== instanceId || keep.has(object.id));
       const insertAt = scene.objects.findIndex((object) => object.id === root.id);
-      scene.objects.splice(insertAt >= 0 ? insertAt : scene.objects.length, 0, nextRoot, ...nextObjects.filter((object) => !scene.objects.some((candidate) => candidate.id === object.id)));
+      scene.objects = scene.objects.filter((object) => object.prefabInstanceId !== instanceId);
+      const insertIndex = insertAt >= 0 ? Math.min(insertAt, scene.objects.length) : scene.objects.length;
+      scene.objects.splice(insertIndex, 0, nextRoot, ...nextObjects);
       updated += 1;
     }
   }
