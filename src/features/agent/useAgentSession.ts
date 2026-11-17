@@ -6,6 +6,7 @@ import { executeClientTool } from "../../engine/ai/client-tools";
 import { streamAgentStep } from "../../engine/ai/transport";
 import { fetchAiSettings, fetchModels, fetchProviders, type ModelInfo, type ProviderInfo } from "../../engine/ai/api";
 import { useEngineStore } from "../../engine/store/engine-store";
+import { deleteChat, readChat, saveChat } from "../../engine/persistence/indexeddb";
 
 export type AgentStatus = "ready" | "thinking" | "streaming" | "tool" | "error";
 
@@ -57,6 +58,17 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [aiSettings, setAiSettings] = useState<{ defaultModelId: string | null; mock: boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMessages([]);
+    if (!args.projectId) return;
+    void readChat(args.projectId).then((record) => {
+      if (cancelled || !record || !Array.isArray(record.messages)) return;
+      setMessages((record.messages as DisplayMessage[]).slice(-50));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [args.projectId]);
 
   useEffect(() => {
     try {
@@ -127,9 +139,10 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   const newChat = useCallback(() => {
     stop();
     setMessages([]);
+    void deleteChat(args.projectId).catch(() => undefined);
     setError(null);
     setStatus("ready");
-  }, [stop]);
+  }, [args.projectId, stop]);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -255,6 +268,16 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   }, [messages, send]);
 
   const isBusy = status === "thinking" || status === "streaming" || status === "tool";
+
+  useEffect(() => {
+    if (!args.projectId || isBusy) return;
+    const persisted = messages
+      .filter((message) => !message.streaming && message.toolCard?.status !== "running")
+      .map(({ streaming, ...message }) => message);
+    if (persisted.length === 0) return;
+    const timer = window.setTimeout(() => { void saveChat(args.projectId, persisted).catch(() => undefined); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [args.projectId, isBusy, messages]);
 
   return useMemo(() => ({
     messages,

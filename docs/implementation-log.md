@@ -225,7 +225,7 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - New known issues: see `docs/known-issues.md` (remaining end-to-end verification gaps).
 - Known limitations / not yet fully browser-verified: authoring+play "coins == 3 → go to Win scene" triggering exactly once in a controlled run; deleted-object rule flagged in authoring and refused/skipped in play; gravity/jump inspector changes measurably affecting playtest behavior; prefab instantiate×10 followed by prefab edit/update with instance-override survival and detach preventing further prefab propagation; rebinding jump to `KeyW` working in play; HUD bound value updates during play, bar max behavior, and hide/removal in play; `show-message` display and clear after duration; per-scene music play/loop and music/SFX volume audibility; animation clip preview in panel and playback on assigned runtime object; numerical viewport-camera preservation across Scene/Content/Logic/Presentation switches. Audio/music assets and audible playback were not exercised in headless runs.
 
-## Slice 6 — Agent transport, context, chat shell (in progress, not gate-closed)
+## Slice 6 — Agent transport, context, chat shell (initial implementation)
 
 - Date: 2026-11-17
 - Commit: (uncommitted; implementation in working tree)
@@ -326,3 +326,17 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Bug fixed: `refreshPrefabInstances` kept existing instance objects and then reinserted refreshed copies with the same ids, producing duplicate object ids when updating a prefab. It now removes the old instance objects before inserting the refreshed set.
 - Known limitations: music/SFX audibility was not measured in headless Chrome; verification covers persisted loop/volume settings, the Audio panel controls and the no-asset state. The runtime harness is uncommitted.
 - Acceptance: **closed** for the Slice 5 list in `docs/clockwork-implementation-plan.md` §Slice 5, with the audio-audibility caveat above.
+
+## Slice 6 gate — chat shell, context, tools, hardening (gate closed on mock evidence)
+
+- Date: 2026-11-17
+- Commit: see this change set.
+- `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`: pass. Production `vite build`: pass (chunk-size warnings only).
+- Browser harness `.data/slice6-ui.mjs` (cold profile, production preview, 1366×768; **17/17 pass**): empty drawer opens from `⌘J` with context chips; a selected object appears in the context chip and in the `/step` request body; mock text streams; tool cards expand to real `obj_` ids; `capture_viewport` renders a PNG in the drawer and that image is attached to the next request; slow stream Stop returns to ready in 25–47 ms; error card shows Retry, and Retry preserves the thread and re-requests; a two-tool chain ends in final text; reload restores the thread; New chat clears it and it stays cleared after reload; at 1920 px the drawer docks at 420 px without horizontal overflow; no uncaught console exceptions.
+- Persistence (S6-1): `readChat`/`saveChat`/`deleteChat` in `src/engine/persistence/indexeddb.ts`; `useAgentSession` loads the last 50 messages per project, debounce-saves 300 ms when idle, and New chat deletes the project thread.
+- Hardening (S6-2): `server/env.ts` Zod schema fails fast; `/api/*` `bodyLimit` 1 MB; in-memory per-IP/per-route POST limiter 60/min returning `429` `code:"rate-limit"`; provider fetch receives `c.req.raw.signal`. Verified with curl: 1.2 MB body → `413 payload-too-large`; 62 rapid `POST /api/ai/step` → 60×400 then 2×429; health stayed 200. Also fixed a crash: a body with no `messages` array now returns `400 bad-request` instead of throwing inside `streamText` and terminating the server.
+- Mock coverage (S6-3): `[mock:slow]`, `[mock:stopped]`, `[mock:chain]`, `[mock:query]`, `[mock:capture]`, plus the error trigger. Triggers only fire on the first step so tool-result follow-ups can finish.
+- Tool aliases (S6-4): `get_project_summary`, `query_project`→`search_entities`, `inspect_entity`→`get_object` accepted by `executeClientTool` and appended to `toolDefinitionsForRequest`; system prompt names both sets.
+- Responsive drawer: scrim below 1500 px; docked 420 px at ≥1500 px via `.app.agent-open` padding.
+- Known limitations: no real-provider turn was possible without credentials (the only unverified Slice 6 gate item); persistence stores plain chat JSON in IndexedDB like the rest of the local project state; rate limiting is in-memory.
+- Acceptance: **closed** for the deterministic/mock Slice 6 gate; the real-provider tool-call item is recorded in `docs/known-issues.md` as a verification gap.

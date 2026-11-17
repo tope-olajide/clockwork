@@ -49,6 +49,7 @@ export async function* openAICompatibleStream(opts: {
   toolsEnabled?: boolean;
   visionEnabled?: boolean;
   contextWindow?: number;
+  signal?: AbortSignal;
 }): AsyncGenerator<string> {
   const { baseUrl, apiKey, model, req } = opts;
   const toolsEnabled = opts.toolsEnabled !== false;
@@ -77,6 +78,7 @@ export async function* openAICompatibleStream(opts: {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal: opts.signal,
   });
 
   if (!response.ok || !response.body) {

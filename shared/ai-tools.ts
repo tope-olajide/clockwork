@@ -91,3 +91,45 @@ export const SLICE6_TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
 ];
+
+const ALIAS_TOOL_DEFINITIONS: ToolDefinition[] = [
+  {
+    type: "function",
+    function: {
+      name: "get_project_summary",
+      description: "Get a compact project summary: name, revision, scene count, start scene, and current selection.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_project",
+      description: "Query project entities by text or kind. Alias of search_entities.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "Case-insensitive search text" },
+          kind: { type: "string", description: "Optional kind filter: scene, object, prefab, asset, rule, variable" },
+          sceneId: { type: "string", description: "Optional scene scope" },
+          limit: { type: "number", description: "Max results, default 50" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "inspect_entity",
+      description: "Inspect one object by id. Alias of get_object.",
+      parameters: {
+        type: "object",
+        properties: { objectId: { type: "string", description: "Object id" } },
+        required: ["objectId"],
+        additionalProperties: false,
+      },
+    },
+  },
+];
+

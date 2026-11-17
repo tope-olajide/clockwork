@@ -25,6 +25,20 @@ export function executeClientTool(input: ToolExecInput): ExecutedTool {
   const fail = (error: string): ExecutedTool => ({ ok: false, error, revision, name, args });
 
   try {
+    if (name === "query_project") return executeClientTool({ ...input, name: "search_entities" });
+    if (name === "inspect_entity") return executeClientTool({ ...input, name: "get_object" });
+    if (name === "get_project_summary") {
+      const scene = document.scenes.find((candidate) => candidate.id === activeSceneId) ?? null;
+      return ok({
+        id: document.id,
+        name: document.name,
+        revision: document.revision,
+        sceneCount: document.scenes.length,
+        startSceneId: document.startSceneId,
+        activeSceneId: scene?.id ?? null,
+        selection,
+      });
+    }
     if (name === "list_scenes") {
       return ok(document.scenes.map((s) => ({ id: s.id, name: s.name, objectCount: s.objects.length, layerCount: s.layers.length, isStart: s.id === document.startSceneId })));
     }

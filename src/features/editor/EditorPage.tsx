@@ -361,7 +361,7 @@ export function EditorPage() {
 
   if (tooSmall) {
     return (
-      <div className="app">
+      <div className={`app${agentOpen ? " agent-open" : ""}`}>
         <TopBar crumbs={[{ label: "Projects", to: "/" }, { label: projectName }]} revision={revision} projectChip onSearch={() => setPaletteOpen(true)} />
         <div className="too-small">
           <div className="too-small-card">
@@ -380,7 +380,7 @@ export function EditorPage() {
 
   if (isLoading && !current) {
     return (
-      <div className="app">
+      <div className={`app${agentOpen ? " agent-open" : ""}`}>
         <TopBar crumbs={[{ label: "Projects", to: "/" }, { label: "Opening project" }]} onSearch={() => setPaletteOpen(true)} />
         <div className="workspace"><div className="editor" style={{ padding: 24 }}><div className="skeleton-card" style={{ height: 420 }} /></div></div>
       </div>
@@ -389,7 +389,7 @@ export function EditorPage() {
 
   if (!current || !scene) {
     return (
-      <div className="app">
+      <div className={`app${agentOpen ? " agent-open" : ""}`}>
         <TopBar crumbs={[{ label: "Projects", to: "/" }, { label: "Project unavailable" }]} onSearch={() => setPaletteOpen(true)} />
         <div className="too-small project-error">
           <div className="too-small-card">
@@ -416,7 +416,7 @@ export function EditorPage() {
   const openAiSettings = () => navigate(`/project/${current.id}?section=ai`);
 
   return (
-    <div className="app">
+    <div className={`app${agentOpen ? " agent-open" : ""}`}>
       <TopBar
         crumbs={[{ label: "Projects", to: "/" }, { label: current.name }, { label: scene.name }]}
         revision={revision}
@@ -531,6 +531,7 @@ export function EditorPage() {
       <Drawer open={hierarchyDrawer} onOpenChange={setHierarchyDrawer} title="Hierarchy" side="left"><EngineLeftDock /></Drawer>
       <Drawer open={inspectorDrawer} onOpenChange={setInspectorDrawer} title="Inspector" side="right"><EngineInspector tab={inspectorTab} onTab={setInspectorTab} /></Drawer>
       {debug && <DebugPanel onClose={() => setDebug(false)} />}
+      {agentOpen && <button className="agent-scrim" aria-label="Close agent" onClick={() => setAgentOpen(false)} />}
       <AgentDrawer
         open={agentOpen}
         onClose={() => setAgentOpen(false)}

@@ -11,9 +11,52 @@ function sleep(ms: number): Promise<void> {
 export async function* mockStepStream(req: StepRequest): AsyncGenerator<string> {
   const lastUser = [...req.messages].reverse().find((m) => m.role === "user")?.content ?? "";
   const lower = lastUser.toLowerCase();
-  const hasToolResult = req.messages.some((m) => m.role === "tool");
+  const lastUserIndex = req.messages.map((m) => m.role).lastIndexOf("user");
+  const toolResults = req.messages.slice(Math.max(0, lastUserIndex)).filter((m) => m.role === "tool").length;
+  const hasToolResult = toolResults > 0;
 
   // allow forcing states for UI coverage
+  if (lower.includes("[mock:slow]")) {
+    const text = "This is a deliberately slow mock stream so streaming and Stop states can be observed.";
+    for (const chunk of text.match(/.{1,12}/g) ?? [text]) {
+      yield ndjson({ type: "text_delta", text: chunk });
+      await sleep(250);
+    }
+    yield ndjson({ type: "step_end", finishReason: "stop" });
+    return;
+  }
+
+  if (lower.includes("[mock:stopped]")) {
+    for (let index = 0; index < 80; index += 1) {
+      yield ndjson({ type: "text_delta", text: `long stream chunk ${index} ` });
+      await sleep(250);
+    }
+    yield ndjson({ type: "step_end", finishReason: "stop" });
+    return;
+  }
+
+  if (lower.includes("[mock:chain]")) {
+    if (toolResults === 0) {
+      yield ndjson({ type: "text_delta", text: "Chain step 1. " });
+      yield ndjson({ type: "tool_call", callId: "mock_chain_1", name: "list_scenes", args: {} });
+      yield ndjson({ type: "step_end", finishReason: "tool-calls" });
+      return;
+    }
+    if (toolResults === 1) {
+      yield ndjson({ type: "text_delta", text: "Chain step 2. " });
+      yield ndjson({ type: "tool_call", callId: "mock_chain_2", name: "get_variables", args: {} });
+      yield ndjson({ type: "step_end", finishReason: "tool-calls" });
+      return;
+    }
+    const text = "Chain complete: scenes and variables inspected.";
+    for (const chunk of text.match(/.{1,20}/g) ?? [text]) {
+      yield ndjson({ type: "text_delta", text: chunk });
+      await sleep(15);
+    }
+    yield ndjson({ type: "step_end", finishReason: "stop" });
+    return;
+  }
+
   if (lower.includes("[mock:error]")) {
     yield ndjson({ type: "error", message: "Mock provider error (requested).", code: "mock-error" });
     yield ndjson({ type: "step_end", finishReason: "error" });
@@ -27,6 +70,18 @@ export async function* mockStepStream(req: StepRequest): AsyncGenerator<string> 
       await sleep(15);
     }
     yield ndjson({ type: "step_end", finishReason: "stop", usage: { promptTokens: 120, completionTokens: 24 } });
+    return;
+  }
+
+  if (toolResults === 0 && lower.includes("[mock:query]")) {
+    yield ndjson({ type: "tool_call", callId: "mock_query_1", name: "query_project", args: { text: "Player", kind: "object", limit: 5 } });
+    yield ndjson({ type: "step_end", finishReason: "tool-calls" });
+    return;
+  }
+
+  if (toolResults === 0 && lower.includes("[mock:capture]")) {
+    yield ndjson({ type: "tool_call", callId: "mock_capture_1", name: "capture_viewport", args: {} });
+    yield ndjson({ type: "step_end", finishReason: "tool-calls" });
     return;
   }
 

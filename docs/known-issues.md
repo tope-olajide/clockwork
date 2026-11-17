@@ -44,11 +44,10 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 
 ### Slice 6 — Agent transport, context, chat shell
 
-- **Chat persistence is not implemented.** The `chats` object store exists in `src/engine/persistence/indexeddb.ts`, but there are no read/write helpers and `useAgentSession` never saves or restores messages (task 11). Reloading loses the thread.
-- **Env validation, JSON body limit and rate limits are missing.** `server/index.ts` reads `process.env` directly with no Zod schema, no `bodyLimit`, and `server/routes/ai.ts` has no rate limiting (task 1; also carried into Slice 6.5 task 5).
+- **One real provider tool-call turn is still unverified.** The Slice 6 browser gate ran entirely against `AI_MOCK=1` because this environment has no provider credentials. The mock covers text, slow stream, stop, error, retry, tool call, tool-result follow-up, two-tool chain, query and viewport capture, but a real OpenAI-compatible streamed tool call remains unproven (verification gap; no code blocker).
 - **Transport is NDJSON on `/api/ai/step`, not SSE `/api/agent/step` with the AI SDK** as written in task 2. It is internally consistent and streams, but it is a spec deviation.
-- **Read-tool names deviate from §5.4.** The implementation exposes `list_scenes`, `get_scene`, `search_entities`, `get_object`, `get_variables`, `get_selection`, `capture_viewport` instead of `get_project_summary`, `query_project`, `inspect_entity`, `capture_viewport`. The system prompt matches the implemented names; the plan's catalog does not.
-- **`AI_MOCK=1` does not cover every required state.** `server/ai/mock.ts` supports plain text, one tool call, a tool-result follow-up, error and short sleeps; there is no explicit slow-stream or three-step-chain scenario, and no automated run of the drawer states exists.
+- **Read-tool names deviate from §5.4.** The implementation exposes `list_scenes`, `get_scene`, `search_entities`, `get_object`, `get_variables`, `get_selection`, `capture_viewport`. §5.4 aliases `get_project_summary`, `query_project` and `inspect_entity` are accepted by the client and listed in the server tool definitions; the original names remain for compatibility.
+- **Hardening is in-memory only.** Rate limiting (60 POST/min per IP and route) lives in server memory and resets on restart; body limit is 1 MB for `/api/*`. Adequate for the local single-user v1, not a multi-instance deployment.
 
 ### Slice 7 — Agent writes, workflows, presence
 

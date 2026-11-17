@@ -173,6 +173,10 @@ app.post("/step", async (c) => {
     return c.json({ error: "Client-supplied credentials are not allowed." }, 400);
   }
 
+  if (!Array.isArray(body?.messages) || body.messages.length === 0) {
+    return jsonError(c, "messages must be a non-empty array.", "bad-request");
+  }
+
   const resolved = resolveModel(body.modelId);
   c.header("Content-Type", "application/x-ndjson; charset=utf-8");
   c.header("Cache-Control", "no-cache");
@@ -208,6 +212,7 @@ app.post("/step", async (c) => {
         toolsEnabled: resolved.tools,
         visionEnabled: resolved.vision,
         contextWindow: resolved.contextWindow,
+        signal: c.req.raw.signal,
       })) {
         await stream.write(chunk);
       }

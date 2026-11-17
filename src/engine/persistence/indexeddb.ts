@@ -132,3 +132,31 @@ export async function writeSetting<T>(key: string, value: T): Promise<void> {
   transaction.objectStore("settings").put({ id: key, value });
   await transactionDone(transaction);
 }
+
+export interface ChatRecord {
+  id: string;
+  messages: unknown[];
+  updatedAt: string;
+}
+
+export async function readChat(projectId: string): Promise<ChatRecord | undefined> {
+  const db = await openDatabase();
+  const transaction = db.transaction("chats", "readonly");
+  const record = await requestToPromise(transaction.objectStore("chats").get(projectId));
+  await transactionDone(transaction);
+  return record as ChatRecord | undefined;
+}
+
+export async function saveChat(projectId: string, messages: unknown[]): Promise<void> {
+  const db = await openDatabase();
+  const transaction = db.transaction("chats", "readwrite");
+  transaction.objectStore("chats").put({ id: projectId, messages, updatedAt: new Date().toISOString() });
+  await transactionDone(transaction);
+}
+
+export async function deleteChat(projectId: string): Promise<void> {
+  const db = await openDatabase();
+  const transaction = db.transaction("chats", "readwrite");
+  transaction.objectStore("chats").delete(projectId);
+  await transactionDone(transaction);
+}

@@ -135,6 +135,23 @@ Completed in Slice 5 · verified at 1366×768 in a cold profile.
 HUD widgets bind to variables in Play; bar widgets respect their max (`Coins 0 of 7`) and hiding a widget removes it from the runtime HUD.
 Completed in Slice 5 · verified at 1366×768 in a cold profile.
 
+## AI Agent
+
+### Agent drawer and project context
+
+Open the agent with `⌘J` or the toolbar; it shows the current scene, selection and revision as context chips, streams replies, supports Ask/Build/Plan modes, and keeps each project's thread across reloads (New chat clears it).
+Completed in Slice 6 · verified at 1366×768 with `AI_MOCK=1`.
+
+### Read-only tools and viewport capture
+
+The agent calls read-only tools (`list_scenes`, `get_scene`, `search_entities`/`query_project`, `get_object`/`inspect_entity`, `get_variables`, `get_selection`) and renders tool results in expandable cards; `capture_viewport` returns a PNG into the drawer and into the next step. Chained tool calls resolve to a final answer.
+Completed in Slice 6 · verified at 1366×768 with `AI_MOCK=1`; one real-provider tool-call turn remains unverified.
+
+### Stop, retry and errors
+
+Stop aborts the stream and returns to ready in under 200 ms, errors render an actionable Retry card that preserves the thread, and the drawer overlays with a scrim at 1366×768 and docks at 420 px on wide screens.
+Completed in Slice 6 · verified at 1366×768 and 1920×1080 with `AI_MOCK=1`.
+
 ## Runtime
 
 ### Manual Play from the project
