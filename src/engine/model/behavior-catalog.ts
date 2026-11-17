@@ -9,6 +9,8 @@ export interface BehaviorParamSpec {
   max?: number;
   step?: number;
   placeholder?: string;
+  unit?: string;
+  help?: string;
 }
 
 export interface BehaviorSpec {
@@ -24,25 +26,27 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Platformer controller",
     description: "Move left/right and jump. Requires a dynamic body.",
     params: [
-      { key: "speed", label: "Speed", type: "number", default: 240 },
-      { key: "jump", label: "Jump", type: "number", default: 580 },
-      { key: "maxAirJumps", label: "Air jumps", type: "number", default: 0, min: 0 },
+      { key: "speed", label: "Speed", type: "number", default: 240, unit: "px/s", help: "Horizontal movement speed." },
+      { key: "jump", label: "Jump", type: "number", default: 580, unit: "px/s", help: "Initial jump velocity." },
+      { key: "maxAirJumps", label: "Air jumps", type: "number", default: 0, min: 0, step: 1, help: "Extra jumps while airborne." },
+      { key: "coyoteMs", label: "Coyote time", type: "number", default: 120, min: 0, step: 10, unit: "ms", help: "Grace period after leaving ground." },
+      { key: "bufferMs", label: "Jump buffer", type: "number", default: 100, min: 0, step: 10, unit: "ms", help: "Queues jump input before landing." },
     ],
   },
   {
     type: "top-down-controller",
     label: "Top-down controller",
     description: "Move in four directions.",
-    params: [{ key: "speed", label: "Speed", type: "number", default: 220 }],
+    params: [{ key: "speed", label: "Speed", type: "number", default: 220, unit: "px/s", help: "Movement speed." }],
   },
   {
     type: "patrol",
     label: "Patrol",
     description: "Move back and forth from spawn.",
     params: [
-      { key: "distance", label: "Distance", type: "number", default: 120 },
-      { key: "speed", label: "Speed", type: "number", default: 60 },
-      { key: "axis", label: "Axis (x/y)", type: "string", default: "x" },
+      { key: "distance", label: "Distance", type: "number", default: 120, unit: "px", help: "Travel distance from start." },
+      { key: "speed", label: "Speed", type: "number", default: 60, unit: "px/s", help: "Patrol speed." },
+      { key: "axis", label: "Axis", type: "string", default: "x", help: "Use x or y." },
     ],
   },
   {
@@ -50,8 +54,8 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Follow",
     description: "Move toward a tag or object.",
     params: [
-      { key: "targetTag", label: "Target tag", type: "string", default: "player" },
-      { key: "speed", label: "Speed", type: "number", default: 80 },
+      { key: "targetTag", label: "Target tag", type: "string", default: "player", help: "Tag to follow." },
+      { key: "speed", label: "Speed", type: "number", default: 80, unit: "px/s", help: "Follow speed." },
     ],
   },
   {
@@ -59,10 +63,10 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Collectible",
     description: "Collected by the player; can update a variable and play SFX.",
     params: [
-      { key: "variable", label: "Variable", type: "string", default: "coins" },
-      { key: "amount", label: "Amount", type: "number", default: 1 },
-      { key: "destroyOnCollect", label: "Destroy on collect", type: "boolean", default: true },
-      { key: "sfxAssetId", label: "SFX asset id", type: "string", default: "" },
+      { key: "variable", label: "Variable", type: "string", default: "coins", help: "Variable name to change." },
+      { key: "amount", label: "Amount", type: "number", default: 1, help: "Amount added on collect." },
+      { key: "destroyOnCollect", label: "Destroy on collect", type: "boolean", default: true, help: "Remove object after collection." },
+      { key: "sfxAssetId", label: "SFX asset id", type: "string", default: "", help: "Optional audio asset id." },
     ],
   },
   {
@@ -70,8 +74,8 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Hazard",
     description: "Respawns the player on contact.",
     params: [
-      { key: "respawn", label: "Respawn player", type: "boolean", default: true },
-      { key: "damage", label: "Damage", type: "number", default: 1 },
+      { key: "respawn", label: "Respawn player", type: "boolean", default: true, help: "Send player to checkpoint/spawn." },
+      { key: "damage", label: "Damage", type: "number", default: 1, help: "Damage amount hook." },
     ],
   },
   {
@@ -85,9 +89,9 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Camera follow",
     description: "Camera tracks this object.",
     params: [
-      { key: "damping", label: "Damping", type: "number", default: 0.12, min: 0, max: 1, step: 0.01 },
-      { key: "offsetX", label: "Offset X", type: "number", default: 0 },
-      { key: "offsetY", label: "Offset Y", type: "number", default: 0 },
+      { key: "damping", label: "Damping", type: "number", default: 0.12, min: 0, max: 1, step: 0.01, help: "Smoothing factor (0-1)." },
+      { key: "offsetX", label: "Offset X", type: "number", default: 0, unit: "px", help: "Camera offset X." },
+      { key: "offsetY", label: "Offset Y", type: "number", default: 0, unit: "px", help: "Camera offset Y." },
     ],
   },
   {
@@ -95,8 +99,8 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Spawner",
     description: "Timer-driven spawning hook for rules/systems.",
     params: [
-      { key: "prefabId", label: "Prefab id", type: "string", default: "" },
-      { key: "intervalMs", label: "Interval (ms)", type: "number", default: 1000 },
+      { key: "prefabId", label: "Prefab id", type: "string", default: "", help: "Prefab to spawn." },
+      { key: "intervalMs", label: "Interval", type: "number", default: 1000, unit: "ms", help: "Spawn interval." },
     ],
   },
   {
@@ -104,8 +108,8 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Timer",
     description: "Emits timer events on an interval.",
     params: [
-      { key: "durationMs", label: "Duration (ms)", type: "number", default: 1000 },
-      { key: "repeat", label: "Repeat", type: "boolean", default: true },
+      { key: "durationMs", label: "Duration", type: "number", default: 1000, unit: "ms", help: "Timer duration." },
+      { key: "repeat", label: "Repeat", type: "boolean", default: true, help: "Restart after firing." },
     ],
   },
   {
@@ -113,23 +117,25 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
     label: "Variable set",
     description: "Parameter holder for variable-driven behavior.",
     params: [
-      { key: "variable", label: "Variable", type: "string", default: "" },
-      { key: "value", label: "Value", type: "string", default: "" },
+      { key: "variable", label: "Variable", type: "string", default: "", help: "Variable name." },
+      { key: "value", label: "Value", type: "string", default: "", help: "Value to set." },
     ],
   },
   {
     type: "health",
     label: "Health",
     description: "Tracks health points for an object.",
-    params: [{ key: "max", label: "Max health", type: "number", default: 3 }],
+    params: [{ key: "max", label: "Max health", type: "number", default: 3, help: "Maximum health points." }],
   },
 ];
 
 export function behaviorSpec(type: BehaviorType): BehaviorSpec {
-  return BEHAVIOR_CATALOG.find((spec) => spec.type === type) ?? {
-    type,
-    label: type,
-    description: "Behavior",
-    params: [],
-  };
+  return (
+    BEHAVIOR_CATALOG.find((spec) => spec.type === type) ?? {
+      type,
+      label: type,
+      description: "Behavior",
+      params: [],
+    }
+  );
 }

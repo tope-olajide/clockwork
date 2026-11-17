@@ -204,22 +204,23 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - **New known issues:** Play is a separate route; replay has no UI control; audio/music paths were not exercised because the template has no audio assets; telemetry is not yet exposed to the agent; the Slice 3 gate remains unlogged.
 - **Known limitations:** runtime physics is deterministic single-player AABB with static bodies and tilemap tiles; no rotation collision or rigid-body solver.
 
-## Slice 5 — Logic authoring, prefabs, presentation (partial, in progress)
+## Slice 5 — Logic authoring, prefabs, presentation (in progress, not gate-closed)
 
 - Date: 2026-11-17
-- Commit: (uncommitted; implementation in working tree)
-- `pnpm typecheck`: pass (`tsc -b`, exit 0).
-- `pnpm build`: pass (`tsc -b && vite build`, exit 0). Vite chunk-size warning only.
-- Manual script (headless Chrome 1366×768, cold profiles, production preview `http://localhost:4174`, CDP-driven, temporary harness files deleted after runs):
-  - Created a new Platformer project from the dashboard and opened the editor at `/project/:id/scene/:sceneId`.
-  - Switched to **Presentation** and verified subtab URL state: `?tab=presentation&ptab=look`, `&ptab=animation`, `&ptab=audio`, and `&ptab=ui` updated on click; reloading with `ptab=ui` preserved `ptab=ui`.
-  - Switched to **Content** and **Logic** workspaces; Logic text showed template variables/rules context including `coins` and win-related content, and Content showed prefab controls including Coin.
-  - From Content, set prefab instance count to 10 and clicked Instantiate; the command completed without a `structuredClone` cloning error and the project revision advanced (e.g. `r0` → `r1` in the gate run).
-  - Opened Play route `/play/:projectId`; Play loaded in `running` state with HUD present and variables `{"coins":0,"won":false,"lives":3}` observed on the player root.
-  - Fixed during verification: prefab/command cloning now unwraps Immer drafts before `structuredClone` (instantiate no longer throws in command execution), and Presentation workspace now exposes subtab controls that update `?ptab=`.
+- Commit: (uncommitted; implementation and verification in working tree)
+- `pnpm typecheck`: pass (`tsc -b`, exit 0) after fixing unused `document` parameters in `src/features/logic/LogicPage.tsx`.
+- `pnpm build`: pass (`pnpm build` / `tsc -b && vite build`, exit 0). Vite chunk-size warning only.
+- Code completed in this session/workspace: Logic/Content/Presentation workspace pages; rule/variable/prefab/animation/HUD/scene-audio model and command support; rule reference validation/flagging helpers; prefab instantiate/update/detach/revert flows with Immer-draft-safe cloning; runtime rule safety, prefab spawn/transition preservation, animation frame application, scene music/volume handling, HUD visibility/message styling; Presentation `?tab=presentation&ptab=` URL state and subtab UI; behavior catalog/editor, variable usage/rule previews, prefab controls, input rebinding/conflict UI, and inspector prefab controls.
+- Browser evidence (headless Chrome 1366×768, cold profiles, production preview `http://localhost:4174`, CDP-driven, temporary harness/profile files deleted): 
+  - Presentation workspace: clicking Look/Animation/Audio/Game UI updated URL to `?tab=presentation&ptab=look|animation|audio|ui`; reloading with `ptab=audio` preserved `?tab=presentation&ptab=audio`.
+  - Workspace switching: Scene/Content/Logic/Presentation navigation worked and returning to Scene rendered the canvas (Scene tab URLs/canvas presence observed across switches).
+  - Logic (Platformer template): rule "When coins >= 3 → set won true, then go to Win" is present and marked `Once`; variable/rule authoring UI and scene-start/rule context render.
+  - Content: setting prefab instance count to 10 and clicking Instantiate completed without a cloning error, advanced revision, showed "Instantiated prefab ×10.", and reported `1 objects · 13 instances`; selecting a prefab instance exposed `Detach instance`, `Revert overrides`, and `Update prefab from selection` with "Updating the prefab applies to 13 instance(s)."
+  - Presentation/Game UI: HUD/Input map/Messages controls render; template input bindings show `up` and `jump` both bound to `KeyW` with `Conflicts: KeyW (up, jump)`. Look allowed changing a gravity input (set to 2200 in a probe).
+  - Play: `/play/:projectId` loaded `running` with HUD `CORES 0` and variables `{"coins":0,"won":false,"lives":3}`.
 - Viewports checked: 1366×768 (headless, cold profile). 1440×900/1920×1080/1024 drawer not re-run.
 - Console: not exhaustively audited in this pass.
-- Acceptance: **not closed** (partial evidence only; full Slice 5 gate not completed in one clean run).
-- Features completed: none added to `features.md` (Slice 5 gate not complete/fully verified).
-- New known issues: added Slice 5 verification gaps and limitations to `docs/known-issues.md`.
-- Known limitations: end-to-end acceptance for rule authoring/play (“coins == 3 → go to Win scene” once from editor-created flow), stale/deleted-reference refusal UX, gravity/jump inspector affecting playtest, input rebinding to `KeyW` in play and duplicate-binding conflict warnings, prefab instantiate×10/update/override survival/detach behaviors, HUD bound updates/bar/max/hide in play, `show-message` duration clearing, per-scene music/SFX volume behavior, animation clip preview and runtime playback, and viewport camera preservation across Scene/Content/Logic/Presentation switches were not fully browser-verified in this pass. Audio/music assets and audible playback were not exercised. Runtime behavior is implemented in code paths but requires targeted manual/automated evidence before gate closure.
+- Acceptance: **not closed**. Full Slice 5 gate not completed in one clean run.
+- Features completed: none added to `features.md` (gate not complete/fully verified).
+- New known issues: see `docs/known-issues.md` (remaining end-to-end verification gaps).
+- Known limitations / not yet fully browser-verified: authoring+play "coins == 3 → go to Win scene" triggering exactly once in a controlled run; deleted-object rule flagged in authoring and refused/skipped in play; gravity/jump inspector changes measurably affecting playtest behavior; prefab instantiate×10 followed by prefab edit/update with instance-override survival and detach preventing further prefab propagation; rebinding jump to `KeyW` working in play; HUD bound value updates during play, bar max behavior, and hide/removal in play; `show-message` display and clear after duration; per-scene music play/loop and music/SFX volume audibility; animation clip preview in panel and playback on assigned runtime object; numerical viewport-camera preservation across Scene/Content/Logic/Presentation switches. Audio/music assets and audible playback were not exercised in headless runs.

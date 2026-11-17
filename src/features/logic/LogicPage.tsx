@@ -42,6 +42,21 @@ function VariablesPanel({ document, dispatch, readOnly }: { document: ProjectDoc
     return value;
   }
 
+  function usageCount(variable: Variable): number {
+    const name = variable.name;
+    let count = document.settings.ui.hud.filter((h) => h.variable === name).length;
+    for (const scene of document.scenes) {
+      for (const rule of scene.rules) {
+        if (rule.when.some((c) => c.kind === "variable" && c.name === name)) count++;
+        if (rule.do.some((a) => a.kind === "set-variable" && a.name === name)) count++;
+      }
+      for (const object of scene.objects) {
+        if (object.behaviors.some((b) => b.params?.variable === name)) count++;
+      }
+    }
+    return count;
+  }
+
   function add() {
     if (!name.trim()) return;
     const error = err(dispatch, "variable.add", {
@@ -61,10 +76,10 @@ function VariablesPanel({ document, dispatch, readOnly }: { document: ProjectDoc
         <h2>Variables</h2>
         <span className="row-meta">Project-wide</span>
       </div>
-      <p className="panel-helper">Rules, HUD, and runtime state read from these names.</p>
+      <p className="panel-helper">Rules, HUD, and runtime state read from these names. Renames/deletes are reference-checked.</p>
       <div className="logic-list">
         {document.variables.map((variable) => (
-          <VariableRow key={variable.id} variable={variable} dispatch={dispatch} readOnly={readOnly} />
+          <VariableRow key={variable.id} variable={variable} usage={usageCount(variable)} dispatch={dispatch} readOnly={readOnly} />
         ))}
         {document.variables.length === 0 && <div className="panel-helper">No variables yet.</div>}
       </div>
@@ -87,7 +102,7 @@ function VariablesPanel({ document, dispatch, readOnly }: { document: ProjectDoc
   );
 }
 
-function VariableRow({ variable, dispatch, readOnly }: { variable: Variable; dispatch: ReturnType<typeof useActive>["dispatch"]; readOnly: boolean }) {
+function VariableRow({ variable, usage, dispatch, readOnly }: { variable: Variable; usage: number; dispatch: ReturnType<typeof useActive>["dispatch"]; readOnly: boolean }) {
   const [name, setName] = useState(variable.name);
   const [initial, setInitial] = useState(String(variable.initial));
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +122,7 @@ function VariableRow({ variable, dispatch, readOnly }: { variable: Variable; dis
     <div className="logic-row">
       <Input value={name} onChange={(event) => setName(event.target.value)} onBlur={save} aria-label={`Variable ${variable.name} name`} disabled={readOnly} />
       <span className="chip">{variable.type}</span>
+      <span className="chip">{usage} uses</span>
       <Input value={initial} onChange={(event) => setInitial(event.target.value)} onBlur={save} aria-label={`Variable ${variable.name} initial`} disabled={readOnly} />
       <Button variant="ghost" size="sm" onClick={remove} disabled={readOnly} aria-label={`Delete variable ${variable.name}`}><Trash2 size={12} /></Button>
       {error && <div className="logic-error full">{error}</div>}
@@ -121,7 +137,7 @@ function RulesPanel({ document, scene, dispatch, readOnly }: { document: Project
   function addRule() {
     const rule = makeRule(`Rule ${scene.rules.length + 1}`);
     if (variableNames[0]) {
-      rule.when = [{ kind: "variable", name: variableNames[0], op: ">=", value: 1 }];
+      rule.when = [{ kind: "variable", name: variableNames[0]!, op: ">=", value: 1 }];
       rule.do = [{ kind: "show-message", text: "Rule triggered", durationMs: 1200 }];
     } else {
       rule.when = [{ kind: "scene-start" }];
@@ -138,7 +154,7 @@ function RulesPanel({ document, scene, dispatch, readOnly }: { document: Project
         <span className="row-meta">Scene: {scene.name}</span>
         <Button variant="secondary" size="sm" onClick={addRule} disabled={readOnly}><Plus size={12} /> Add rule</Button>
       </div>
-      <p className="panel-helper">Rules evaluate in order each frame. Flagged rules are skipped in play.</p>
+      <p className="panel-helper">Rules evaluate in order each frame. Unknown references are rejected on save; existing broken refs are flagged and skipped in play.</p>
       <div className="logic-list">
         {scene.rules.map((rule, index) => (
           <RuleEditor
@@ -157,6 +173,34 @@ function RulesPanel({ document, scene, dispatch, readOnly }: { document: Project
       {error && <div className="logic-error">{error}</div>}
     </section>
   );
+}
+
+function rulePreview(document: ProjectDocument, scene: Scene, rule: Rule): string {
+  const when = rule.when.map((c) => describeCondition(document, scene, c)).join(" and ");
+  const action = rule.do.map((a) => describeAction(document, a)).join(", then ");
+  return `When ${when || "…"} → ${action || "…"}`;
+}
+
+function describeCondition(_document: ProjectDocument, scene: Scene, condition: Condition): string {
+  if (condition.kind === "variable") return `${condition.name} ${condition.op} ${String(condition.value)}`;
+  if (condition.kind === "overlap") {
+    const obj = condition.objectId ? scene.objects.find((o) => o.id === condition.objectId)?.name ?? "missing object" : "any object";
+    return `${obj} overlaps ${condition.otherTag ?? condition.otherId ?? "anything"}`;
+  }
+  if (condition.kind === "input") return `${condition.action} is ${condition.mode}`;
+  if (condition.kind === "timer") return `timer ${condition.timerId} fires`;
+  return "scene starts";
+}
+
+function describeAction(_document: ProjectDocument, action: RuleAction): string {
+  if (action.kind === "set-variable") return `${action.op} ${action.name}${action.value !== undefined ? ` ${String(action.value)}` : ""}`;
+  if (action.kind === "show-message") return `show message "${action.text}"`;
+  if (action.kind === "go-scene") return `go to ${_document.scenes.find((s) => s.id === action.sceneId)?.name ?? "missing scene"}`;
+  if (action.kind === "play-sound") return `play sound ${_document.assets.find((a) => a.id === action.assetId)?.name ?? "missing asset"}`;
+  if (action.kind === "spawn") return `spawn ${_document.prefabs.find((p) => p.id === action.prefabId)?.name ?? "missing prefab"}`;
+  if (action.kind === "destroy") return `destroy ${action.target}`;
+  if (action.kind === "set-behavior-param") return `set behavior ${action.param}`;
+  return `log ${action.message}`;
 }
 
 function RuleEditor({
@@ -204,9 +248,10 @@ function RuleEditor({
         <Button variant="ghost" size="sm" aria-label="Move rule down" disabled={readOnly || index === total - 1} onClick={() => move(1)}><ChevronDown size={12} /></Button>
         <Button variant="ghost" size="sm" aria-label="Delete rule" disabled={readOnly} onClick={remove}><Trash2 size={12} /></Button>
       </div>
+      <p className="panel-helper rule-preview" style={{ margin: "4px 0 6px" }}>{rulePreview(document, scene, rule)}</p>
       {issues.length > 0 && (
         <div className="rule-flag" role="status">
-          <AlertTriangle size={13} /> {issues[0]!.message} Flagged rules are skipped in play.
+          <AlertTriangle size={13} /> {issues[0]!.message} Flagged rules are skipped in play and cannot be saved with new invalid references.
         </div>
       )}
       <div className="rule-grid">
@@ -311,7 +356,7 @@ function ConditionEditor({
       )}
       {condition.kind === "input" && (
         <>
-          <select className="input" value={condition.action} disabled={readOnly} aria-label="Input action" onChange={(event) => onChange({ ...condition, action: event.target.value as Condition extends { kind: "input" } ? Condition["action"] : never })}>
+          <select className="input" value={condition.action} disabled={readOnly} aria-label="Input action" onChange={(event) => onChange({ ...condition, action: event.target.value as "left" | "right" | "up" | "down" | "jump" | "action" })}>
             {(["left", "right", "up", "down", "jump", "action"] as const).map((action) => <option key={action} value={action}>{action}</option>)}
           </select>
           <select className="input" value={condition.mode} disabled={readOnly} aria-label="Input mode" onChange={(event) => onChange({ ...condition, mode: event.target.value as "pressed" | "down" | "released" })}>

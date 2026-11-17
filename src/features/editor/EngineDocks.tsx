@@ -776,6 +776,7 @@ function ObjectInspector({
   onAddBehavior: (type: BehaviorType) => boolean;
   onRemoveBehavior: (behaviorId: string) => boolean;
 }) {
+  const dispatch = useEngineStore((state) => state.dispatch);
   const [name, setName] = useState(object.name);
   const [tags, setTags] = useState(object.tags.join(", "));
   const [x, setX] = useState(String(object.transform.x));
@@ -890,7 +891,14 @@ function ObjectInspector({
             <div className="detail-row"><span>Instance</span><span className="value input-mono">{object.prefabInstanceId ?? "—"}</span></div>
             <div className="detail-row"><span>Overrides</span><span className="value">{object.prefabOverrides ? Object.keys(object.prefabOverrides).join(", ") : "none"}</span></div>
           </div>
-          <p className="panel-helper">Manage detach/revert in the Content workspace.</p>
+          <div className="layer-editor-actions" style={{ marginTop: 8 }}>
+            <Button variant="secondary" size="sm" disabled={readOnly || !object.prefabInstanceId} onClick={() => dispatch("prefab.detach", { sceneId: scene.id, instanceId: object.prefabInstanceId })}>
+              Detach
+            </Button>
+            <Button variant="ghost" size="sm" disabled={readOnly || !object.prefabInstanceId || !object.prefabOverrides} onClick={() => dispatch("prefab.revert", { sceneId: scene.id, instanceId: object.prefabInstanceId })}>
+              Revert overrides
+            </Button>
+          </div>
         </section>
       )}
       <Button variant="primary" className="inspector-save" onClick={save} disabled={readOnly}>
@@ -957,6 +965,10 @@ function BehaviorEditor({
     dispatch("behavior.update", { sceneId, objectId, behaviorId: behavior.id, patch: { params: { [key]: value } } });
   }
 
+  function resetParam(key: string, defaultValue: unknown) {
+    updateParam(key, defaultValue);
+  }
+
   return (
     <div className="behavior-editor">
       <div className="behavior-row">
@@ -974,32 +986,43 @@ function BehaviorEditor({
         </label>
         <TinyButton label={`Remove ${spec.label}`} icon={<Trash2 size={11} />} disabled={readOnly} onClick={onRemove} />
       </div>
+      {spec.description && <p className="panel-helper" style={{ margin: "4px 0 6px" }}>{spec.description}</p>}
       {spec.params.length > 0 && (
         <div className="behavior-param-grid">
           {spec.params.map((param) => {
-            const value = behavior.params[param.key] ?? param.default;
+            const hasValue = param.key in behavior.params;
+            const value = hasValue ? behavior.params[param.key] : param.default;
             if (param.type === "boolean") {
               return (
-                <label key={param.key} className="logic-check">
-                  <input type="checkbox" checked={Boolean(value)} disabled={readOnly} onChange={(event) => updateParam(param.key, event.target.checked)} />
-                  {param.label}
-                </label>
+                <div key={param.key} className="behavior-param-field">
+                  <label className="logic-check">
+                    <input type="checkbox" checked={Boolean(value)} disabled={readOnly} onChange={(event) => updateParam(param.key, event.target.checked)} />
+                    {param.label}
+                  </label>
+                  {param.help && <div className="row-meta">{param.help}</div>}
+                  <Button variant="ghost" size="sm" disabled={readOnly} onClick={() => resetParam(param.key, param.default ?? false)}>Reset</Button>
+                </div>
               );
             }
             return (
-              <label key={param.key} className="field-row">
-                <span>{param.label}</span>
-                <Input
-                  value={String(value ?? "")}
-                  disabled={readOnly}
-                  aria-label={`${spec.label} ${param.label}`}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    if (param.type === "number") updateParam(param.key, raw === "" ? 0 : Number(raw));
-                    else updateParam(param.key, raw);
-                  }}
-                />
-              </label>
+              <div key={param.key} className="behavior-param-field">
+                <label className="field-row">
+                  <span>{param.label}{param.unit ? ` (${param.unit})` : ""}</span>
+                  <Input
+                    value={String(value ?? "")}
+                    disabled={readOnly}
+                    aria-label={`${spec.label} ${param.label}`}
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      if (param.type === "number") updateParam(param.key, raw === "" ? 0 : Number(raw));
+                      else updateParam(param.key, raw);
+                    }}
+                  />
+                </label>
+                <div className="row-meta">Default: {String(param.default ?? "—")}{param.unit ? ` ${param.unit}` : ""}</div>
+                {param.help && <div className="row-meta">{param.help}</div>}
+                <Button variant="ghost" size="sm" disabled={readOnly} onClick={() => resetParam(param.key, param.default ?? (param.type === "number" ? 0 : ""))}>Reset</Button>
+              </div>
             );
           })}
         </div>
