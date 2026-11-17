@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="512" viewBox="0 0 2048 512">
+  <path d="M0 470 L280 420 L560 460 L840 400 L1120 455 L1400 410 L1680 460 L1920 430 L2048 460 L2048 512 L0 512 Z" fill="#27324d"/>
+  <path d="M0 470 L280 420 L560 460 L840 400 L1120 455 L1400 410 L1680 460 L1920 430 L2048 460 L2048 512 L0 512 Z" fill="none" stroke="#4d5c7f" stroke-width="3" opacity="0.45"/>
+</svg>

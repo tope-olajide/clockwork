@@ -1,0 +1,1398 @@
+import { Application, Graphics } from "pixi.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Copy, CornerDownRight, Layers, Sparkles, Trash2 } from "lucide-react";
+import { useToast } from "../../components/ui";
+import { registerViewportCapture } from "../ai/viewport-capture";
+import { makeTransform, newObjectId, newPrefabId } from "../model/factory";
+import type { GameObject, Prefab, Scene } from "../model/schema";
+import { useEngineStore } from "../store/engine-store";
+import { useAgentPresenceStore, type AgentGhostState } from "../store/agent-presence";
+import {
+  fitCamera,
+  panBy,
+  screenToWorld,
+  worldToScreen,
+  zoomAt,
+  type CameraState,
+  type ViewportSize,
+} from "./camera";
+import { SceneRenderer, objectDims } from "./scene-renderer";
+import { ensureTexture, getTexture } from "./texture-cache";
+import { readAssetBlob } from "../persistence/indexeddb";
+import { importAssetFile } from "../assets/asset-store";
+import { fitColliderToAsset } from "../assets/collider";
+
+type TransformPatch = {
+  x?: number;
+  y?: number;
+  rotation?: number;
+  scaleX?: number;
+  scaleY?: number;
+};
+
+type HandleName = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+interface GestureMove {
+  kind: "move";
+  startWorld: { x: number; y: number };
+  ids: string[];
+  origins: Map<string, { x: number; y: number }>;
+  moved: boolean;
+  preview: Record<string, TransformPatch>;
+}
+
+interface GestureScale {
+  kind: "scale";
+  handle: HandleName;
+  objectId: string;
+  fixed: { x: number; y: number };
+  dims: { w: number; h: number };
+  preview: Record<string, TransformPatch>;
+}
+
+interface GestureRotate {
+  kind: "rotate";
+  objectId: string;
+  center: { x: number; y: number };
+  startAngle: number;
+  startRotation: number;
+  preview: Record<string, TransformPatch>;
+}
+
+interface GesturePan {
+  kind: "pan";
+  lastX: number;
+  lastY: number;
+}
+
+interface GestureMarquee {
+  kind: "marquee";
+  startScreen: { x: number; y: number };
+}
+
+type Gesture = GestureMove | GestureScale | GestureRotate | GesturePan | GestureMarquee;
+
+const HANDLE_SIZE = 7;
+const ROTATE_OFFSET = 26;
+const sceneCameraCache = new Map<string, CameraState>();
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  objectId: string | null;
+}
+
+export function EngineViewport({ onAskAgent }: { onAskAgent?: (objectId: string) => void } = {}) {
+  const document = useEngineStore((state) => state.document);
+  const activeSceneId = useEngineStore((state) => state.activeSceneId);
+  const selection = useEngineStore((state) => state.selection);
+  const setSelection = useEngineStore((state) => state.setSelection);
+  const dispatch = useEngineStore((state) => state.dispatch);
+  const snapGrid = useEngineStore((state) => state.snapGrid);
+  const presence = useAgentPresenceStore((state) => state.presence);
+  const ghost = useAgentPresenceStore((state) => state.ghost);
+  const toast = useToast();
+
+  const scene: Scene | null =
+    document?.scenes.find((candidate) => candidate.id === activeSceneId) ?? document?.scenes[0] ?? null;
+  const selectedTilemap =
+    scene?.objects.find((object) => object.id === selection[0] && object.visual?.kind === "tilemap") ?? null;
+  const selectedObject = scene?.objects.find((object) => object.id === selection[0]) ?? null;
+  const readOnly = Boolean(document?.archivedAt);
+
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const appRef = useRef<Application | null>(null);
+  const rendererRef = useRef<SceneRenderer | null>(null);
+  const overlayRef = useRef<Graphics | null>(null);
+  const gestureRef = useRef<Gesture | null>(null);
+  const spaceRef = useRef(false);
+  const cameraRef = useRef<CameraState>({ x: 0, y: 0, zoom: 1 });
+  const viewportRef = useRef<ViewportSize>({ width: 0, height: 0 });
+  const sceneRef = useRef<Scene | null>(scene);
+  const [ready, setReady] = useState(false);
+  const [camera, setCamera] = useState<CameraState>({ x: 0, y: 0, zoom: 1 });
+  const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Record<string, TransformPatch>>({});
+  const [marquee, setMarquee] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [fps, setFps] = useState(0);
+  const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
+  const [textureVersion, setTextureVersion] = useState(0);
+  const [tilemapMode, setTilemapMode] = useState<"paint" | "erase" | "fill" | "pick">("paint");
+  const [tilemapBrush, setTilemapBrush] = useState(1);
+  const [tilemapTileIndex, setTilemapTileIndex] = useState(1);
+  const tileStrokeRef = useRef<{ objectId: string; mode: "paint" | "erase"; transactionId: string } | null>(null);
+
+  const tileHover = useMemo(() => {
+    if (!selectedTilemap || selectedTilemap.visual?.kind !== "tilemap" || !cursorWorld) return null;
+    const visual = selectedTilemap.visual;
+    const col = Math.floor((cursorWorld.x - selectedTilemap.transform.x) / visual.tileSize);
+    const row = Math.floor((cursorWorld.y - selectedTilemap.transform.y) / visual.tileSize);
+    if (col < 0 || row < 0 || col >= visual.cols || row >= visual.rows) return null;
+    return { col, row };
+  }, [selectedTilemap, cursorWorld]);
+
+  sceneRef.current = scene;
+
+  useEffect(() => {
+    if (presence?.sceneId && presence.sceneId !== activeSceneId) {
+      useEngineStore.getState().setActiveScene(presence.sceneId);
+    }
+  }, [presence?.sceneId, activeSceneId]);
+
+  useEffect(() => {
+    if (!presence?.objectIds.length) return;
+    const state = useEngineStore.getState();
+    const active = state.document?.scenes.find((candidate) => candidate.id === (presence.sceneId ?? state.activeSceneId));
+    const target = active?.objects.find((object) => presence.objectIds.includes(object.id));
+    if (!target) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      setCamera((current) => ({ ...current, x: target.transform.x, y: target.transform.y }));
+      return;
+    }
+    const start = cameraRef.current;
+    const started = performance.now();
+    const duration = 350;
+    let raf = 0;
+    const tick = () => {
+      const t = Math.min(1, (performance.now() - started) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setCamera({
+        x: start.x + (target.transform.x - start.x) * eased,
+        y: start.y + (target.transform.y - start.y) * eased,
+        zoom: start.zoom,
+      });
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [presence?.until, presence?.objectIds.join("|")]);
+
+  useEffect(() => {
+    cameraRef.current = camera;
+  }, [camera]);
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+
+  // Create the Pixi application once, and keep it sized to the canvas host.
+  useEffect(() => {
+    const host = canvasRef.current;
+    if (!host) return;
+    let disposed = false;
+    const app = new Application();
+    const renderer = new SceneRenderer();
+    void app
+      .init({ backgroundAlpha: 0, antialias: true, autoDensity: true, resolution: window.devicePixelRatio || 1 })
+      .then(() => {
+        if (disposed) {
+          app.destroy(true, { children: true });
+          return;
+        }
+        app.canvas.style.width = "100%";
+        app.canvas.style.height = "100%";
+        app.canvas.style.display = "block";
+        app.canvas.style.touchAction = "none";
+        host.appendChild(app.canvas);
+        const overlay = new Graphics();
+        renderer.attach(app);
+        app.stage.addChild(overlay);
+        appRef.current = app;
+        rendererRef.current = renderer;
+        overlayRef.current = overlay;
+        registerViewportCapture(() => {
+          try { return app.canvas.toDataURL("image/png"); } catch { return null; }
+        });
+
+        const rect = host.getBoundingClientRect();
+        const width = Math.max(1, Math.round(rect.width));
+        const height = Math.max(1, Math.round(rect.height));
+        app.renderer.resize(width, height);
+        setViewport({ width, height });
+
+        const onLost = (event: Event) => event.preventDefault();
+        app.canvas.addEventListener("webglcontextlost", onLost);
+
+        let frames = 0;
+        let last = performance.now();
+        const tick = () => {
+          frames += 1;
+          const now = performance.now();
+          if (now - last >= 500) {
+            setFps(Math.round((frames * 1000) / (now - last)));
+            frames = 0;
+            last = now;
+          }
+        };
+        app.ticker.add(tick);
+        (app as unknown as { __onLost?: (event: Event) => void }).__onLost = onLost;
+        setReady(true);
+      })
+      .catch(() => {
+        toast.push("Renderer unavailable", "WebGL could not start. The document is still editable from the docks.");
+      });
+
+    const observer = new ResizeObserver(() => {
+      const rect = host.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height));
+      setViewport({ width, height });
+      if (app.renderer) app.renderer.resize(width, height);
+    });
+    observer.observe(host);
+
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      registerViewportCapture(null);
+      const current = appRef.current;
+      const currentRenderer = rendererRef.current;
+      if (current) {
+        const onLost = (current as unknown as { __onLost?: (event: Event) => void }).__onLost;
+        if (onLost) current.canvas.removeEventListener("webglcontextlost", onLost);
+        current.destroy(true, { children: true });
+      }
+      currentRenderer?.destroy();
+      appRef.current = null;
+      rendererRef.current = null;
+      overlayRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reconcile the document into Pixi whenever the scene, revision, or camera changes.
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const app = appRef.current;
+    if (!ready || !renderer || !app || !scene || !document) return;
+    renderer.render(scene, document, textureVersion);
+    renderer.applyCamera(scene, camera);
+    renderer.root.position.set(viewport.width / 2 - camera.x * camera.zoom, viewport.height / 2 - camera.y * camera.zoom);
+    renderer.root.scale.set(camera.zoom);
+    renderer.previewTransforms(preview, scene);
+
+    const overlay = overlayRef.current;
+    if (overlay) drawOverlay(overlay, scene, camera, viewport, selection, hoverId, marquee, guides, selectedTilemap, tileHover, presence?.objectIds ?? [], ghost);
+  }, [ready, scene, document, camera, viewport, selection, hoverId, marquee, guides, preview, textureVersion, selectedTilemap, tileHover, presence?.objectIds, ghost]);
+
+  // Preload asset textures for the active scene/document so sprites and tilemaps can render real art.
+  useEffect(() => {
+    if (!document) return;
+    const imageAssets = document.assets.filter((asset) => asset.kind === "image" || asset.kind === "tileset");
+    if (imageAssets.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (const asset of imageAssets) {
+        if (cancelled) return;
+        const hadTexture = getTexture(asset.id) !== null;
+        const blob = await readAssetBlob(asset.id);
+        if (!blob || cancelled) continue;
+        const url = URL.createObjectURL(blob);
+        const texture = await ensureTexture(asset.id, url);
+        if (texture && !hadTexture && !cancelled) setTextureVersion((version) => version + 1);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [document?.id, document?.revision]);
+
+  // Fit the scene when it changes or when the viewport first becomes measurable.
+  useEffect(() => {
+    if (!scene || viewport.width === 0 || viewport.height === 0) return;
+    const cached = sceneCameraCache.get(scene.id);
+    setCamera(cached ?? fitCamera(viewport, scene.size));
+  }, [scene?.id, viewport.width > 0, viewport.height > 0]);
+
+  useEffect(() => {
+    if (scene) sceneCameraCache.set(scene.id, camera);
+  }, [scene?.id, camera]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      if (event.code === "Space") {
+        spaceRef.current = true;
+        if (canvasRef.current) canvasRef.current.style.cursor = "grab";
+        event.preventDefault();
+      }
+      const state = useEngineStore.getState();
+      if (event.key === "0") {
+        const active = sceneRef.current;
+        if (active) setCamera(fitCamera(viewportRef.current, active.size));
+      } else if (event.key === "1") {
+        setCamera((current) => ({ ...current, zoom: 1 }));
+      } else if (event.key === "Escape") {
+        setMenu(null);
+      } else if (
+        (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") &&
+        state.selection.length > 0 &&
+        !state.document?.archivedAt
+      ) {
+        event.preventDefault();
+        const step = event.shiftKey ? 10 : 1;
+        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+        const active = sceneRef.current;
+        if (!active) return;
+        const transforms = state.selection
+          .map((id) => active.objects.find((object) => object.id === id))
+          .filter((object): object is GameObject => Boolean(object))
+          .map((object) => ({ objectId: object.id, transform: { x: object.transform.x + dx, y: object.transform.y + dy } }));
+        if (transforms.length > 0) state.dispatch("objects.applyTransforms", { sceneId: active.id, transforms });
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        spaceRef.current = false;
+        if (canvasRef.current) canvasRef.current.style.cursor = "";
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenu(null);
+    };
+    const onBlur = () => setMenu(null);
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [menu]);
+
+  const onWheel = useCallback((event: WheelEvent) => {
+    event.preventDefault();
+    const host = canvasRef.current;
+    if (!host) return;
+    const rect = host.getBoundingClientRect();
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    setCamera((current) => zoomAt(current, { width: rect.width, height: rect.height }, point, current.zoom * Math.exp(-event.deltaY * 0.0015)));
+  }, []);
+
+  useEffect(() => {
+    const host = canvasRef.current;
+    if (!host) return;
+    host.addEventListener("wheel", onWheel, { passive: false });
+    return () => host.removeEventListener("wheel", onWheel);
+  }, [onWheel]);
+
+  function localPoint(event: { clientX: number; clientY: number }) {
+    const host = canvasRef.current;
+    if (!host) return { x: 0, y: 0 };
+    const rect = host.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function pointToWorld(local: { x: number; y: number }) {
+    return screenToWorld(cameraRef.current, viewportRef.current, local);
+  }
+
+  function snapValue(value: number, grid: number): number {
+    if (!grid) return value;
+    return Math.round(value / grid) * grid;
+  }
+
+  function beginScale(handle: HandleName, objectId: string, object: GameObject): void {
+    const dims = objectDims(object);
+    const halfW = (dims.w * object.transform.scaleX) / 2;
+    const halfH = (dims.h * object.transform.scaleY) / 2;
+    const cx = object.transform.x;
+    const cy = object.transform.y;
+    const fixed = {
+      x: handle.includes("w") ? cx + halfW : handle.includes("e") ? cx - halfW : cx,
+      y: handle.includes("n") ? cy + halfH : handle.includes("s") ? cy - halfH : cy,
+    };
+    gestureRef.current = { kind: "scale", handle, objectId, fixed, dims, preview: {} };
+  }
+
+  function handlePoints(rect: { x: number; y: number; w: number; h: number }) {
+    const { x, y, w, h } = rect;
+    return {
+      nw: { x, y },
+      n: { x: x + w / 2, y },
+      ne: { x: x + w, y },
+      e: { x: x + w, y: y + h / 2 },
+      se: { x: x + w, y: y + h },
+      s: { x: x + w / 2, y: y + h },
+      sw: { x, y: y + h },
+      w: { x, y: y + h / 2 },
+    } as Record<HandleName, { x: number; y: number }>;
+  }
+
+  function screenRectOf(object: GameObject) {
+    const bounds = rendererRef.current?.getBounds(object.id);
+    if (!bounds) return null;
+    const topLeft = worldToScreen(cameraRef.current, viewportRef.current, { x: bounds.left, y: bounds.top });
+    const bottomRight = worldToScreen(cameraRef.current, viewportRef.current, { x: bounds.right, y: bounds.bottom });
+    return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
+  }
+
+  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (menu) setMenu(null);
+    const host = canvasRef.current;
+    if (!host) return;
+    try {
+      host.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointers (tests, some pen drivers) cannot be captured; the gesture still works.
+    }
+    const local = localPoint(event);
+    if (event.button === 1 || spaceRef.current) {
+      gestureRef.current = { kind: "pan", lastX: local.x, lastY: local.y };
+      host.style.cursor = "grabbing";
+      return;
+    }
+    if (event.button !== 0 || !scene) return;
+    if (readOnly) return;
+
+    const selectedObject = scene.objects.find((object) => object.id === selection[0]);
+    if (selectedObject?.visual?.kind === "tilemap") {
+      const visual = selectedObject.visual;
+      const world = pointToWorld(local);
+      const col = Math.floor((world.x - selectedObject.transform.x) / visual.tileSize);
+      const row = Math.floor((world.y - selectedObject.transform.y) / visual.tileSize);
+      if (col >= 0 && row >= 0 && col < visual.cols && row < visual.rows) {
+        const brushCells = (centerCol: number, centerRow: number) => {
+          const cells: { x: number; y: number }[] = [];
+          const offset = Math.floor(tilemapBrush / 2);
+          for (let dy = -offset; dy <= offset; dy += 1) {
+            for (let dx = -offset; dx <= offset; dx += 1) {
+              const x = centerCol + dx;
+              const y = centerRow + dy;
+              if (x >= 0 && y >= 0 && x < visual.cols && y < visual.rows) cells.push({ x, y });
+            }
+          }
+          return cells;
+        };
+        if (tilemapMode === "fill") {
+          dispatch("tilemap.fill", { sceneId: scene.id, objectId: selectedObject.id, tileIndex: tilemapTileIndex });
+          return;
+        }
+        if (tilemapMode === "pick") {
+          setTilemapTileIndex(visual.data[row * visual.cols + col] ?? 0);
+          setTilemapMode("paint");
+          return;
+        }
+        const cells = brushCells(col, row);
+        const transactionId = `tile-stroke-${Date.now()}`;
+        tileStrokeRef.current = { objectId: selectedObject.id, mode: tilemapMode === "erase" ? "erase" : "paint", transactionId };
+        if (tilemapMode === "erase") {
+          dispatch("tilemap.erase", { sceneId: scene.id, objectId: selectedObject.id, cells }, { transactionId });
+        } else {
+          dispatch("tilemap.paint", { sceneId: scene.id, objectId: selectedObject.id, cells, tileIndex: tilemapTileIndex }, { transactionId });
+        }
+      }
+      return;
+    }
+
+    const selectionState = useEngineStore.getState().selection;
+    if (selectionState.length === 1) {
+      const only = scene.objects.find((object) => object.id === selectionState[0]);
+      if (only) {
+        const rect = screenRectOf(only);
+        if (rect) {
+          // Edge handles overlap the middle of short objects; a drag that starts
+          // inside the object must move it, not resize it from a handle.
+          const insideObject =
+            local.x > rect.x + 2 &&
+            local.x < rect.x + rect.w - 2 &&
+            local.y > rect.y + 2 &&
+            local.y < rect.y + rect.h - 2;
+          const points = handlePoints(rect);
+          if (!insideObject) {
+            for (const [name, point] of Object.entries(points) as Array<[HandleName, { x: number; y: number }]>) {
+              if (Math.abs(point.x - local.x) <= HANDLE_SIZE && Math.abs(point.y - local.y) <= HANDLE_SIZE) {
+                beginScale(name, only.id, only);
+                return;
+              }
+            }
+          }
+          const rotatePoint = { x: rect.x + rect.w / 2, y: rect.y - ROTATE_OFFSET };
+          if (Math.hypot(rotatePoint.x - local.x, rotatePoint.y - local.y) <= 8) {
+            const center = { x: only.transform.x, y: only.transform.y };
+            const world = pointToWorld(local);
+            gestureRef.current = {
+              kind: "rotate",
+              objectId: only.id,
+              center,
+              startAngle: Math.atan2(world.y - center.y, world.x - center.x),
+              startRotation: only.transform.rotation,
+              preview: {},
+            };
+            return;
+          }
+        }
+      }
+    }
+
+    const world = pointToWorld(local);
+    const hit = rendererRef.current?.hitTest(world, scene) ?? null;
+    if (hit) {
+      const additive = event.shiftKey || event.metaKey || event.ctrlKey;
+      let nextSelection: string[];
+      if (additive) {
+        nextSelection = selectionState.includes(hit.id)
+          ? selectionState.filter((id) => id !== hit.id)
+          : [...selectionState, hit.id];
+      } else if (selectionState.includes(hit.id)) {
+        nextSelection = selectionState;
+      } else {
+        nextSelection = [hit.id];
+      }
+      setSelection(nextSelection);
+      const ids = nextSelection.includes(hit.id) ? nextSelection : [hit.id];
+      const origins = new Map<string, { x: number; y: number }>();
+      for (const id of ids) {
+        const object = scene.objects.find((candidate) => candidate.id === id);
+        if (object) origins.set(id, { x: object.transform.x, y: object.transform.y });
+      }
+      gestureRef.current = { kind: "move", startWorld: world, ids, origins, moved: false, preview: {} };
+      return;
+    }
+
+    if (!event.shiftKey) setSelection([]);
+    gestureRef.current = { kind: "marquee", startScreen: local };
+    setMarquee({ x1: local.x, y1: local.y, x2: local.x, y2: local.y });
+  }
+
+  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const host = canvasRef.current;
+    if (!host) return;
+    const local = localPoint(event);
+    const world = pointToWorld(local);
+    setCursorWorld(world);
+    const stroke = tileStrokeRef.current;
+    if (stroke && scene) {
+      const object = scene.objects.find((candidate) => candidate.id === stroke.objectId);
+      if (object?.visual?.kind === "tilemap") {
+        const visual = object.visual;
+        const col = Math.floor((world.x - object.transform.x) / visual.tileSize);
+        const row = Math.floor((world.y - object.transform.y) / visual.tileSize);
+        if (col >= 0 && row >= 0 && col < visual.cols && row < visual.rows) {
+          const offset = Math.floor(tilemapBrush / 2);
+          const cells: { x: number; y: number }[] = [];
+          for (let dy = -offset; dy <= offset; dy += 1) {
+            for (let dx = -offset; dx <= offset; dx += 1) {
+              const x = col + dx;
+              const y = row + dy;
+              if (x >= 0 && y >= 0 && x < visual.cols && y < visual.rows) cells.push({ x, y });
+            }
+          }
+          if (stroke.mode === "erase") {
+            dispatch("tilemap.erase", { sceneId: scene.id, objectId: object.id, cells }, { transactionId: stroke.transactionId });
+          } else {
+            dispatch("tilemap.paint", { sceneId: scene.id, objectId: object.id, cells, tileIndex: tilemapTileIndex }, { transactionId: stroke.transactionId });
+          }
+        }
+      }
+      return;
+    }
+    const gesture = gestureRef.current;
+
+    if (!gesture) {
+      if (scene) setHoverId(rendererRef.current?.hitTest(world, scene)?.id ?? null);
+      return;
+    }
+
+    if (gesture.kind === "pan") {
+      setCamera((current) => panBy(current, local.x - gesture.lastX, local.y - gesture.lastY));
+      gesture.lastX = local.x;
+      gesture.lastY = local.y;
+      return;
+    }
+
+    if (gesture.kind === "marquee") {
+      setMarquee({ x1: gesture.startScreen.x, y1: gesture.startScreen.y, x2: local.x, y2: local.y });
+      return;
+    }
+
+    if (gesture.kind === "move") {
+      const dx = world.x - gesture.startWorld.x;
+      const dy = world.y - gesture.startWorld.y;
+      if (!gesture.moved && Math.hypot(dx, dy) * cameraRef.current.zoom < 2) return;
+      gesture.moved = true;
+      const next: Record<string, TransformPatch> = {};
+      const guideX: number[] = [];
+      const guideY: number[] = [];
+      for (const [id, origin] of gesture.origins) {
+        let x = origin.x + dx;
+        let y = origin.y + dy;
+        if (snapGrid) {
+          const snappedX = snapValue(x, snapGrid);
+          const snappedY = snapValue(y, snapGrid);
+          if (Math.abs(snappedX - x) * cameraRef.current.zoom <= 6) {
+            x = snappedX;
+            guideX.push(x);
+          }
+          if (Math.abs(snappedY - y) * cameraRef.current.zoom <= 6) {
+            y = snappedY;
+            guideY.push(y);
+          }
+        }
+        next[id] = { x, y };
+      }
+      gesture.preview = next;
+      setPreview(next);
+      setGuides({ x: guideX, y: guideY });
+      return;
+    }
+
+    if (gesture.kind === "scale") {
+      const object = sceneRef.current?.objects.find((candidate) => candidate.id === gesture.objectId);
+      if (!object) return;
+      let px = world.x;
+      let py = world.y;
+      if (snapGrid) {
+        px = snapValue(px, snapGrid);
+        py = snapValue(py, snapGrid);
+      }
+      const newW = Math.max(4, Math.abs(px - gesture.fixed.x));
+      const newH = Math.max(4, Math.abs(py - gesture.fixed.y));
+      let scaleX = newW / gesture.dims.w;
+      let scaleY = newH / gesture.dims.h;
+      if (event.shiftKey) {
+        const uniform = Math.max(scaleX, scaleY);
+        scaleX = uniform;
+        scaleY = uniform;
+      }
+      const x = gesture.fixed.x + ((px - gesture.fixed.x) / Math.abs(px - gesture.fixed.x || 1)) * (newW / 2);
+      const y = gesture.fixed.y + ((py - gesture.fixed.y) / Math.abs(py - gesture.fixed.y || 1)) * (newH / 2);
+      gesture.preview = { [gesture.objectId]: { x, y, scaleX, scaleY } };
+      setPreview({ ...gesture.preview });
+      return;
+    }
+
+    if (gesture.kind === "rotate") {
+      const angle = Math.atan2(world.y - gesture.center.y, world.x - gesture.center.x);
+      let rotation = gesture.startRotation + ((angle - gesture.startAngle) * 180) / Math.PI;
+      if (event.shiftKey) rotation = Math.round(rotation / 15) * 15;
+      gesture.preview = { [gesture.objectId]: { rotation } };
+      setPreview({ ...gesture.preview });
+    }
+  }
+
+  function onPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    const host = canvasRef.current;
+    if (host?.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
+    if (host) host.style.cursor = spaceRef.current ? "grab" : "";
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    tileStrokeRef.current = null;
+    if (!gesture || !scene) return;
+
+    if (gesture.kind === "marquee") {
+      const start = pointToWorld(gesture.startScreen);
+      const end = pointToWorld(localPoint(event));
+      const left = Math.min(start.x, end.x);
+      const right = Math.max(start.x, end.x);
+      const top = Math.min(start.y, end.y);
+      const bottom = Math.max(start.y, end.y);
+      const renderer = rendererRef.current;
+      if (renderer && (right - left > 2 || bottom - top > 2)) {
+        const ids = scene.objects
+          .filter((object) => {
+            const bounds = renderer.getBounds(object.id);
+            return bounds && bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom;
+          })
+          .map((object) => object.id);
+        if (ids.length > 0) setSelection(ids);
+      }
+      setMarquee(null);
+      return;
+    }
+
+    if (gesture.kind === "move") {
+      if (gesture.moved) {
+        const transforms = Object.keys(gesture.preview).map((id) => ({ objectId: id, transform: gesture.preview[id] }));
+        if (transforms.length > 0) {
+          const result = dispatch("objects.applyTransforms", { sceneId: scene.id, transforms });
+          if (!result.ok) toast.push("Move rejected", result.error);
+        }
+      }
+      setPreview({});
+      setGuides({ x: [], y: [] });
+      return;
+    }
+
+    if (gesture.kind === "scale" || gesture.kind === "rotate") {
+      const transforms = Object.keys(gesture.preview).map((id) => ({ objectId: id, transform: gesture.preview[id] }));
+      if (transforms.length > 0) {
+        const result = dispatch("objects.applyTransforms", { sceneId: scene.id, transforms });
+        if (!result.ok) toast.push("Transform rejected", result.error);
+      }
+      setPreview({});
+      setGuides({ x: [], y: [] });
+    }
+  }
+
+  function onDoubleClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!scene) return;
+    const local = localPoint(event);
+    const world = pointToWorld(local);
+    const hit = rendererRef.current?.hitTest(world, scene);
+    if (!hit) return;
+    const children = scene.objects.filter((object) => object.parentId === hit.id);
+    if (children.length > 0) {
+      const child = children.find((candidate) => {
+        const bounds = rendererRef.current?.getBounds(candidate.id);
+        return bounds && world.x >= bounds.left && world.x <= bounds.right && world.y >= bounds.top && world.y <= bounds.bottom;
+      });
+      setSelection([(child ?? children[0]!).id]);
+      return;
+    }
+    if (hit.parentId) {
+      setSelection([hit.parentId]);
+      return;
+    }
+    setSelection([hit.id]);
+  }
+
+  function onContextMenu(event: React.MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!scene) return;
+    const local = localPoint(event);
+    const world = pointToWorld(local);
+    const hit = rendererRef.current?.hitTest(world, scene);
+    if (hit && !selection.includes(hit.id)) setSelection([hit.id]);
+    setMenu({ x: local.x, y: local.y, objectId: hit?.id ?? null });
+  }
+
+  function groupSelection() {
+    if (!scene || selection.length === 0) return;
+    const objects = selection
+      .map((id) => scene.objects.find((candidate) => candidate.id === id))
+      .filter((object): object is GameObject => Boolean(object));
+    if (objects.length === 0) return;
+    let sumX = 0;
+    let sumY = 0;
+    for (const object of objects) {
+      const bounds = rendererRef.current?.getBounds(object.id);
+      sumX += bounds ? (bounds.left + bounds.right) / 2 : object.transform.x;
+      sumY += bounds ? (bounds.top + bounds.bottom) / 2 : object.transform.y;
+    }
+    const group: GameObject = {
+      id: newObjectId(),
+      name: "Group",
+      layerId: objects[0]!.layerId,
+      transform: makeTransform(sumX / objects.length, sumY / objects.length),
+      behaviors: [],
+      properties: {},
+      tags: ["group"],
+    };
+    const result = dispatch("objects.group", { sceneId: scene.id, group, objectIds: objects.map((object) => object.id) });
+    if (result.ok) {
+      setSelection([group.id]);
+      toast.push("Grouped", `${objects.length} object${objects.length === 1 ? "" : "s"} into ${group.name}.`);
+    } else {
+      toast.push("Group failed", result.error);
+    }
+  }
+
+  function createPrefab(objectId: string | null) {
+    if (!scene) return;
+    const selected = selection
+      .map((id) => scene.objects.find((candidate) => candidate.id === id))
+      .filter((object): object is GameObject => Boolean(object));
+    const fallback = objectId ? scene.objects.find((candidate) => candidate.id === objectId) : undefined;
+    const seeds = selected.length > 0 ? selected : fallback ? [fallback] : [];
+    if (seeds.length === 0) return;
+
+    const collect = (rootIds: string[]) => {
+      const ids = new Set(rootIds);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const object of scene.objects) {
+          if (!ids.has(object.id) && object.parentId && ids.has(object.parentId)) {
+            ids.add(object.id);
+            changed = true;
+          }
+        }
+      }
+      return [...ids]
+        .map((id) => scene.objects.find((object) => object.id === id))
+        .filter((object): object is GameObject => Boolean(object));
+    };
+
+    const sources = collect(seeds.map((seed) => seed.id));
+    const idMap = new Map<string, string>();
+    const clones = sources.map((source) => {
+      const clone = structuredClone(source);
+      clone.id = newObjectId();
+      idMap.set(source.id, clone.id);
+      return clone;
+    });
+    clones.forEach((clone, index) => {
+      const original = sources[index]!;
+      const parent = original.parentId ? idMap.get(original.parentId) : undefined;
+      if (parent) clone.parentId = parent;
+      else delete clone.parentId;
+    });
+
+    let root: GameObject;
+    let objects: GameObject[];
+    let name: string;
+    if (seeds.length === 1) {
+      root = clones[0]!;
+      objects = clones.slice(1);
+      name = `${seeds[0]!.name} prefab`;
+    } else {
+      let sumX = 0;
+      let sumY = 0;
+      for (const seed of seeds) {
+        sumX += seed.transform.x;
+        sumY += seed.transform.y;
+      }
+      root = {
+        id: newObjectId(),
+        name: "Prefab group",
+        layerId: seeds[0]!.layerId,
+        transform: makeTransform(sumX / seeds.length, sumY / seeds.length),
+        behaviors: [],
+        properties: {},
+        tags: ["group"],
+      };
+      objects = clones.map((clone) => ({ ...clone, parentId: root.id }));
+      name = `${seeds.length} object prefab`;
+    }
+
+    const prefab: Prefab = { id: newPrefabId(), name, root, objects, params: {} };
+    const result = dispatch("prefab.create", { prefab });
+    if (result.ok) {
+      toast.push("Prefab created", `${name} · ${objects.length + 1} objects.`);
+    } else {
+      toast.push("Prefab failed", result.error);
+    }
+  }
+
+  function contextAction(action: "duplicate" | "delete" | "forward" | "backward" | "group" | "prefab" | "ask") {
+    if (!scene) return;
+    const objectId = menu?.objectId;
+    setMenu(null);
+    if (!objectId) return;
+    if (action === "duplicate") {
+      const result = dispatch("object.duplicate", { sceneId: scene.id, objectId });
+      if (!result.ok) toast.push("Duplicate failed", result.error);
+    } else if (action === "delete") {
+      const object = scene.objects.find((candidate) => candidate.id === objectId);
+      if (!window.confirm(`Delete “${object?.name ?? "object"}”?`)) return;
+      const result = dispatch("object.delete", { sceneId: scene.id, objectId });
+      if (result.ok) setSelection([]);
+      else toast.push("Delete failed", result.error);
+    } else if (action === "group") {
+      groupSelection();
+    } else if (action === "prefab") {
+      createPrefab(objectId);
+    } else if (action === "forward" || action === "backward") {
+      const object = scene.objects.find((candidate) => candidate.id === objectId);
+      if (!object) return;
+      const siblings = scene.objects.filter((candidate) => candidate.layerId === object.layerId);
+      const index = siblings.indexOf(object);
+      const toIndex = action === "forward" ? index + 1 : Math.max(0, index - 1);
+      const result = dispatch("object.reorder", { sceneId: scene.id, objectId, toIndex });
+      if (!result.ok) toast.push("Reorder failed", result.error);
+    } else if (action === "ask") {
+      if (onAskAgent) onAskAgent(objectId);
+      else toast.push("Ask agent", "Open the agent drawer from the toolbar to ask about this selection.");
+    }
+  }
+
+  async function fitBodyToArt(asset: { id: string; width?: number; height?: number; slices?: { x: number; y: number; w: number; h: number }[] }, objectId: string) {
+    if (!scene || !document) return;
+    const object = scene.objects.find((candidate) => candidate.id === objectId);
+    if (!object || object.visual?.kind !== "sprite") return;
+    const bounds = await fitColliderToAsset(asset as never, object.visual.frame ?? 0);
+    if (!bounds) {
+      toast.push("Fit failed", "Could not read that asset.");
+      return;
+    }
+    const dims = object.visual.width ?? asset.width ?? 32;
+    const height = object.visual.height ?? asset.height ?? 32;
+    const offsetX = bounds.x + bounds.width / 2 - dims / 2;
+    const offsetY = bounds.y + bounds.height / 2 - height / 2;
+    const outcome = dispatch("object.setBody", {
+      sceneId: scene.id,
+      objectId: object.id,
+      body: {
+        type: object.body?.type ?? "static",
+        width: bounds.width,
+        height: bounds.height,
+        offsetX,
+        offsetY,
+        gravityScale: object.body?.gravityScale ?? 1,
+        collideWorldBounds: object.body?.collideWorldBounds ?? false,
+        oneWay: object.body?.oneWay ?? false,
+      },
+    });
+    if (!outcome.ok) toast.push("Fit failed", outcome.error);
+    else toast.push("Body fitted", asset.id);
+  }
+
+  const debug = new URLSearchParams(window.location.search).get("debug") === "1";
+  const zoomLabel = `${Math.round(camera.zoom * 100)}%`;
+  const presenceObject = presence?.objectIds.length
+    ? scene?.objects.find((object) => presence.objectIds.includes(object.id)) ?? null
+    : null;
+  const presencePill = presenceObject
+    ? (() => {
+        const dims = objectDims(presenceObject);
+        const top = worldToScreen(camera, viewport, {
+          x: presenceObject.transform.x,
+          y: presenceObject.transform.y - (dims.h * presenceObject.transform.scaleY) / 2,
+        });
+        return { left: Math.max(8, top.x), top: Math.max(8, top.y - 26) };
+      })()
+    : null;
+
+  const rulerStep = useMemo(() => {
+    const steps = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+    return steps.find((step) => step * camera.zoom >= 70) ?? 10000;
+  }, [camera.zoom]);
+
+  const rulerTicks = useMemo(() => {
+    if (!scene) return [];
+    const left = camera.x - viewport.width / 2 / camera.zoom;
+    const right = camera.x + viewport.width / 2 / camera.zoom;
+    const ticks: Array<{ world: number; screen: number; major: boolean }> = [];
+    const start = Math.floor(left / rulerStep) * rulerStep;
+    for (let world = start; world <= right; world += rulerStep) {
+      const screen = (world - camera.x) * camera.zoom + viewport.width / 2;
+      ticks.push({ world, screen, major: world % (rulerStep * 5) === 0 || world === 0 });
+    }
+    return ticks;
+  }, [scene, camera, viewport.width, rulerStep]);
+
+  const rulerTicksY = useMemo(() => {
+    if (!scene) return [];
+    const top = camera.y - viewport.height / 2 / camera.zoom;
+    const bottom = camera.y + viewport.height / 2 / camera.zoom;
+    const ticks: Array<{ world: number; screen: number; major: boolean }> = [];
+    const start = Math.floor(top / rulerStep) * rulerStep;
+    for (let world = start; world <= bottom; world += rulerStep) {
+      const screen = (world - camera.y) * camera.zoom + viewport.height / 2;
+      ticks.push({ world, screen, major: world % (rulerStep * 5) === 0 || world === 0 });
+    }
+    return ticks;
+  }, [scene, camera, viewport.height, rulerStep]);
+
+  if (!document || !scene) {
+    return (
+      <div className="workspace-placeholder">
+        <h2>No scene</h2>
+        <p>Open a scene to see it here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="viewport">
+      <div className="viewport-toolstrip">
+        <div className="zoom-cluster" aria-label="Zoom controls">
+          <button className="icon-button" aria-label="Fit scene" title="Fit scene (0)" onClick={() => setCamera(fitCamera(viewport, scene.size))}>
+            ⌂
+          </button>
+          <span className="zoom-value">{zoomLabel}</span>
+          <button className="icon-button" aria-label="Reset zoom" title="100% (1)" onClick={() => setCamera((current) => ({ ...current, zoom: 1 }))}>
+            1:1
+          </button>
+        </div>
+        {selectedObject?.visual?.kind === "sprite" && (
+          <button
+            className="icon-button"
+            title="Fit body to art"
+            onClick={() => {
+              const assetId = selectedObject.visual?.kind === "sprite" ? selectedObject.visual.assetId : undefined;
+              const asset = assetId ? document?.assets.find((candidate) => candidate.id === assetId) : undefined;
+              if (asset) void fitBodyToArt(asset, selectedObject.id);
+            }}
+          >
+            Fit
+          </button>
+        )}
+        {selectedTilemap && (
+          <>
+            <select value={tilemapMode} onChange={(event) => setTilemapMode(event.target.value as typeof tilemapMode)}>
+              <option value="paint">Paint</option>
+              <option value="erase">Erase</option>
+              <option value="fill">Fill</option>
+              <option value="pick">Pick</option>
+            </select>
+            <select value={tilemapBrush} onChange={(event) => setTilemapBrush(Number(event.target.value))}>
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={3}>3</option>
+            </select>
+            <input
+              type="number"
+              min={0}
+              value={tilemapTileIndex}
+              onChange={(event) => setTilemapTileIndex(Number(event.target.value))}
+              style={{ width: 56 }}
+            />
+          </>
+        )}
+        <span className="viewport-coords input-mono">
+          {cursorWorld ? `${Math.round(cursorWorld.x)}, ${Math.round(cursorWorld.y)}` : "—"}
+        </span>
+        {snapGrid > 0 && <span className="chip">Snap {snapGrid}</span>}
+        {readOnly && <span className="chip archived">Read-only</span>}
+      </div>
+
+      <div className="viewport-stage">
+        <div className="ruler-corner" />
+        <div className="ruler-h" aria-hidden="true">
+          {rulerTicks.map((tick) => (
+            <span key={tick.world} className={`ruler-h-tick${tick.major ? " major" : ""}`} style={{ left: tick.screen }}>
+              {tick.major && <span className="ruler-h-label">{Math.round(tick.world)}</span>}
+            </span>
+          ))}
+          {cursorWorld && (
+            <span
+              className="ruler-cursor"
+              style={{ left: (cursorWorld.x - camera.x) * camera.zoom + viewport.width / 2 }}
+            />
+          )}
+        </div>
+        <div className="ruler-v" aria-hidden="true">
+          {rulerTicksY.map((tick) => (
+            <span key={tick.world} className={`ruler-v-tick${tick.major ? " major" : ""}`} style={{ top: tick.screen }}>
+              {tick.major && <span className="ruler-v-label">{Math.round(tick.world)}</span>}
+            </span>
+          ))}
+        </div>
+        <div
+          ref={canvasRef}
+          className="viewport-canvas"
+          data-viewport-canvas
+          data-guides={guides.x.length + guides.y.length}
+          data-marquee={marquee ? 1 : 0}
+          data-camera={`${camera.x},${camera.y},${camera.zoom}`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={() => setHoverId(null)}
+          onDragOver={(event) => {
+            const types = event.dataTransfer?.types ?? [];
+            if (types.includes("Files") || types.includes("application/x-clockwork-asset")) {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const draggedAssetId = event.dataTransfer?.getData("application/x-clockwork-asset");
+            if (draggedAssetId) {
+              const state = useEngineStore.getState();
+              const doc = state.document;
+              const targetScene = doc?.scenes.find((candidate) => candidate.id === state.activeSceneId) ?? doc?.scenes[0] ?? null;
+              const layerId = targetScene?.layers[0]?.id;
+              const asset = doc?.assets.find((candidate) => candidate.id === draggedAssetId);
+              if (!doc || !targetScene || !layerId || !asset || doc.archivedAt) return;
+              const world = pointToWorld(localPoint(event));
+              const objectId = newObjectId();
+              const outcome = state.dispatch("object.create", {
+                sceneId: targetScene.id,
+                object: {
+                  id: objectId,
+                  name: asset.name,
+                  layerId,
+                  transform: makeTransform(world.x, world.y),
+                  visual: { kind: "sprite" as const, assetId: asset.id, frame: 0, width: asset.width, height: asset.height },
+                  behaviors: [],
+                  properties: {},
+                  tags: [],
+                },
+              });
+              if (outcome.ok) {
+                setSelection([objectId]);
+                toast.push("Sprite added", asset.name);
+              } else toast.push("Sprite failed", outcome.error);
+              return;
+            }
+            const file = event.dataTransfer?.files?.[0];
+            if (!file) return;
+            const state = useEngineStore.getState();
+            const document = state.document;
+            const scene = document?.scenes.find((candidate) => candidate.id === state.activeSceneId) ?? document?.scenes[0] ?? null;
+            const layerId = scene?.layers[0]?.id;
+            if (!document || !scene || !layerId || document.archivedAt) return;
+            const local = localPoint(event);
+            const world = pointToWorld(local);
+            void (async () => {
+              try {
+                const result = await importAssetFile(file, document);
+                if (result.reused) toast.push("Already in project", result.asset.name);
+                else {
+                  const assetOutcome = state.dispatch("asset.add", { asset: result.asset });
+                  if (!assetOutcome.ok) {
+                    toast.push("Import rejected", assetOutcome.error);
+                    return;
+                  }
+                }
+                const objectId = newObjectId();
+                const object = {
+                  id: objectId,
+                  name: result.asset.name,
+                  layerId,
+                  transform: makeTransform(world.x, world.y),
+                  visual: { kind: "sprite" as const, assetId: result.asset.id },
+                  behaviors: [],
+                  properties: {},
+                  tags: [],
+                };
+                const outcome = state.dispatch("object.create", { sceneId: scene.id, object });
+                if (outcome.ok) {
+                  setSelection([objectId]);
+                  toast.push("Sprite added", result.asset.name);
+                } else toast.push("Sprite failed", outcome.error);
+              } catch (error) {
+                toast.push("Import failed", error instanceof Error ? error.message : "Could not import that file.");
+              }
+            })();
+          }}
+          onDoubleClick={onDoubleClick}
+          onContextMenu={onContextMenu}
+        />
+
+        {menu && (
+          <div className="canvas-menu" ref={menuRef} style={{ left: menu.x + 8, top: menu.y + 8 }} role="menu">
+            <button role="menuitem" onClick={() => contextAction("duplicate")} disabled={!menu.objectId}>
+              <Copy size={12} /> Duplicate
+            </button>
+            <button role="menuitem" onClick={() => contextAction("forward")} disabled={!menu.objectId}>
+              <CornerDownRight size={12} /> Bring forward
+            </button>
+            <button role="menuitem" onClick={() => contextAction("backward")} disabled={!menu.objectId}>
+              <CornerDownRight size={12} style={{ transform: "scaleY(-1)" }} /> Send backward
+            </button>
+            <div className="canvas-menu-sep" />
+            <button role="menuitem" onClick={() => contextAction("group")} disabled={selection.length === 0}>
+              <Layers size={12} /> Group selection{selection.length > 1 ? ` (${selection.length})` : ""}
+            </button>
+            <button role="menuitem" onClick={() => contextAction("prefab")} disabled={selection.length === 0 || !menu.objectId}>
+              <Box size={12} /> Create prefab{selection.length > 1 ? ` (${selection.length})` : ""}
+            </button>
+            <button role="menuitem" onClick={() => contextAction("ask")} disabled={!menu.objectId}>
+              <Sparkles size={12} /> Ask agent about selection
+            </button>
+            <div className="canvas-menu-sep" />
+            <button role="menuitem" className="danger" onClick={() => contextAction("delete")} disabled={!menu.objectId}>
+              <Trash2 size={12} /> Delete
+            </button>
+          </div>
+        )}
+
+        {presencePill && (
+          <div className="agent-presence-pill" style={{ left: presencePill.left, top: presencePill.top }} aria-live="polite">
+            AGENT · {presence?.label ?? "edit"}
+          </div>
+        )}
+
+        {debug && (
+          <div className="viewport-debug" aria-label="Renderer diagnostics">
+            <span>FPS {fps}</span>
+            <span>Objects {scene.objects.length}</span>
+            <span>Layers {scene.layers.length}</span>
+            <span>Cam {Math.round(camera.x)}, {Math.round(camera.y)} · {zoomLabel}</span>
+            <span>Sel {selection.length}</span>
+            <span className="muted">r{document.revision}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="viewport-hint">
+        <span>
+          {readOnly
+            ? "Archived project · read-only"
+            : "Drag to move · handles to scale · wheel to zoom · Space/⌘ drag to pan · right-click for actions"}
+        </span>
+        <span className="right">
+          {scene.size.w} × {scene.size.h}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function drawOverlay(
+  overlay: Graphics,
+  scene: Scene,
+  camera: CameraState,
+  viewport: ViewportSize,
+  selection: string[],
+  hoverId: string | null,
+  marquee: { x1: number; y1: number; x2: number; y2: number } | null,
+  guides: { x: number[]; y: number[] },
+  tilemap: GameObject | null,
+  tileHover: { col: number; row: number } | null,
+  agentIds: string[],
+  ghost: AgentGhostState | null,
+): void {
+  overlay.clear();
+  const screen = (x: number, y: number) => worldToScreen(camera, viewport, { x, y });
+  const topLeft = screen(0, 0);
+  const bottomRight = screen(scene.size.w, scene.size.h);
+  overlay.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y).stroke({ width: 1, color: 0xff856f, alpha: 0.5 });
+
+  const objects = scene.objects;
+  if (hoverId && !selection.includes(hoverId)) {
+    const object = objects.find((candidate) => candidate.id === hoverId);
+    if (object) drawOutline(overlay, object, camera, viewport, 0xffffff, 0.5, 1);
+  }
+
+  for (const id of selection) {
+    const object = objects.find((candidate) => candidate.id === id);
+    if (!object) continue;
+    drawOutline(overlay, object, camera, viewport, 0xff856f, 1, 1.5);
+  }
+
+  for (const id of agentIds) {
+    const object = objects.find((candidate) => candidate.id === id);
+    if (!object) continue;
+    drawOutline(overlay, object, camera, viewport, 0x8f6bff, 0.95, 2);
+  }
+
+  if (ghost) {
+    const ghostScene = ghost.document.scenes.find((candidate) => candidate.id === (ghost.sceneId ?? scene.id));
+    if (ghostScene) {
+      for (const object of ghostScene.objects) {
+        const touched = ghost.changedIds.includes(object.id);
+        if (!touched) continue;
+        drawGhostOutline(overlay, object, camera, viewport, ghost.deletedIds.includes(object.id) ? 0xff5f6d : 0x8f6bff);
+      }
+      for (const id of ghost.deletedIds) {
+        const existing = objects.find((candidate) => candidate.id === id);
+        if (existing) drawGhostOutline(overlay, existing, camera, viewport, 0xff5f6d);
+      }
+    }
+  }
+
+  // Handles and rotation ring for a single selection.
+  if (selection.length === 1) {
+    const object = objects.find((candidate) => candidate.id === selection[0]);
+    if (object) {
+      const halfW = (objectDims(object).w * object.transform.scaleX) / 2;
+      const halfH = (objectDims(object).h * object.transform.scaleY) / 2;
+      const cx = object.transform.x;
+      const cy = object.transform.y;
+      const tl = screen(cx - halfW, cy - halfH);
+      const br = screen(cx + halfW, cy + halfH);
+      const rect = { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y };
+      const points = {
+        nw: { x: rect.x, y: rect.y },
+        n: { x: rect.x + rect.w / 2, y: rect.y },
+        ne: { x: rect.x + rect.w, y: rect.y },
+        e: { x: rect.x + rect.w, y: rect.y + rect.h / 2 },
+        se: { x: rect.x + rect.w, y: rect.y + rect.h },
+        s: { x: rect.x + rect.w / 2, y: rect.y + rect.h },
+        sw: { x: rect.x, y: rect.y + rect.h },
+        w: { x: rect.x, y: rect.y + rect.h / 2 },
+      };
+      for (const point of Object.values(points)) {
+        overlay.rect(point.x - HANDLE_SIZE / 2, point.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE).fill({ color: 0xf1f0ed }).stroke({ width: 1, color: 0xff856f });
+      }
+      const rotatePoint = { x: rect.x + rect.w / 2, y: rect.y - ROTATE_OFFSET };
+      overlay.moveTo(rotatePoint.x, rect.y).lineTo(rotatePoint.x, rotatePoint.y + 4).stroke({ width: 1, color: 0xff856f, alpha: 0.8 });
+      overlay.circle(rotatePoint.x, rotatePoint.y, 5).fill({ color: 0x0b0d12 }).stroke({ width: 1.5, color: 0xff856f });
+    }
+  }
+
+  if (marquee) {
+    const x = Math.min(marquee.x1, marquee.x2);
+    const y = Math.min(marquee.y1, marquee.y2);
+    const w = Math.abs(marquee.x2 - marquee.x1);
+    const h = Math.abs(marquee.y2 - marquee.y1);
+    overlay.rect(x, y, w, h).fill({ color: 0xa9b4ff, alpha: 0.08 }).stroke({ width: 1, color: 0xa9b4ff, alpha: 0.9 });
+  }
+
+  for (const gx of guides.x) {
+    const point = screen(gx, 0);
+    overlay.moveTo(point.x, 0).lineTo(point.x, viewport.height).stroke({ width: 1, color: 0xf4c56a, alpha: 0.8 });
+  }
+  for (const gy of guides.y) {
+    const point = screen(0, gy);
+    overlay.moveTo(0, point.y).lineTo(viewport.width, point.y).stroke({ width: 1, color: 0xf4c56a, alpha: 0.8 });
+  }
+
+  if (tilemap?.visual?.kind === "tilemap") {
+    const visual = tilemap.visual;
+    const origin = screen(tilemap.transform.x, tilemap.transform.y);
+    const cell = visual.tileSize * camera.zoom;
+    const width = visual.cols * cell;
+    const height = visual.rows * cell;
+    for (let col = 0; col <= visual.cols; col += 1) {
+      const x = origin.x + col * cell;
+      overlay.moveTo(x, origin.y).lineTo(x, origin.y + height).stroke({ width: 1, color: 0x8f9dff, alpha: 0.2 });
+    }
+    for (let row = 0; row <= visual.rows; row += 1) {
+      const y = origin.y + row * cell;
+      overlay.moveTo(origin.x, y).lineTo(origin.x + width, y).stroke({ width: 1, color: 0x8f9dff, alpha: 0.2 });
+    }
+    if (tileHover) {
+      const hover = screen(
+        tilemap.transform.x + tileHover.col * visual.tileSize,
+        tilemap.transform.y + tileHover.row * visual.tileSize,
+      );
+      overlay
+        .rect(hover.x, hover.y, cell, cell)
+        .fill({ color: 0x8f9dff, alpha: 0.22 })
+        .stroke({ width: 1.5, color: 0xc7d0ff, alpha: 0.9 });
+    }
+  }
+
+  void scene;
+}
+
+function drawGhostOutline(
+  overlay: Graphics,
+  object: GameObject,
+  camera: CameraState,
+  viewport: ViewportSize,
+  color: number,
+): void {
+  const dims = objectDims(object);
+  const halfW = (dims.w * object.transform.scaleX) / 2;
+  const halfH = (dims.h * object.transform.scaleY) / 2;
+  const tl = worldToScreen(camera, viewport, { x: object.transform.x - halfW, y: object.transform.y - halfH });
+  const br = worldToScreen(camera, viewport, { x: object.transform.x + halfW, y: object.transform.y + halfH });
+  overlay
+    .rect(tl.x, tl.y, Math.max(1, br.x - tl.x), Math.max(1, br.y - tl.y))
+    .fill({ color, alpha: 0.28 })
+    .stroke({ width: 2, color, alpha: 0.9 });
+}
+
+function drawOutline(
+  overlay: Graphics,
+  object: GameObject,
+  camera: CameraState,
+  viewport: ViewportSize,
+  color: number,
+  alpha: number,
+  width: number,
+): void {
+  const dims = objectDims(object);
+  const halfW = (dims.w * object.transform.scaleX) / 2;
+  const halfH = (dims.h * object.transform.scaleY) / 2;
+  const tl = worldToScreen(camera, viewport, { x: object.transform.x - halfW, y: object.transform.y - halfH });
+  const br = worldToScreen(camera, viewport, { x: object.transform.x + halfW, y: object.transform.y + halfH });
+  overlay
+    .rect(tl.x, tl.y, Math.max(1, br.x - tl.x), Math.max(1, br.y - tl.y))
+    .stroke({ width, color, alpha });
+}
+

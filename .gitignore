@@ -125,6 +125,13 @@ dist
 # Stores Visual Studio Code versions used for testing Visual Studio Code extensions
 .vscode-test
 
+# Clockwork local data and verification artifacts
+.data/
+.testmuai/runs/
+.testmuai/evidence/
+docs/evidence/
+*.ndjson
+
 # pnpm
 .pnpm-store
 
@@ -147,3 +154,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# TypeScript incremental build
+*.tsbuildinfo
