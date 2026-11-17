@@ -435,15 +435,30 @@ export async function ensureDemoProject(): Promise<void> {
   }
 }
 
-/** Restore the intentional Neon Runner defect for AI Play rehearsals. */
+/**
+ * Restore the intentional Neon Runner defect for AI Play rehearsals.
+ *
+ * `?demoReset=1` is read in an effect that mounts twice in development, so two
+ * resets overlap: both see no existing project and both save one, leaving two
+ * identical Neon Runner records (one of which later drifts with test edits and
+ * makes Play open the wrong one). Share the first run instead of racing.
+ */
+let demoResetInFlight: Promise<void> | null = null;
+
 export async function resetDemoProject(): Promise<void> {
-  const records = await listProjectRecords();
-  for (const record of records) {
-    if (record.name === "Neon Runner") await deleteProjectRecord(record.id);
-  }
-  const demo = await buildDemoProject();
-  await saveProjectDocument(demo, DEMO_COVER);
-  localStorage.setItem("clockwork:seeded:v1", "1");
+  if (demoResetInFlight) return demoResetInFlight;
+  demoResetInFlight = (async () => {
+    const records = await listProjectRecords();
+    for (const record of records) {
+      if (record.name === "Neon Runner") await deleteProjectRecord(record.id);
+    }
+    const demo = await buildDemoProject();
+    await saveProjectDocument(demo, DEMO_COVER);
+    localStorage.setItem("clockwork:seeded:v1", "1");
+  })().finally(() => {
+    demoResetInFlight = null;
+  });
+  return demoResetInFlight;
 }
 
 export async function createAndSaveProject(
