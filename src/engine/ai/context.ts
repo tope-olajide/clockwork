@@ -6,6 +6,7 @@ interface EditorContextInput {
   activeSceneId: string | null;
   activeLayerId: string | null;
   selection: string[];
+  lockedSelectionId?: string | null;
   tab: string;
   tool: string;
   playtestRunning: boolean;
@@ -50,6 +51,7 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
   const scene = document.scenes.find((s) => s.id === activeSceneId) ?? document.scenes.find((s) => s.id === document.startSceneId) ?? null;
   const layerNames = new Map(scene?.layers.map((l) => [l.id, l.name]) ?? []);
   const selectionObjects = scene ? scene.objects.filter((o) => selection.includes(o.id)) : [];
+  const lockedObject = input.lockedSelectionId && scene ? scene.objects.find((o) => o.id === input.lockedSelectionId) ?? null : null;
   const settingsAny = document.settings as any;
 
   const availableCommands = [
@@ -87,6 +89,7 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
       activeSceneName: scene?.name ?? null,
       activeLayerId,
       selection: selectionObjects.map((o) => ({ id: o.id, name: o.name, type: (o.visual as any)?.kind, layerName: layerNames.get(o.layerId) })),
+      lockedSelection: lockedObject ? { id: lockedObject.id, name: lockedObject.name } : null,
       tool,
       playtest: playtestRunning ? "running" : "off",
       camera: input.camera ?? { x: 0, y: 0, zoom: 1 },

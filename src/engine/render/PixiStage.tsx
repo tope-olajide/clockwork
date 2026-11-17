@@ -6,6 +6,7 @@ import { registerViewportCapture } from "../ai/viewport-capture";
 import { makeTransform, newObjectId, newPrefabId } from "../model/factory";
 import type { GameObject, Prefab, Scene } from "../model/schema";
 import { useEngineStore } from "../store/engine-store";
+import { useAgentPresenceStore, type AgentGhostState } from "../store/agent-presence";
 import {
   fitCamera,
   panBy,
@@ -81,13 +82,15 @@ interface ContextMenuState {
   objectId: string | null;
 }
 
-export function EngineViewport() {
+export function EngineViewport({ onAskAgent }: { onAskAgent?: (objectId: string) => void } = {}) {
   const document = useEngineStore((state) => state.document);
   const activeSceneId = useEngineStore((state) => state.activeSceneId);
   const selection = useEngineStore((state) => state.selection);
   const setSelection = useEngineStore((state) => state.setSelection);
   const dispatch = useEngineStore((state) => state.dispatch);
   const snapGrid = useEngineStore((state) => state.snapGrid);
+  const presence = useAgentPresenceStore((state) => state.presence);
+  const ghost = useAgentPresenceStore((state) => state.ghost);
   const toast = useToast();
 
   const scene: Scene | null =
@@ -133,6 +136,41 @@ export function EngineViewport() {
   }, [selectedTilemap, cursorWorld]);
 
   sceneRef.current = scene;
+
+  useEffect(() => {
+    if (presence?.sceneId && presence.sceneId !== activeSceneId) {
+      useEngineStore.getState().setActiveScene(presence.sceneId);
+    }
+  }, [presence?.sceneId, activeSceneId]);
+
+  useEffect(() => {
+    if (!presence?.objectIds.length) return;
+    const state = useEngineStore.getState();
+    const active = state.document?.scenes.find((candidate) => candidate.id === (presence.sceneId ?? state.activeSceneId));
+    const target = active?.objects.find((object) => presence.objectIds.includes(object.id));
+    if (!target) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      setCamera((current) => ({ ...current, x: target.transform.x, y: target.transform.y }));
+      return;
+    }
+    const start = cameraRef.current;
+    const started = performance.now();
+    const duration = 350;
+    let raf = 0;
+    const tick = () => {
+      const t = Math.min(1, (performance.now() - started) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setCamera({
+        x: start.x + (target.transform.x - start.x) * eased,
+        y: start.y + (target.transform.y - start.y) * eased,
+        zoom: start.zoom,
+      });
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [presence?.until, presence?.objectIds.join("|")]);
 
   useEffect(() => {
     cameraRef.current = camera;
@@ -238,8 +276,8 @@ export function EngineViewport() {
     renderer.previewTransforms(preview, scene);
 
     const overlay = overlayRef.current;
-    if (overlay) drawOverlay(overlay, scene, camera, viewport, selection, hoverId, marquee, guides, selectedTilemap, tileHover);
-  }, [ready, scene, document, camera, viewport, selection, hoverId, marquee, guides, preview, textureVersion, selectedTilemap, tileHover]);
+    if (overlay) drawOverlay(overlay, scene, camera, viewport, selection, hoverId, marquee, guides, selectedTilemap, tileHover, presence?.objectIds ?? [], ghost);
+  }, [ready, scene, document, camera, viewport, selection, hoverId, marquee, guides, preview, textureVersion, selectedTilemap, tileHover, presence?.objectIds, ghost]);
 
   // Preload asset textures for the active scene/document so sprites and tilemaps can render real art.
   useEffect(() => {
@@ -869,8 +907,9 @@ export function EngineViewport() {
       const toIndex = action === "forward" ? index + 1 : Math.max(0, index - 1);
       const result = dispatch("object.reorder", { sceneId: scene.id, objectId, toIndex });
       if (!result.ok) toast.push("Reorder failed", result.error);
-    } else {
-      toast.push("Ask agent", "The live agent arrives in Slice 6.");
+    } else if (action === "ask") {
+      if (onAskAgent) onAskAgent(objectId);
+      else toast.push("Ask agent", "Open the agent drawer from the toolbar to ask about this selection.");
     }
   }
 
@@ -907,6 +946,19 @@ export function EngineViewport() {
 
   const debug = new URLSearchParams(window.location.search).get("debug") === "1";
   const zoomLabel = `${Math.round(camera.zoom * 100)}%`;
+  const presenceObject = presence?.objectIds.length
+    ? scene?.objects.find((object) => presence.objectIds.includes(object.id)) ?? null
+    : null;
+  const presencePill = presenceObject
+    ? (() => {
+        const dims = objectDims(presenceObject);
+        const top = worldToScreen(camera, viewport, {
+          x: presenceObject.transform.x,
+          y: presenceObject.transform.y - (dims.h * presenceObject.transform.scaleY) / 2,
+        });
+        return { left: Math.max(8, top.x), top: Math.max(8, top.y - 26) };
+      })()
+    : null;
 
   const rulerStep = useMemo(() => {
     const steps = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
@@ -1146,6 +1198,12 @@ export function EngineViewport() {
           </div>
         )}
 
+        {presencePill && (
+          <div className="agent-presence-pill" style={{ left: presencePill.left, top: presencePill.top }} aria-live="polite">
+            AGENT · {presence?.label ?? "edit"}
+          </div>
+        )}
+
         {debug && (
           <div className="viewport-debug" aria-label="Renderer diagnostics">
             <span>FPS {fps}</span>
@@ -1183,6 +1241,8 @@ function drawOverlay(
   guides: { x: number[]; y: number[] },
   tilemap: GameObject | null,
   tileHover: { col: number; row: number } | null,
+  agentIds: string[],
+  ghost: AgentGhostState | null,
 ): void {
   overlay.clear();
   const screen = (x: number, y: number) => worldToScreen(camera, viewport, { x, y });
@@ -1200,6 +1260,27 @@ function drawOverlay(
     const object = objects.find((candidate) => candidate.id === id);
     if (!object) continue;
     drawOutline(overlay, object, camera, viewport, 0xff856f, 1, 1.5);
+  }
+
+  for (const id of agentIds) {
+    const object = objects.find((candidate) => candidate.id === id);
+    if (!object) continue;
+    drawOutline(overlay, object, camera, viewport, 0x8f6bff, 0.95, 2);
+  }
+
+  if (ghost) {
+    const ghostScene = ghost.document.scenes.find((candidate) => candidate.id === (ghost.sceneId ?? scene.id));
+    if (ghostScene) {
+      for (const object of ghostScene.objects) {
+        const touched = ghost.changedIds.includes(object.id);
+        if (!touched) continue;
+        drawGhostOutline(overlay, object, camera, viewport, ghost.deletedIds.includes(object.id) ? 0xff5f6d : 0x8f6bff);
+      }
+      for (const id of ghost.deletedIds) {
+        const existing = objects.find((candidate) => candidate.id === id);
+        if (existing) drawGhostOutline(overlay, existing, camera, viewport, 0xff5f6d);
+      }
+    }
   }
 
   // Handles and rotation ring for a single selection.
@@ -1276,6 +1357,24 @@ function drawOverlay(
   }
 
   void scene;
+}
+
+function drawGhostOutline(
+  overlay: Graphics,
+  object: GameObject,
+  camera: CameraState,
+  viewport: ViewportSize,
+  color: number,
+): void {
+  const dims = objectDims(object);
+  const halfW = (dims.w * object.transform.scaleX) / 2;
+  const halfH = (dims.h * object.transform.scaleY) / 2;
+  const tl = worldToScreen(camera, viewport, { x: object.transform.x - halfW, y: object.transform.y - halfH });
+  const br = worldToScreen(camera, viewport, { x: object.transform.x + halfW, y: object.transform.y + halfH });
+  overlay
+    .rect(tl.x, tl.y, Math.max(1, br.x - tl.x), Math.max(1, br.y - tl.y))
+    .fill({ color, alpha: 0.28 })
+    .stroke({ width: 2, color, alpha: 0.9 });
 }
 
 function drawOutline(

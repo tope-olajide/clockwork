@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Bot, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, Send, Settings, Square, X } from "lucide-react";
+import { AlertTriangle, Bot, Check, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, Send, Settings, Square, X } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
 import type { AgentMode } from "@shared/protocol";
-import type { DisplayMessage, AgentUiError } from "./useAgentSession";
+import type { DisplayMessage, AgentUiError, PendingPreview } from "./useAgentSession";
 import { ModelPicker } from "./ModelPicker";
 import type { ModelInfo, ProviderInfo } from "../../engine/ai/api";
+import { PROMPT_PRESETS, suggestionsFor } from "../../engine/ai/prompts";
 
 interface AgentDrawerProps {
   open: boolean;
@@ -31,14 +32,12 @@ interface AgentDrawerProps {
   modelLabel: string;
   canBuildPlan: boolean;
   onOpenSettings: () => void;
+  pendingPreview: PendingPreview | null;
+  onApplyPreview: () => void;
+  onDiscardPreview: () => void;
+  lockedSelection: { id: string; name: string } | null;
+  onUnlockSelection: () => void;
 }
-
-const SUGGESTIONS = [
-  "Summarize this scene.",
-  "List all scenes and their object counts.",
-  "What is currently selected?",
-  "Show project variables.",
-];
 
 function statusLabel(status: AgentDrawerProps["status"]) {
   if (status === "thinking") return "thinking";
@@ -49,9 +48,11 @@ function statusLabel(status: AgentDrawerProps["status"]) {
 }
 
 export function AgentDrawer(props: AgentDrawerProps) {
-  const { open, onClose, projectName, sceneName, revision, selectionCount, mode, onModeChange, messages, status, error, isBusy, onSend, onStop, onRetry, onNewChat, selectedModelId, onSelectModel, models, providers, aiSettings, modelLabel, canBuildPlan, onOpenSettings } = props;
+  const { open, onClose, projectName, sceneName, revision, selectionCount, mode, onModeChange, messages, status, error, isBusy, onSend, onStop, onRetry, onNewChat, selectedModelId, onSelectModel, models, providers, aiSettings, modelLabel, canBuildPlan, onOpenSettings, pendingPreview, onApplyPreview, onDiscardPreview, lockedSelection, onUnlockSelection } = props;
   const [input, setInput] = useState("");
   const [showJump, setShowJump] = useState(false);
+  const [presetOpen, setPresetOpen] = useState(false);
+  const suggestions = suggestionsFor({ selectionPresent: selectionCount > 0, emptyProject: messages.length === 0, lastChangeFailed: status === "error", noKeyConfigured: !aiSettings?.mock && !models.some((m) => { const provider = providers.find((p) => p.id === m.providerId); return Boolean(provider?.key.configured || provider?.local); }) });
   const listRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
@@ -67,7 +68,7 @@ export function AgentDrawer(props: AgentDrawerProps) {
 
   useEffect(() => {
     if (stickRef.current) bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, open]);
+  }, [messages, open, pendingPreview]);
 
   function onScroll() {
     const el = listRef.current;
@@ -97,15 +98,7 @@ export function AgentDrawer(props: AgentDrawerProps) {
           <span className={`agent-status agent-status-${status}`}><span className="dot" /> {statusLabel(status)}</span>
         </div>
         <div className="agent-header-right">
-          <ModelPicker
-            value={selectedModelId}
-            onChange={onSelectModel}
-            onOpenSettings={onOpenSettings}
-            models={models}
-            providers={providers}
-            settings={aiSettings}
-            label={modelLabel}
-          />
+          <ModelPicker value={selectedModelId} onChange={onSelectModel} onOpenSettings={onOpenSettings} models={models} providers={providers} settings={aiSettings} label={modelLabel} />
           <Button variant="ghost" size="sm" onClick={onNewChat} aria-label="New chat">+ Chat</Button>
           <IconButton label="Close agent" onClick={onClose}><X size={14} /></IconButton>
         </div>
@@ -115,6 +108,12 @@ export function AgentDrawer(props: AgentDrawerProps) {
         <span className="agent-chip">{projectName} · r{revision}</span>
         {sceneName && <span className="agent-chip">Scene: {sceneName}</span>}
         <span className="agent-chip">{selectionCount} selected</span>
+        {lockedSelection && (
+          <span className="agent-chip agent-chip-locked">
+            Locked: {lockedSelection.name}
+            <button type="button" aria-label="Unlock selection" className="agent-chip-x" onClick={onUnlockSelection}><X size={10} /></button>
+          </span>
+        )}
       </div>
 
       <div className="agent-mode-row" role="tablist" aria-label="Agent mode">
@@ -133,12 +132,25 @@ export function AgentDrawer(props: AgentDrawerProps) {
         {messages.length === 0 ? (
           <div className="agent-empty">
             <h3>What are we building?</h3>
-            <p>Ask about the project, scenes, objects, or variables. I can inspect the live editor state and use read-only tools when supported by the selected model.</p>
+            <p>Ask about the project, inspect live state, or use Build/Plan with a tool-capable model to propose and apply changes.</p>
             <div className="agent-suggestions">
-              {SUGGESTIONS.map((s) => (
-                <button key={s} className="agent-suggestion" onClick={() => submit(s)}>{s}</button>
+              {suggestions.map((preset) => (
+                <button key={preset.id} className="agent-suggestion" onClick={() => { onModeChange(preset.mode); submit(preset.prompt); }}>
+                  <strong>{preset.label}</strong>
+                  <span>{preset.description}</span>
+                </button>
               ))}
             </div>
+            <button className="agent-presets-link" type="button" onClick={() => setPresetOpen((open) => !open)}>All presets</button>
+            {presetOpen && (
+              <div className="agent-preset-menu" role="menu" aria-label="Prompt presets">
+                {PROMPT_PRESETS.map((preset) => (
+                  <button key={preset.id} role="menuitem" type="button" onClick={() => { setPresetOpen(false); setInput(preset.prompt); }}>
+                    <strong>{preset.label}</strong> <span>{preset.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {!aiSettings?.mock && !models.some((m) => {
               const p = providers.find((pr) => pr.id === m.providerId);
               return p?.key.configured || p?.local;
@@ -153,6 +165,30 @@ export function AgentDrawer(props: AgentDrawerProps) {
         ) : (
           messages.map((m) => <MessageView key={m.id} message={m} />)
         )}
+
+        {pendingPreview && (
+          <div className={`agent-error-card ${pendingPreview.destructive ? "" : ""}`} role="region" aria-label="Pending change preview" style={{ borderColor: pendingPreview.destructive ? "var(--danger, #d35)" : "var(--accent, #7c5cff)" }}>
+            <div className="agent-error-title">
+              {pendingPreview.destructive ? <AlertTriangle size={14} /> : <Check size={14} />} {pendingPreview.destructive ? "Confirm changes" : "Proposed changes"}
+            </div>
+            <div className="agent-error-body">
+              <div><strong>{pendingPreview.summary}</strong>{pendingPreview.stale ? " (stale — project changed)" : ""}</div>
+              {pendingPreview.changeSet?.changes?.length ? (
+                <ul style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                  {pendingPreview.changeSet.changes.slice(0, 8).map((c, i) => (
+                    <li key={i}>{c.op} {c.entityKind} “{c.entityName}”{c.fields.length ? ` (${c.fields.length} field${c.fields.length === 1 ? "" : "s"})` : ""}</li>
+                  ))}
+                </ul>
+              ) : <div className="muted">Review the previewed command batch before applying.</div>}
+              {pendingPreview.destructive && <div style={{ marginTop: 6, color: "var(--danger, #d35)" }}>This includes destructive changes. Applying may remove content.</div>}
+            </div>
+            <div className="agent-error-actions">
+              <Button variant="primary" size="sm" onClick={onApplyPreview} disabled={pendingPreview.stale}>{pendingPreview.destructive ? "Delete / Apply" : "Apply"}</Button>
+              <Button variant="secondary" size="sm" onClick={onDiscardPreview}>Discard</Button>
+            </div>
+          </div>
+        )}
+
         {error && status === "error" && (
           <div className="agent-error-card" role="alert">
             <div className="agent-error-title"><AlertTriangle size={14} /> {errorTitle(error.code)}</div>
@@ -162,7 +198,7 @@ export function AgentDrawer(props: AgentDrawerProps) {
                 <Button variant="secondary" size="sm" onClick={onOpenSettings}><Settings size={12} /> Open settings</Button>
               )}
               {(error.action === "choose-model" || error.code === "no-model" || error.code === "model-unavailable" || error.code === "no-tools" || error.code === "no-vision") && (
-                <Button variant="secondary" size="sm" onClick={() => { /* focus picker by opening settings-less choice is implicit */ (document.querySelector('.agent-model') as HTMLButtonElement | null)?.click(); }}>Choose another model</Button>
+                <Button variant="secondary" size="sm" onClick={() => { (document.querySelector('.agent-model') as HTMLButtonElement | null)?.click(); }}>Choose another model</Button>
               )}
               <Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button>
             </div>
@@ -176,6 +212,15 @@ export function AgentDrawer(props: AgentDrawerProps) {
       )}
 
       <div className="agent-composer">
+        {input.startsWith("/") && (
+          <div className="agent-preset-menu" role="listbox" aria-label="Preset suggestions">
+            {PROMPT_PRESETS.filter((preset) => `${preset.label} ${preset.id}`.toLowerCase().includes(input.slice(1).toLowerCase())).map((preset) => (
+              <button key={preset.id} role="option" type="button" onClick={() => setInput(preset.prompt)}>
+                <strong>{preset.label}</strong> <span>{preset.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           className="agent-input"
           rows={1}
@@ -238,6 +283,12 @@ function ToolCardView({ name, args, status, result }: { name: string; args: unkn
     get_variables: "Reading variables",
     get_selection: "Reading selection",
     capture_viewport: "Capturing viewport",
+    apply_commands: "Applying commands",
+    preview_commands: "Previewing commands",
+    select_entities: "Selecting entities",
+    open_panel: "Opening panel",
+    start_playtest: "Starting playtest",
+    undo_last_agent_change: "Undoing agent change",
   };
   return (
     <div className={`agent-tool-card ${status}`}>
@@ -251,7 +302,7 @@ function ToolCardView({ name, args, status, result }: { name: string; args: unkn
       {open && (
         <div className="agent-tool-body">
           <div className="agent-tool-section"><div className="agent-tool-key">Input</div><pre>{JSON.stringify(args, null, 2)}</pre></div>
-          {result && <div className="agent-tool-section"><div className="agent-tool-key">Result</div><pre>{JSON.stringify({ ok: result.ok, error: result.error, revision: result.revision, data: result.imageDataUrl ? { ...(result.data ?? {}), image: "[png]" } : result.data }, null, 2)}</pre></div>}
+          {result && <div className="agent-tool-section"><div className="agent-tool-key">Result</div><pre>{JSON.stringify({ ok: result.ok, error: result.error, revision: result.revision, preview: result.preview, changeSet: result.changeSet, data: result.imageDataUrl ? { ...(result.data ?? {}), image: "[png]" } : result.data }, null, 2)}</pre></div>}
           {result?.imageDataUrl && <div className="agent-tool-image"><div className="agent-tool-key"><ImageIcon size={12} /> Captured viewport</div><img src={result.imageDataUrl} alt="Viewport capture" /></div>}
         </div>
       )}

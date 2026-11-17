@@ -33,6 +33,7 @@ import type {
   Scene,
 } from "../../engine/model/schema";
 import { useEngineStore } from "../../engine/store/engine-store";
+import { useAgentPresenceStore } from "../../engine/store/agent-presence";
 import { EngineViewport } from "../../engine/render/PixiStage";
 import { LogicPage } from "../logic/LogicPage";
 import { ContentPage } from "../content/ContentPage";
@@ -108,6 +109,19 @@ export function EngineLeftDock() {
   const hierarchyListRef = useRef<HTMLDivElement | null>(null);
   const [hierarchyScroll, setHierarchyScroll] = useState(0);
   const [hierarchyHeight, setHierarchyHeight] = useState(320);
+  const agentPresence = useAgentPresenceStore((state) => state.presence);
+
+  useEffect(() => {
+    const firstId = agentPresence?.objectIds[0];
+    if (!firstId) return;
+    const list = hierarchyListRef.current;
+    const row = list?.querySelector<HTMLElement>(`[data-object-id="${firstId}"]`);
+    if (row) row.scrollIntoView({ block: "nearest" });
+    else if (list) {
+      const index = scene?.objects.findIndex((object) => object.id === firstId) ?? -1;
+      if (index >= 0) list.scrollTop = Math.max(0, (scene!.objects.length - 1 - index) * 28 - 40);
+    }
+  }, [agentPresence?.until, agentPresence?.objectIds.join("|"), scene]);
 
   const activeLayer = scene?.layers.find((layer) => layer.id === activeLayerId) ?? scene?.layers[0] ?? null;
 
@@ -430,6 +444,7 @@ export function EngineLeftDock() {
             return (
               <div
                 key={object.id}
+                data-object-id={object.id}
                 className={`object-row${selection.includes(object.id) ? " selected" : ""}${draggingObjectId === object.id ? " dragging" : ""}`}
                 role="button"
                 tabIndex={0}
@@ -515,9 +530,11 @@ export function EngineLeftDock() {
 export function EngineInspector({
   tab,
   onTab,
+  onAskAgent,
 }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
+  onAskAgent?: (objectId: string) => void;
 }) {
   const { document, scene } = useActiveScene();
   const selection = useEngineStore((state) => state.selection);
@@ -545,6 +562,9 @@ export function EngineInspector({
     <div className="inspector-content">
       <div className="inspector-head">
         <span className="panel-title" style={{ marginRight: "auto" }}>Inspector</span>
+        {selected && onAskAgent && (
+          <Button variant="ghost" size="sm" onClick={() => onAskAgent(selected.id)}><Bot size={12} /> Ask AI</Button>
+        )}
         <span className="chip">{scene.kind}</span>
       </div>
       <div className="inspector-head">
@@ -914,13 +934,15 @@ export function EngineWorkspace({
   tab,
   presentationTab,
   onPresentationTab,
+  onAskAgent,
 }: {
   tab: WorkspaceTab;
   presentationTab: PresentationTab;
   onPresentationTab: (tab: PresentationTab) => void;
   onToast: (title: string, message?: string) => void;
+  onAskAgent?: (objectId: string) => void;
 }) {
-  if (tab === "scene") return <EngineViewport />;
+  if (tab === "scene") return <EngineViewport onAskAgent={onAskAgent} />;
   if (tab === "logic") return <LogicPage />;
   if (tab === "content") return <ContentPage />;
   return (

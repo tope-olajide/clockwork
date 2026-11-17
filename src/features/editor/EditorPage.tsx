@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ChevronDown,
   FileDown,
@@ -86,6 +86,8 @@ export function EditorPage() {
   const { projectId = "", sceneId = "" } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const location = useLocation();
+  const briefSentFor = useRef<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const { wide, huge, tooSmall } = useShellBreakpoints();
 
@@ -128,6 +130,7 @@ export function EditorPage() {
   const [hierarchyDrawer, setHierarchyDrawer] = useState(false);
   const [inspectorDrawer, setInspectorDrawer] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [lockedSelectionId, setLockedSelectionId] = useState<string | null>(null);
   const [debug, setDebug] = useState(searchParams.get("debug") === "1");
 
   const tab = (searchParams.get("tab") as WorkspaceTab | null) ?? "scene";
@@ -279,11 +282,67 @@ export function EditorPage() {
   const projectName = current?.name ?? "Loading project";
   const revision = current ? `r${current.revision}` : "r—";
 
+  function handleAgentOpenPanel(panel: string, subtab?: string) {
+    const p = panel.toLowerCase();
+    if (p === "hierarchy" || p === "layers") {
+      if (wide) toast.push("Hierarchy", "The hierarchy is already open on this width.");
+      else setHierarchyDrawer(true);
+      return;
+    }
+    if (p === "inspector") {
+      openInspector();
+      return;
+    }
+    if (p === "assets" || p === "content") {
+      setTab("content");
+      return;
+    }
+    if (p === "logic" || p === "rules" || p === "variables") {
+      setTab("logic");
+      return;
+    }
+    if (p === "presentation" || p === "look" || p === "animation" || p === "audio" || p === "ui" || p === "game-ui") {
+      setTab("presentation");
+      if (subtab && ["look", "animation", "audio", "ui"].includes(subtab)) setPresentation(subtab as PresentationTab);
+      return;
+    }
+    if (p === "scene") {
+      setTab("scene");
+      return;
+    }
+    if (p === "playtest" || p === "play") {
+      navigate(`/play/${current?.id ?? projectId}`);
+      return;
+    }
+    if (p === "settings" || p === "ai") {
+      navigate(`/project/${current?.id ?? projectId}?section=ai`);
+      return;
+    }
+    if (p === "ship" || p === "share") {
+      toast.push("Ship", "Ship/share flow arrives in Slice 8.");
+      return;
+    }
+    toast.push("Panel", `Opened request: ${panel}`);
+  }
+
   const agent = useAgentSession({
     projectId: current?.id ?? projectId,
     tab: activeTab,
     tool,
+    onOpenPanel: handleAgentOpenPanel,
+    lockedSelectionId,
   });
+
+  const lockedSelection = lockedSelectionId
+    ? current?.scenes.flatMap((item) => item.objects).find((object) => object.id === lockedSelectionId) ?? null
+    : null;
+
+  function askAgentAbout(objectId: string, nextMode: "ask" | "build" | "plan" = "ask") {
+    setSelection([objectId]);
+    setLockedSelectionId(objectId);
+    agent.setMode(nextMode);
+    setAgentOpen(true);
+  }
 
   const commands: PaletteCommand[] = buildStubCommands({
     onCreate: () => toast.push("New project", "Use Projects → New project."),
@@ -295,6 +354,19 @@ export function EditorPage() {
     onSettings: () => navigate(`/project/${current?.id ?? projectId}?section=ai`),
     onToast: toast.push,
   });
+
+  useEffect(() => {
+    const state = location.state as { agentBrief?: string; agentMode?: "build" | "ask" | "plan" } | null;
+    const brief = state?.agentBrief?.trim();
+    if (!brief || !current || isLoading) return;
+    if (briefSentFor.current === current.id) return;
+    briefSentFor.current = current.id;
+    agent.setMode(state?.agentMode === "plan" ? "plan" : "build");
+    setAgentOpen(true);
+    const prompt = `Build the first playable draft of this project from the following brief. Create or update scenes, objects, rules, variables, and presentation as needed, and summarize what you built.\n\nBrief:\n${brief}`;
+    void agent.send(prompt);
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [agent, current, isLoading, location.pathname, location.search, location.state, navigate]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -361,7 +433,7 @@ export function EditorPage() {
 
   if (tooSmall) {
     return (
-      <div className={`app${agentOpen ? " agent-open" : ""}`}>
+      <div className="app">
         <TopBar crumbs={[{ label: "Projects", to: "/" }, { label: projectName }]} revision={revision} projectChip onSearch={() => setPaletteOpen(true)} />
         <div className="too-small">
           <div className="too-small-card">
@@ -380,7 +452,7 @@ export function EditorPage() {
 
   if (isLoading && !current) {
     return (
-      <div className={`app${agentOpen ? " agent-open" : ""}`}>
+      <div className="app">
         <TopBar crumbs={[{ label: "Projects", to: "/" }, { label: "Opening project" }]} onSearch={() => setPaletteOpen(true)} />
         <div className="workspace"><div className="editor" style={{ padding: 24 }}><div className="skeleton-card" style={{ height: 420 }} /></div></div>
       </div>
@@ -389,7 +461,7 @@ export function EditorPage() {
 
   if (!current || !scene) {
     return (
-      <div className={`app${agentOpen ? " agent-open" : ""}`}>
+      <div className="app">
         <TopBar crumbs={[{ label: "Projects", to: "/" }, { label: "Project unavailable" }]} onSearch={() => setPaletteOpen(true)} />
         <div className="too-small project-error">
           <div className="too-small-card">
@@ -475,8 +547,9 @@ export function EditorPage() {
             {savePill}
             <Menu trigger={<Button variant="violet" size="sm"><Sparkles size={13} /><span className="ask-agent-label">Ask agent</span><ChevronDown size={11} /></Button>}>
               <MenuLabel>Game Director</MenuLabel>
-              <MenuItem onSelect={() => { agent.setMode("ask"); setAgentOpen(true); }}>Ask about this scene</MenuItem>
-              <MenuItem onSelect={() => { agent.setMode(agent.canBuildPlan ? "plan" : "ask"); setAgentOpen(true); }} disabled={!agent.canBuildPlan}>Plan a change</MenuItem>
+              <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], "ask"); else { agent.setMode("ask"); setAgentOpen(true); } }}>Ask about this scene</MenuItem>
+              <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], agent.canBuildPlan ? "plan" : "ask"); else { agent.setMode(agent.canBuildPlan ? "plan" : "ask"); setAgentOpen(true); } }} disabled={!agent.canBuildPlan}>Plan a change</MenuItem>
+              <MenuItem onSelect={() => { setLockedSelectionId(null); agent.setMode("ask"); setAgentOpen(true); }}>Explain this scene</MenuItem>
               <MenuItem onSelect={() => setAgentOpen(true)} shortcut="⌘J">Open chat</MenuItem>
             </Menu>
             <Button variant="ghost" size="sm" icon={<Play size={13} />} onClick={() => navigate(`/play/${current.id}`)}>Play</Button>
@@ -505,12 +578,12 @@ export function EditorPage() {
             )}
             {wide && <DockResizer side="left" width={leftDockWidth} min={200} max={Math.max(240, window.innerWidth - rightDockWidth - 520)} onChange={setLeftDockWidth} />}
             <main className="center-stage">
-              <EngineWorkspace tab={activeTab} presentationTab={presentationTab} onPresentationTab={setPresentation} onToast={toast.push} />
+              <EngineWorkspace tab={activeTab} presentationTab={presentationTab} onPresentationTab={setPresentation} onToast={toast.push} onAskAgent={(objectId) => askAgentAbout(objectId, "ask")} />
             </main>
             {wide && <DockResizer side="right" width={rightDockWidth} min={240} max={Math.max(280, window.innerWidth - leftDockWidth - 520)} onChange={setRightDockWidth} />}
             {wide && (
               <aside className={`right-dock${inspectorOpen ? "" : " inspector-closed"}`} style={{ width: rightDockWidth }} aria-label="Inspector">
-                <EngineInspector tab={inspectorTab} onTab={setInspectorTab} />
+                <EngineInspector tab={inspectorTab} onTab={setInspectorTab} onAskAgent={(objectId) => askAgentAbout(objectId, "ask")} />
               </aside>
             )}
           </div>
@@ -529,9 +602,16 @@ export function EditorPage() {
       </div>
 
       <Drawer open={hierarchyDrawer} onOpenChange={setHierarchyDrawer} title="Hierarchy" side="left"><EngineLeftDock /></Drawer>
-      <Drawer open={inspectorDrawer} onOpenChange={setInspectorDrawer} title="Inspector" side="right"><EngineInspector tab={inspectorTab} onTab={setInspectorTab} /></Drawer>
+      <Drawer open={inspectorDrawer} onOpenChange={setInspectorDrawer} title="Inspector" side="right"><EngineInspector tab={inspectorTab} onTab={setInspectorTab} onAskAgent={(objectId) => askAgentAbout(objectId, "ask")} /></Drawer>
       {debug && <DebugPanel onClose={() => setDebug(false)} />}
       {agentOpen && <button className="agent-scrim" aria-label="Close agent" onClick={() => setAgentOpen(false)} />}
+      {agent.pendingPreview && (
+        <div className="plan-preview-pill" role="status">
+          <span>PLAN PREVIEW · {agent.pendingPreview.changeSet?.changes.length ?? agent.pendingPreview.commands.length} changes</span>
+          <button type="button" onClick={agent.applyPendingPreview} disabled={agent.pendingPreview.stale}>Apply</button>
+          <button type="button" onClick={agent.discardPendingPreview}>Discard</button>
+        </div>
+      )}
       <AgentDrawer
         open={agentOpen}
         onClose={() => setAgentOpen(false)}
@@ -557,6 +637,11 @@ export function EditorPage() {
         modelLabel={agent.modelLabel}
         canBuildPlan={agent.canBuildPlan}
         onOpenSettings={openAiSettings}
+        pendingPreview={agent.pendingPreview}
+        onApplyPreview={agent.applyPendingPreview}
+        onDiscardPreview={agent.discardPendingPreview}
+        lockedSelection={lockedSelection ? { id: lockedSelection.id, name: lockedSelection.name } : null}
+        onUnlockSelection={() => setLockedSelectionId(null)}
       />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={commands} />
     </div>

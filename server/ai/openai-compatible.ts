@@ -1,4 +1,4 @@
-import { SLICE6_TOOL_DEFINITIONS } from "../../shared/ai-tools";
+import { toolDefinitionsForRequest } from "../../shared/ai-tools";
 import type { AgentChatMessage, StepEvent, StepRequest } from "../../shared/protocol";
 import { buildSystemPrompt } from "./system-prompt";
 
@@ -14,7 +14,7 @@ function trimText(text: string, maxChars: number) {
 function toOpenAIMessages(req: StepRequest, maxContextChars: number, visionEnabled: boolean) {
   const contextJson = trimText(JSON.stringify(req.context), Math.max(4000, Math.floor(maxContextChars * 0.6)));
   const messages: Array<Record<string, unknown>> = [
-    { role: "system", content: buildSystemPrompt() },
+    { role: "system", content: buildSystemPrompt(req.mode) },
     { role: "user", content: `Context (JSON):\n${contextJson}` },
   ];
   const historyBudget = Math.max(2000, maxContextChars - contextJson.length - 2000);
@@ -28,7 +28,6 @@ function toOpenAIMessages(req: StepRequest, maxContextChars: number, visionEnabl
     else if (m.role === "assistant") messages.push({ role: "assistant", content: m.content || "" });
     else if (m.role === "tool") {
       let content = typeof m.content === "string" ? m.content : JSON.stringify(m.toolResult ?? {});
-      // never forward image data in plain text; vision models would need multimodal parts (not implemented) so drop
       if (!visionEnabled) content = content.replace(/\[image attached\]/g, "[image omitted: vision not supported]");
       messages.push({ role: "tool", tool_call_id: m.toolCallId ?? "tool_call", content });
     }
@@ -58,15 +57,16 @@ export async function* openAICompatibleStream(opts: {
   const maxContextChars = Math.max(8000, Math.min(120000, contextWindow * 3));
 
   const url = `${baseUrl}/chat/completions`;
-  const tools = SLICE6_TOOL_DEFINITIONS.filter((t) => visionEnabled || t.function.name !== "capture_viewport");
+  const allowWrites = toolsEnabled && (req.mode === "build" || req.mode === "plan");
+  const tools = toolDefinitionsForRequest({ toolsEnabled, visionEnabled, allowWrites });
   const body: Record<string, unknown> = {
     model,
     stream: true,
     temperature: 0.2,
-    max_tokens: 1024,
+    max_tokens: 1400,
     messages: toOpenAIMessages(req, maxContextChars, visionEnabled),
   };
-  if (toolsEnabled && tools.length > 0) {
+  if (tools.length > 0) {
     body.tools = tools;
     body.tool_choice = "auto";
   }

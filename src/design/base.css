@@ -3431,3 +3431,59 @@ a {
 @media (max-width: 1365px) {
   .agent-drawer { width: min(420px, 100vw); }
 }
+
+/* Slice 7 — agent presence, plan preview and presets */
+.agent-presence-pill {
+  position: absolute;
+  z-index: 8;
+  transform: translateY(-100%);
+  background: #8f6bff;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(143, 107, 255, 0.35);
+}
+.plan-preview-pill {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px 7px 14px;
+  border-radius: 999px;
+  border: 1px solid #8f6bff;
+  background: #1b1730;
+  color: #e9e4ff;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.plan-preview-pill button {
+  border: 1px solid #8f6bff;
+  background: #8f6bff;
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.plan-preview-pill button + button {
+  background: transparent;
+  color: #cfc6ff;
+}
+.plan-preview-pill button:disabled { opacity: 0.45; cursor: not-allowed; }
+.agent-chip-locked { border-color: #8f6bff; color: #dcd4ff; display: inline-flex; align-items: center; gap: 4px; }
+.agent-chip-x { border: 0; background: transparent; color: inherit; padding: 0; display: inline-flex; cursor: pointer; }
+.agent-presets-link { margin-top: 8px; border: 0; background: transparent; color: #a99cff; font-size: 11px; cursor: pointer; }
+.agent-preset-menu { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--border, #2a2f3a); border-radius: 8px; background: var(--bg-2, #1f232b); max-height: 240px; overflow: auto; }
+.agent-preset-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; border-radius: 6px; background: transparent; color: var(--text-1, #e8ecf4); padding: 6px; text-align: left; cursor: pointer; }
+.agent-preset-menu button:hover { background: rgba(143, 107, 255, 0.12); }
+.agent-preset-menu span { color: var(--text-3, #8b93a7); font-size: 11px; }
+.agent-suggestion span { display: block; margin-top: 2px; color: var(--text-3, #8b93a7); font-size: 11px; }

@@ -57,6 +57,7 @@ export interface ContextPacket {
     activeSceneName: string | null;
     activeLayerId: string | null;
     selection: Array<{ id: string; name: string; type?: string; layerName?: string }>;
+    lockedSelection?: { id: string; name: string } | null;
     tool: string;
     playtest: "off" | "running" | "paused";
     camera: { x: number; y: number; zoom: number };

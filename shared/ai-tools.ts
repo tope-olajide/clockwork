@@ -1,9 +1,7 @@
-import type { Slice6ReadToolName } from "./protocol";
-
 export interface ToolDefinition {
   type: "function";
   function: {
-    name: Slice6ReadToolName;
+    name: string;
     description: string;
     parameters: {
       type: "object";
@@ -14,7 +12,7 @@ export interface ToolDefinition {
   };
 }
 
-export const SLICE6_TOOL_DEFINITIONS: ToolDefinition[] = [
+export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
     function: {
@@ -92,6 +90,138 @@ export const SLICE6_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
 ];
 
+export const WRITE_TOOL_DEFINITIONS: ToolDefinition[] = [
+  {
+    type: "function",
+    function: {
+      name: "apply_commands",
+      description: "Apply project commands as one atomic transaction (one revision, one undo entry). Use for Build mode edits.",
+      parameters: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "Short human label for the change set" },
+          expectedRevision: { type: "number", description: "Current project revision from context" },
+          commands: {
+            type: "array",
+            description: "1..50 command objects executed in order",
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string", description: "Command type, e.g. object.update, scene.create, rule.create" },
+                args: { type: "object", description: "Command arguments object" },
+              },
+              required: ["type", "args"],
+              additionalProperties: true,
+            },
+          },
+        },
+        required: ["summary", "expectedRevision", "commands"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "preview_commands",
+      description: "Preview project commands without committing. Use in Plan mode and for destructive changes to show a change set.",
+      parameters: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "Short human label for the proposed change set" },
+          expectedRevision: { type: "number", description: "Current project revision from context" },
+          commands: {
+            type: "array",
+            description: "1..50 command objects to preview",
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string", description: "Command type" },
+                args: { type: "object", description: "Command arguments object" },
+              },
+              required: ["type", "args"],
+              additionalProperties: true,
+            },
+          },
+        },
+        required: ["summary", "expectedRevision", "commands"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "select_entities",
+      description: "Select entities in the editor and optionally focus/switch scene.",
+      parameters: {
+        type: "object",
+        properties: {
+          ids: { type: "array", items: { type: "string" }, description: "Entity ids to select" },
+          sceneId: { type: "string", description: "Scene to switch to if needed" },
+          focus: { type: "boolean", description: "Whether to pan/focus viewport" },
+        },
+        required: ["ids"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "open_panel",
+      description: "Open an editor panel/tab for the user.",
+      parameters: {
+        type: "object",
+        properties: {
+          panel: { type: "string", description: "Panel name, e.g. layers, inspector, assets, logic, playtest, ship, agent, settings" },
+          tab: { type: "string", description: "Optional sub-tab" },
+        },
+        required: ["panel"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "start_playtest",
+      description: "Start a bounded playtest and return telemetry. Editor is read-only while running.",
+      parameters: {
+        type: "object",
+        properties: {
+          sceneId: { type: "string" },
+          durationMs: { type: "number", description: "Default 4000, max 15000" },
+          seed: { type: "number" },
+          inputs: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                atMs: { type: "number" },
+                action: { type: "string", description: "left|right|up|down|jump|action" },
+                phase: { type: "string", description: "press|release" },
+              },
+              required: ["atMs", "action", "phase"],
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "undo_last_agent_change",
+      description: "Undo the most recent agent-authored transaction. Refuses if user edited since (revision changed).",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+];
+
+export const SLICE6_TOOL_DEFINITIONS = READ_TOOL_DEFINITIONS;
 const ALIAS_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
@@ -133,3 +263,12 @@ const ALIAS_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
 ];
 
+export const ALL_AGENT_TOOL_DEFINITIONS = [...READ_TOOL_DEFINITIONS, ...ALIAS_TOOL_DEFINITIONS, ...WRITE_TOOL_DEFINITIONS];
+
+export function toolDefinitionsForRequest(opts: { toolsEnabled: boolean; visionEnabled: boolean; allowWrites: boolean }) {
+  const base = opts.toolsEnabled ? [...READ_TOOL_DEFINITIONS] : [];
+  const filtered = base.filter((t) => opts.visionEnabled || t.function.name !== "capture_viewport");
+  if (opts.toolsEnabled) filtered.push(...ALIAS_TOOL_DEFINITIONS);
+  if (opts.toolsEnabled && opts.allowWrites) filtered.push(...WRITE_TOOL_DEFINITIONS);
+  return filtered;
+}

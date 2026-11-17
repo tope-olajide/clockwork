@@ -3,10 +3,13 @@ import { nanoid } from "nanoid";
 import type { AgentChatMessage, AgentMode, ToolResult } from "@shared/protocol";
 import { buildContextPacket } from "../../engine/ai/context";
 import { executeClientTool } from "../../engine/ai/client-tools";
+import { applyCommandsInStore, batchHasDestructive, previewCommands, type ApplyCommandsArgs, type ChangeSetSummary } from "../../engine/ai/executor";
 import { streamAgentStep } from "../../engine/ai/transport";
 import { fetchAiSettings, fetchModels, fetchProviders, type ModelInfo, type ProviderInfo } from "../../engine/ai/api";
 import { useEngineStore } from "../../engine/store/engine-store";
 import { deleteChat, readChat, saveChat } from "../../engine/persistence/indexeddb";
+import { runHeadlessPlaytest, type PlaytestInput } from "../../engine/runtime/playtest";
+import { useAgentPresenceStore } from "../../engine/store/agent-presence";
 
 export type AgentStatus = "ready" | "thinking" | "streaming" | "tool" | "error";
 
@@ -15,7 +18,7 @@ export interface AgentToolCard {
   name: string;
   args: unknown;
   status: "running" | "done" | "error" | "canceled";
-  result?: ToolResult & { imageDataUrl?: string };
+  result?: ToolResult & { imageDataUrl?: string; changeSet?: ChangeSetSummary; preview?: boolean };
 }
 
 export interface DisplayMessage extends AgentChatMessage {
@@ -29,12 +32,27 @@ export interface AgentUiError {
   action?: "open-settings" | "choose-model" | "retry";
 }
 
+export interface PendingPreview {
+  id: string;
+  summary: string;
+  expectedRevision: number;
+  commands: any[];
+  changeSet?: ChangeSetSummary;
+  changedIds: string[];
+  previewDocument?: any;
+  destructive: boolean;
+  stale: boolean;
+  transactionId: string;
+}
+
 interface UseAgentSessionArgs {
   projectId: string;
   tab: string;
   tool: string;
   camera?: { x: number; y: number; zoom: number };
   viewportSize?: { w: number; h: number };
+  onOpenPanel?: (panel: string, tab?: string) => void;
+  lockedSelectionId?: string | null;
 }
 
 const storageKey = (projectId: string) => `clockwork:agent-model:${projectId}`;
@@ -57,7 +75,9 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [aiSettings, setAiSettings] = useState<{ defaultModelId: string | null; mock: boolean } | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<PendingPreview | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const agentTransactionIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +106,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       setProviders(p.providers);
       setAiSettings(s.settings);
     } catch {
-      // keep previous; mock/env-only sessions may still function
+      // keep previous
     }
   }, []);
 
@@ -127,6 +147,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       return;
     }
     setModeState(next);
+    useAgentPresenceStore.getState().setGhost(null);
   }, [canBuildPlan]);
 
   const stop = useCallback(() => {
@@ -141,8 +162,173 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     setMessages([]);
     void deleteChat(args.projectId).catch(() => undefined);
     setError(null);
+    setPendingPreview(null);
+    useAgentPresenceStore.getState().clear();
     setStatus("ready");
-  }, [args.projectId, stop]);
+  }, [stop]);
+
+  const executeAgentTool = useCallback(async (name: string, callArgs: Record<string, unknown>, transactionId: string) => {
+    const store = useEngineStore.getState();
+    const doc = store.document;
+    const revision = doc?.revision ?? 0;
+    const ok = (data: unknown, extra?: any) => ({ ok: true as const, data, revision: store.document?.revision ?? revision, name, args: callArgs, ...extra });
+    const fail = (error: string, code?: string) => ({ ok: false as const, error, code, revision: store.document?.revision ?? revision, name, args: callArgs });
+
+    if (name === "select_entities") {
+      const ids = Array.isArray(callArgs.ids) ? callArgs.ids.filter((x): x is string => typeof x === "string") : [];
+      const sceneId = typeof callArgs.sceneId === "string" ? callArgs.sceneId : null;
+      if (sceneId && store.document?.scenes.some((s) => s.id === sceneId)) store.setActiveScene(sceneId);
+      store.setSelection(ids);
+      return ok({ selected: ids, sceneId: sceneId ?? store.activeSceneId });
+    }
+
+    if (name === "open_panel") {
+      const panel = typeof callArgs.panel === "string" ? callArgs.panel : "";
+      const tab = typeof callArgs.tab === "string" ? callArgs.tab : undefined;
+      args.onOpenPanel?.(panel, tab);
+      return ok({ opened: panel, tab: tab ?? null });
+    }
+
+    if (name === "undo_last_agent_change") {
+      const lastTx = [...agentTransactionIdsRef.current].reverse()[0];
+      if (!lastTx) return fail("No agent-authored change to undo.");
+      const history = store.history;
+      const entry = [...history].reverse().find((h: any) => h.transactionId === lastTx);
+      if (!entry) return fail("The agent change is no longer in the undo history.");
+      // undo only if it's the latest history entry; otherwise unsafe
+      if (history[history.length - 1] !== entry) return fail("User edits happened after the agent change. Undo refused to avoid reverting user work.");
+      const undone = store.undo();
+      if (!undone) return fail("Undo failed.");
+      agentTransactionIdsRef.current = agentTransactionIdsRef.current.filter((id) => id !== lastTx);
+      return ok({ undone: true, transactionId: lastTx, revision: useEngineStore.getState().document?.revision ?? 0 });
+    }
+
+    if (name === "start_playtest") {
+      if (!doc) return fail("No project open.");
+      if (useEngineStore.getState().playtestRunning) return fail("A playtest is already running. Stop it before starting another.");
+      const sceneId = typeof callArgs.sceneId === "string" ? callArgs.sceneId : store.activeSceneId ?? doc.startSceneId;
+      if (!doc.scenes.some((scene) => scene.id === sceneId)) return fail(`Scene not found: ${sceneId}`);
+      const durationMs = Math.max(0, Math.min(15000, Number(callArgs.durationMs) || 4000));
+      const rawInputs = Array.isArray(callArgs.inputs) ? callArgs.inputs : [];
+      const inputs: PlaytestInput[] = rawInputs
+        .filter((input: any) => input && typeof input.atMs === "number" && typeof input.action === "string" && (input.phase === "press" || input.phase === "release"))
+        .map((input: any) => ({ atMs: Number(input.atMs), action: input.action, phase: input.phase }));
+      useEngineStore.getState().setPlaytestRunning(true);
+      try {
+        const result = runHeadlessPlaytest(doc, {
+          sceneId,
+          seed: Number(callArgs.seed) || 1234,
+          durationMs,
+          inputs,
+        });
+        return ok({ ...result, passed: result.passed, telemetry: result });
+      } finally {
+        useEngineStore.getState().setPlaytestRunning(false);
+      }
+    }
+
+    if (name === "preview_commands") {
+      if (!doc) return fail("No project open.");
+      const input = callArgs as unknown as ApplyCommandsArgs;
+      const result = previewCommands(doc, input);
+      if (!result.ok) return { ok: false, error: result.message, code: result.code, revision: result.revision ?? doc.revision, name, args: callArgs, data: result };
+      const destructive = batchHasDestructive((input.commands ?? []) as any[]);
+      const changedIds = result.changedIds ?? [];
+      setPendingPreview({
+        id: nanoid(),
+        summary: input.summary || result.changeSet?.label || "Previewed changes",
+        expectedRevision: input.expectedRevision,
+        commands: input.commands ?? [],
+        changeSet: result.changeSet,
+        changedIds,
+        previewDocument: result.document,
+        destructive,
+        stale: false,
+        transactionId,
+      });
+      useAgentPresenceStore.getState().setGhost({
+        document: result.document ?? doc,
+        changedIds,
+        deletedIds: (result.changeSet?.changes ?? []).filter((change) => change.op === "delete").map((change) => change.entityId),
+        sceneId: store.activeSceneId,
+        label: input.summary || result.changeSet?.label || "Plan preview",
+      });
+      return ok({ preview: true, destructive, changeSet: result.changeSet, revision: result.revision }, { changeSet: result.changeSet, preview: true });
+    }
+
+    if (name === "apply_commands") {
+      if (!doc) return fail("No project open.");
+      const input = callArgs as unknown as ApplyCommandsArgs;
+      const commands = (input.commands ?? []) as any[];
+      if (mode === "plan") {
+        // plan mode should not apply; convert behavior to preview result
+        const p = previewCommands(doc, input);
+        if (!p.ok) return { ok: false, error: p.message, code: p.code, revision: p.revision ?? doc.revision, name, args: callArgs };
+        const planChangedIds = p.changedIds ?? [];
+        setPendingPreview({ id: nanoid(), summary: input.summary || "Previewed changes", expectedRevision: input.expectedRevision, commands, changeSet: p.changeSet, changedIds: planChangedIds, previewDocument: p.document, destructive: batchHasDestructive(commands), stale: false, transactionId });
+        useAgentPresenceStore.getState().setGhost({ document: p.document ?? doc, changedIds: planChangedIds, deletedIds: (p.changeSet?.changes ?? []).filter((change) => change.op === "delete").map((change) => change.entityId), sceneId: store.activeSceneId, label: input.summary || "Plan preview" });
+        return ok({ preview: true, note: "Plan mode: previewed instead of applying.", changeSet: p.changeSet, revision: p.revision }, { changeSet: p.changeSet, preview: true });
+      }
+      const destructive = batchHasDestructive(commands);
+      if (destructive) {
+        const p = previewCommands(doc, input);
+        if (!p.ok) return { ok: false, error: p.message, code: p.code, revision: p.revision ?? doc.revision, name, args: callArgs };
+        const destructiveIds = p.changedIds ?? [];
+        setPendingPreview({ id: nanoid(), summary: input.summary || p.changeSet?.label || "Destructive changes", expectedRevision: input.expectedRevision, commands, changeSet: p.changeSet, changedIds: destructiveIds, previewDocument: p.document, destructive: true, stale: false, transactionId });
+        useAgentPresenceStore.getState().setGhost({ document: p.document ?? doc, changedIds: destructiveIds, deletedIds: (p.changeSet?.changes ?? []).filter((change) => change.op === "delete").map((change) => change.entityId), sceneId: store.activeSceneId, label: input.summary || "Destructive preview" });
+        return ok({ preview: true, requiresConfirmation: true, destructive: true, changeSet: p.changeSet, revision: p.revision, message: "Destructive change requires confirmation. Review and confirm to apply." }, { changeSet: p.changeSet, preview: true });
+      }
+      const applied = applyCommandsInStore(store.dispatch as any, () => useEngineStore.getState().document, input, transactionId);
+      if (!applied.ok) return { ok: false, error: applied.message, code: applied.code, revision: applied.revision ?? doc.revision, name, args: callArgs, data: applied };
+      agentTransactionIdsRef.current.push(transactionId);
+      useAgentPresenceStore.getState().setGhost(null);
+      if (applied.changedIds?.length) {
+        useAgentPresenceStore.getState().setPresence({ objectIds: applied.changedIds, sceneId: store.activeSceneId, label: input.summary || "Agent change" });
+      }
+      return ok({ applied: true, revision: applied.revision, changeSet: applied.changeSet, changedIds: applied.changedIds }, { changeSet: applied.changeSet });
+    }
+
+    // read tools
+    if (doc) {
+      const executed = executeClientTool({ document: doc, activeSceneId: store.activeSceneId, selection: store.selection, name, args: callArgs, allowViewportCapture: capabilities.vision });
+      return executed as any;
+    }
+    return fail("No project open.");
+  }, [args, capabilities.vision, mode]);
+
+  const applyPendingPreview = useCallback(() => {
+    if (!pendingPreview) return;
+    const store = useEngineStore.getState();
+    const doc = store.document;
+    if (!doc) { setError({ message: "No project open.", action: "retry" }); return; }
+    if (doc.revision !== pendingPreview.expectedRevision) {
+      setPendingPreview((p) => p ? { ...p, stale: true } : p);
+      useAgentPresenceStore.getState().setGhost(null);
+      setError({ message: "Preview is stale because the project changed. Ask the agent to re-plan.", code: "revision", action: "retry" });
+      return;
+    }
+    const input: ApplyCommandsArgs = { summary: pendingPreview.summary, expectedRevision: pendingPreview.expectedRevision, commands: pendingPreview.commands };
+    const applied = applyCommandsInStore(store.dispatch as any, () => useEngineStore.getState().document, input, pendingPreview.transactionId);
+    if (!applied.ok) {
+      setError({ message: applied.message || "Apply failed.", code: applied.code, action: "retry" });
+      setStatus("error");
+      return;
+    }
+    agentTransactionIdsRef.current.push(pendingPreview.transactionId);
+    setMessages((prev) => [...prev, { id: nanoid(), role: "assistant", content: `Applied: ${pendingPreview.summary} (r${applied.revision}, 1 undo entry).`, createdAt: new Date().toISOString() }]);
+    useAgentPresenceStore.getState().setGhost(null);
+    if (applied.changedIds?.length) {
+      useAgentPresenceStore.getState().setPresence({ objectIds: applied.changedIds, sceneId: useEngineStore.getState().activeSceneId, label: pendingPreview.summary });
+    }
+    setPendingPreview(null);
+    setError(null);
+  }, [pendingPreview]);
+
+  const discardPendingPreview = useCallback(() => {
+    if (pendingPreview) setMessages((prev) => [...prev, { id: nanoid(), role: "assistant", content: `Discarded preview: ${pendingPreview.summary}.`, createdAt: new Date().toISOString() }]);
+    useAgentPresenceStore.getState().setGhost(null);
+    setPendingPreview(null);
+  }, [pendingPreview]);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -152,6 +338,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     if (!doc) return;
 
     setError(null);
+    useAgentPresenceStore.getState().clearPresence();
     const userMsg: DisplayMessage = { id: nanoid(), role: "user", content: trimmed, createdAt: new Date().toISOString() };
     setMessages((prev) => [...prev, userMsg]);
 
@@ -160,6 +347,8 @@ export function useAgentSession(args: UseAgentSessionArgs) {
 
     const run = async () => {
       let conversation: AgentChatMessage[] = [...messages.filter((m) => !m.streaming), userMsg].map(({ streaming, toolCard, ...m }) => m);
+      const turnTransactionId = nanoid();
+      let replanCount = 0;
       for (let step = 0; step < 8; step++) {
         if (abort.signal.aborted) return;
         setStatus("thinking");
@@ -171,6 +360,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           activeSceneId: fresh.activeSceneId,
           activeLayerId: fresh.activeLayerId,
           selection: fresh.selection,
+          lockedSelectionId: args.lockedSelectionId,
           tab: args.tab,
           tool: args.tool,
           playtestRunning: fresh.playtestRunning,
@@ -223,12 +413,16 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           const cardId = nanoid();
           const card: AgentToolCard = { id: call.callId || cardId, name: call.name, args: call.args, status: "running" };
           setMessages((prev) => [...prev, { id: nanoid(), role: "tool", content: "", createdAt: new Date().toISOString(), toolCallId: card.id, toolName: call.name, toolArgs: call.args, toolCard: card }]);
-          const fresh2 = useEngineStore.getState();
-          const doc2 = fresh2.document;
-          const executed = doc2
-            ? executeClientTool({ document: doc2, activeSceneId: fresh2.activeSceneId, selection: fresh2.selection, name: call.name, args: (call.args as Record<string, unknown>) ?? {}, allowViewportCapture: capabilities.vision })
-            : { ok: false, error: "No project open", revision: 0, name: call.name, args: call.args } as any;
-          const toolResult: ToolResult & { imageDataUrl?: string } = { ok: executed.ok, data: executed.data, error: executed.error, revision: executed.revision, imageDataUrl: executed.imageDataUrl };
+          const executed: any = await executeAgentTool(call.name, (call.args as Record<string, unknown>) ?? {}, turnTransactionId);
+          const toolResult: ToolResult & { imageDataUrl?: string; changeSet?: ChangeSetSummary; preview?: boolean } = {
+            ok: executed.ok,
+            data: executed.data,
+            error: executed.error,
+            revision: executed.revision ?? (useEngineStore.getState().document?.revision ?? 0),
+            imageDataUrl: executed.imageDataUrl,
+            changeSet: executed.changeSet,
+            preview: executed.preview,
+          };
           setMessages((prev) => prev.map((m) => m.toolCallId === card.id ? { ...m, toolCard: { ...card, status: executed.ok ? "done" : "error", result: toolResult }, toolResult, content: JSON.stringify(executed.imageDataUrl ? { ...toolResult, imageDataUrl: "[image attached]" } : toolResult) } : m));
           const toolMsg: AgentChatMessage = {
             id: nanoid(),
@@ -242,6 +436,17 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           } as any;
           (toolMsg as any).imageDataUrl = capabilities.vision ? executed.imageDataUrl : undefined;
           conversation = [...conversation, toolMsg];
+
+          // A stale revision is recoverable: re-read context and re-plan once per
+          // failure (at most twice per user turn), never retry the same batch.
+          if (!executed.ok && executed.code === "revision" && replanCount < 2) {
+            replanCount += 1;
+            const currentRevision = useEngineStore.getState().document?.revision ?? 0;
+            const note = `Revision changed to r${currentRevision}; re-read the context and re-plan. Do not retry the same batch.`;
+            conversation = [...conversation, { id: nanoid(), role: "user", content: note, createdAt: new Date().toISOString() }];
+            setMessages((prev) => [...prev, { id: nanoid(), role: "user", content: note, createdAt: new Date().toISOString() }]);
+            break;
+          }
         }
       }
       setStatus("ready");
@@ -260,7 +465,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
     }
-  }, [args.camera, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, messages, mode]);
+  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, executeAgentTool, messages, mode]);
 
   const retry = useCallback(() => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
@@ -303,5 +508,8 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     retry,
     newChat,
     refreshAiMeta,
-  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, stop, retry, newChat, refreshAiMeta]);
+    pendingPreview,
+    applyPendingPreview,
+    discardPendingPreview,
+  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, stop, retry, newChat, refreshAiMeta, pendingPreview, applyPendingPreview, discardPendingPreview]);
 }

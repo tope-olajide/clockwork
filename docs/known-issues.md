@@ -51,13 +51,13 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 
 ### Slice 7 — Agent writes, workflows, presence
 
-- **Agent presence is not implemented.** `EditorState.agentPresence` exists in `src/engine/model/schema.ts` but is never read or written; there is no violet pulse, `AGENT` label, camera ease, hierarchy scroll or selection sync on agent edits (task 7 / acceptance).
-- **Plan-mode ghost preview is not implemented.** `EditorState.ghostPreview` is likewise dead; the pending change set is only a text/modal card in the agent drawer, with no canvas ghost overlay (task 3).
-- **`start_playtest` is a stub.** It returns `passed: false` with “Playtest bridge is not fully available in this build.” and `telemetry: null`; there is no runtime bridge, scripted input feed, duration wait or telemetry return (task 8).
-- **Selection-level “Ask AI” is still a placeholder.** The canvas context menu action and the editor “Ask agent” split button do not open the drawer with a locked selection context; the canvas action still shows “The live agent arrives in Slice 6.” (task 10).
-- **Prompt presets and contextual suggestions from §7.6 are not implemented**; the drawer only has four hard-coded starter prompts (task 9).
-- **No golden-prompt verification.** There are no fixtures or tests for the seven prompts in §7.1, so task 12 is unverified beyond the system-prompt text.
-- **Revision-conflict auto re-plan is prompt-only.** The system prompt tells the model to re-plan, but the client applies no automatic re-plan attempt/limit; a stale preview produces an error card and requires the user to retry (task 6).
+- **Agent presence is implemented but not browser-verified.** A transient `useAgentPresenceStore` now drives violet outlines, an `AGENT` pill, a 350 ms camera ease, hierarchy row scrolling and a 2.5 s clear; it deliberately never changes the user's selection. Slice 7's browser gate is deferred to the Slice 10 Kane run, so this is unverified evidence.
+- **Plan-mode ghost preview is implemented but not browser-verified.** `previewCommands` now returns the dry-run document and changed ids; the canvas draws violet ghost bounds, deleted objects in red, and a top-center `PLAN PREVIEW` pill with Apply/Discard. Clearing on apply/discard/stale/mode change is wired, but the visual match is unverified until Slice 10.
+- **`start_playtest` is implemented but not browser-verified.** It now runs `runHeadlessPlaytest` with the real `Runtime`, fixed 1/60 s steps, optional scripted inputs, a 15 s cap, variables/events/frames and an honest `passed` flag; it is a headless simulation, not a rendered run. Browser telemetry parity is deferred to Slice 10.
+- **Selection-level “Ask AI” is implemented but not browser-verified.** Canvas context menu, inspector and toolbar now open the drawer with a locked selection chip; the context packet carries `lockedSelection`, and the chip unlocks explicitly. Entry-point behavior is deferred to the Slice 10 browser gate.
+- **Prompt presets are implemented but not browser-verified.** `src/engine/ai/prompts.ts` exports the seven presets and `suggestionsFor`, the empty state renders them as cards, and `/` opens the preset list. `docs/golden-prompts.md` records expected tools and success; real-model runs are deferred.
+- **No golden-prompt verification.** The seven prompts and expected tool calls are documented in `docs/golden-prompts.md`, but no real-model run has been performed; task 12 remains unverified.
+- **Revision-conflict auto re-plan is implemented but unverified.** A failed tool with code `revision` appends a synthetic re-read/re-plan message and continues once per failure, at most twice per turn; conflicts never auto-apply. No forced-conflict browser run has been performed.
 - **No Build-mode changed-object pulse/toast/undo affordance** beyond the generic undo history (task 4).
 
 ## Product limitations by design (v1)

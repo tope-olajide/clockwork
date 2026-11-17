@@ -340,3 +340,17 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Responsive drawer: scrim below 1500 px; docked 420 px at ≥1500 px via `.app.agent-open` padding.
 - Known limitations: no real-provider turn was possible without credentials (the only unverified Slice 6 gate item); persistence stores plain chat JSON in IndexedDB like the rest of the local project state; rate limiting is in-memory.
 - Acceptance: **closed** for the deterministic/mock Slice 6 gate; the real-provider tool-call item is recorded in `docs/known-issues.md` as a verification gap.
+
+## Slice 7 — agent writes, presence, playtest, presets (implementation; browser gate deferred)
+
+- Date: 2026-11-17
+- Commit: see this change set.
+- `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`: pass.
+- S7-1: `previewCommands` now returns the dry-run `document` and `changedIds`; `applyCommandsInStore` reports changed ids and names the failing command index.
+- S7-2: new `useAgentPresenceStore` drives violet changed-object outlines, an `AGENT` pill, a 350 ms camera ease (reduced-motion aware), a hierarchy scroll, and a 2.5 s clear. The user's selection is never changed. Presence is set after apply and on preview, cleared on a new turn/new chat/mode change.
+- S7-3: Plan preview stores the preview document; the canvas draws violet ghost bounds and red deleted bounds, plus a top-center `PLAN PREVIEW · N changes` pill with Apply/Discard. Apply/discard/stale/mode change clear the ghost.
+- S7-4: `start_playtest` now runs `runHeadlessPlaytest`: the real `Runtime`, 1/60 s fixed steps, scripted inputs, a 15 s cap, variables/events/frames, a stuck-position error, and an honest `passed` only for `won` or a clean stop. It rejects a second concurrent run.
+- S7-5: canvas context menu, inspector and toolbar open the drawer with a locked selection chip; `ContextPacket.editor.lockedSelection` carries it, and unlocking is explicit.
+- S7-6: seven presets and contextual suggestions (`src/engine/ai/prompts.ts`), preset cards in the empty state, `/` preset filtering, and `docs/golden-prompts.md`.
+- S7-7: a `revision` tool failure appends a re-read/re-plan message and continues, at most twice per turn; it never auto-applies after a conflict.
+- Verification deferred at the user's request until the Slice 10 Kane run. No browser acceptance evidence is claimed; `docs/known-issues.md` marks each implemented item as unverified.
