@@ -170,7 +170,17 @@ The root cause is visible in the prompt and tool surface: `apply_commands` only 
 
 That second failure is a **test artifact, not a product bug**: split runs get a fresh browser context, so the project is re-seeded and carries no history from flow 1. Play never touches `history` (`PlayPage` only calls `setPlaytestRunning`), and the same repair produced one undo entry locally.
 
-**Next step for K3:** keep the objective to one flow — repair + play-to-win only — and check undo/redo in a separate objective that performs the edit and undo inside a single run.
+**Split into one flow each:** `scripts/kane/objectives/k3a-repair-win.txt` (repair + play-to-win) and `scripts/kane/objectives/k3b-undo-redo.txt` (make an edit, undo, redo in the same run).
+
+### K3a — the loop closes (real pass, single flow)
+
+`k3a.ndjson` (`scripts/kane/objectives/k3a-repair-win.txt`): **`run_end.status: "passed"`**, 282.1 s, 60.1 credits, **`bifurcated: false`, `total_runs: 1`**, `final_state { coin_counter: "3", stage_loaded: "true", command_rejected: "false" }`.
+
+One flow did all of it: opened `?demoReset=1`, switched the agent to Build, sent the defect report, waited for the applied change, pressed Play, clicked the stage to steer right repeatedly, and stopped after the win message. This is the fail → fix → pass loop the slice is about, and every step happened inside a single run, so no state crossed a context boundary.
+
+Why it counts as a real pass rather than a lucky one: on the untouched demo the same click steering stops at 2 coins with `won: false` (local CDP runs and the steer probe both measured that), so `COINS 3` plus the win message can only happen if the buried `Core A` was moved into reach during that session. And `command_rejected: false` is the direct confirmation that the command-reference fix removed the rejected-edit failure that failed `k3d`.
+
+`k3b-undo-redo.txt` is written but not run against Kane; undo/redo after an applied repair is verified locally (one undo entry, Undo enabled), not by a Kane run.
 
 **Kane steerability probe** (`scripts/kane/objectives/k3-steer-probe.txt`, 199.4 s, 33.1 credits): `run_end.status: "passed"`, `final_state { player_moved: "true", coins_counter: "2" }`, summary "Clicked to the right of the player … The player moved, and the COINS counter reached 2". Click steering is therefore the input path K3 should use; `k3-agent-repair.txt` was rewritten to click the stage instead of pressing keys.
 - An earlier K3 attempt was killed by a 320 s wrapper mid-repair (no `run_end`, no verdict) and is not evidence either way.
@@ -201,6 +211,7 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 
 - The full Neon Runner AI Play loop is verified as fail → fix → pass in 151.6 s (85.0 s + 66.6 s) with the assert-only objective. With the required `store ... as` extraction the passing attempt measured 86.8 s, so the same loop is ~172 s — only 8 s of headroom against the 180 s budget. The saved-test replay path is the margin, and it is still unmeasured.
 - K2–K5 were not executed against real Kane in this pass. Their objectives remain in `scripts/kane/objectives/`.
+- K3's undo/redo half is not verified by Kane: `k3b-undo-redo.txt` exists but was not run (credit cost after the 60.1-credit K3a pass). The local check — a repair leaves exactly one undo entry and Undo is enabled — is the only evidence for it.
 - The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
 - The independent negative control (unreachable goal rather than the seeded coin) has not been run.
 - The full Neon Runner loop uses the deterministic embedded-coin repair, not a model-driven diagnosis. The agent path is exercised by the reduced-fixture smoke and the fixture stream, not by an LLM turn on the demo.
