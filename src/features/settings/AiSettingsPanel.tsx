@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Input, useToast } from "../../components/ui";
+import type { KaneCliStatus } from "@shared/protocol/kane";
+import { fetchKaneStatus } from "../../engine/ai/kane-api";
 import {
   createCustomModel,
   createCustomProvider,
@@ -27,6 +29,8 @@ export function AiSettingsPanel() {
   const [keyMode, setKeyMode] = useState<Record<string, "vault" | "session">>({});
   const [customProvider, setCustomProvider] = useState({ name: "", baseUrl: "" });
   const [customModel, setCustomModel] = useState({ providerId: "", model: "", label: "", contextWindow: "8192", tools: true, vision: false });
+  const [kane, setKane] = useState<KaneCliStatus | null>(null);
+  const [kaneBusy, setKaneBusy] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -44,6 +48,16 @@ export function AiSettingsPanel() {
   }
 
   useEffect(() => { void refresh(); }, []);
+
+  async function testKane() {
+    setKaneBusy(true);
+    try {
+      setKane(await fetchKaneStatus(true));
+      toast.push("Kane checked", "Status refreshed from the local Kane CLI.");
+    } catch (e) {
+      toast.push("Kane unavailable", e instanceof Error ? e.message : "Could not reach Kane.");
+    } finally { setKaneBusy(false); }
+  }
 
   const modelsByProvider = useMemo(() => {
     const map = new Map<string, ModelInfo[]>();
@@ -186,6 +200,23 @@ export function AiSettingsPanel() {
           <label className="logic-check"><input type="checkbox" checked={customModel.vision} onChange={(e) => setCustomModel((s) => ({ ...s, vision: e.target.checked }))} /> Vision</label>
         </div>
         <div style={{ marginTop: 8 }}><Button variant="secondary" onClick={() => void onAddCustomModel()} disabled={busy === "custom-model"}>Add model</Button></div>
+      </section>
+
+      <section className="settings-card" data-testid="settings-kane">
+        <div className="section-heading-row"><h2>Kane</h2></div>
+        <p className="muted">Kane is the browser verification layer. AI Play uses it to play an immutable snapshot and reports the run back to the editor. Kane never receives an API key or provider secret.</p>
+        <div className="field-grid" style={{ marginTop: 8 }}>
+          <div className="detail-row"><span>CLI</span><span className="value input-mono">{kane?.installed ? (kane.version ?? "installed") : "not checked"}</span></div>
+          <div className="detail-row"><span>Signed in</span><span className="value">{kane?.authenticated ? (kane.user ?? "yes") : "no"}</span></div>
+          <div className="detail-row"><span>Engine QA</span><span className="value">{kane?.qaEnabled ? "enabled" : "disabled"}</span></div>
+          <div className="detail-row"><span>AI Play</span><span className="value">{kane?.aiPlayEnabled ? "enabled" : "disabled"}</span></div>
+          <div className="detail-row"><span>Evidence folder</span><span className="value input-mono">{kane?.evidenceDir ?? ".data/ai-play"}</span></div>
+        </div>
+        {kane?.reason && <p className="muted" style={{ color: "var(--amber)" }}>{kane.reason}</p>}
+        <div className="layer-editor-actions" style={{ marginTop: 10 }}>
+          <Button variant="secondary" size="sm" disabled={kaneBusy} onClick={() => void testKane()} data-testid="kane-test">{kaneBusy ? "Checking…" : "Test Kane"}</Button>
+          <span className="muted" style={{ fontSize: 11 }}>Set KANE_ENABLED=1 and KANE_AI_PLAY_ENABLED=1 on the server to enable runs.</span>
+        </div>
       </section>
 
       <section className="settings-card">

@@ -23,10 +23,37 @@ export function isMockEnabled() {
   return process.env.AI_MOCK === "1";
 }
 
+function resolveEnvModel(): ResolvedModelOk | null {
+  const model = process.env.LLM_MODEL?.trim() || process.env.AI_MODEL?.trim();
+  const baseUrl = process.env.LLM_BASE_URL?.trim() || process.env.AI_BASE_URL?.trim();
+  const apiKey = process.env.LLM_API_KEY?.trim() || process.env.AI_API_KEY?.trim();
+  if (!model || !baseUrl || !apiKey) return null;
+  return {
+    kind: "ok",
+    providerId: "env",
+    model,
+    fullModelId: `env:${model}`,
+    apiStyle: "openai-compatible",
+    baseUrl,
+    apiKey,
+    tools: true,
+    vision: false,
+    contextWindow: 128_000,
+  };
+}
+
 export function resolveModel(requestedModelId?: string): ResolvedModel {
   if (isMockEnabled()) return { kind: "mock", label: "MOCK" };
 
-  const modelId = requestedModelId || getDefaultModelId() || process.env.AI_MODEL;
+  const requested = requestedModelId || getDefaultModelId();
+  if (!requested) {
+    // A single-provider .env.local setup is enough to run the agent without
+    // first adding a custom provider and API key in Settings.
+    const fromEnv = resolveEnvModel();
+    if (fromEnv) return fromEnv;
+  }
+
+  const modelId = requested || process.env.AI_MODEL;
   if (!modelId) {
     return { kind: "missing", code: "no-model", message: "No model configured. Open Settings to choose a model or set AI_MODEL." };
   }

@@ -49,6 +49,7 @@ export async function* openAICompatibleStream(opts: {
   visionEnabled?: boolean;
   contextWindow?: number;
   signal?: AbortSignal;
+  allowKane?: boolean;
 }): AsyncGenerator<string> {
   const { baseUrl, apiKey, model, req } = opts;
   const toolsEnabled = opts.toolsEnabled !== false;
@@ -58,7 +59,7 @@ export async function* openAICompatibleStream(opts: {
 
   const url = `${baseUrl}/chat/completions`;
   const allowWrites = toolsEnabled && (req.mode === "build" || req.mode === "plan");
-  const tools = toolDefinitionsForRequest({ toolsEnabled, visionEnabled, allowWrites });
+  const tools = toolDefinitionsForRequest({ toolsEnabled, visionEnabled, allowWrites, allowKane: opts.allowKane });
   const body: Record<string, unknown> = {
     model,
     stream: true,

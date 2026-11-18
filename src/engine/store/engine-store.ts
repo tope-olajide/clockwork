@@ -404,15 +404,21 @@ const DEMO_COVER = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg 
 
 async function buildDemoProject(): Promise<ProjectDocument> {
   const demo = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate("platformer", "Neon Runner")));
-  // Seeded defect for the Slice 10 negative control: Core B sits inside the
-  // solid Ledge B body, so manual play can reach the relay but cannot collect
-  // all three cores. `?demoReset=1` restores this exact state.
+  // Seeded defect for the Slice 10 negative control: Core A sits inside the
+  // solid ground body, so the player cannot collect all three cores without a
+  // repair. `?demoReset=1` restores this exact state. All targets are placed in
+  // a short straight run from spawn so Kane can fail and pass quickly.
   const scene = demo.scenes.find((candidate) => candidate.id === demo.startSceneId) ?? demo.scenes[0];
-  const coreB = scene?.objects.find((object) => object.name === "Core B");
-  if (coreB) {
-    coreB.transform.x = 1080;
-    coreB.transform.y = 566;
-  }
+  const place = (name: string, x: number, y: number) => {
+    const object = scene?.objects.find((candidate) => candidate.name === name);
+    if (object) { object.transform.x = x; object.transform.y = y; }
+  };
+  place("Core A", 280, 860);
+  place("Core B", 360, 790);
+  place("Core C", 440, 790);
+  place("Relay", 520, 760);
+  const coinWidget = demo.settings.ui.hud.find((widget) => widget.variable === "coins");
+  if (coinWidget) coinWidget.label = "COINS";
   return demo;
 }
 
@@ -429,15 +435,30 @@ export async function ensureDemoProject(): Promise<void> {
   }
 }
 
-/** Restore the intentional Neon Runner defect for AI Play rehearsals. */
+/**
+ * Restore the intentional Neon Runner defect for AI Play rehearsals.
+ *
+ * `?demoReset=1` is read in an effect that mounts twice in development, so two
+ * resets overlap: both see no existing project and both save one, leaving two
+ * identical Neon Runner records (one of which later drifts with test edits and
+ * makes Play open the wrong one). Share the first run instead of racing.
+ */
+let demoResetInFlight: Promise<void> | null = null;
+
 export async function resetDemoProject(): Promise<void> {
-  const records = await listProjectRecords();
-  for (const record of records) {
-    if (record.name === "Neon Runner") await deleteProjectRecord(record.id);
-  }
-  const demo = await buildDemoProject();
-  await saveProjectDocument(demo, DEMO_COVER);
-  localStorage.setItem("clockwork:seeded:v1", "1");
+  if (demoResetInFlight) return demoResetInFlight;
+  demoResetInFlight = (async () => {
+    const records = await listProjectRecords();
+    for (const record of records) {
+      if (record.name === "Neon Runner") await deleteProjectRecord(record.id);
+    }
+    const demo = await buildDemoProject();
+    await saveProjectDocument(demo, DEMO_COVER);
+    localStorage.setItem("clockwork:seeded:v1", "1");
+  })().finally(() => {
+    demoResetInFlight = null;
+  });
+  return demoResetInFlight;
 }
 
 export async function createAndSaveProject(

@@ -44,6 +44,9 @@ export class InputManager {
   private pointerPressed = false;
   private pointerReleased = false;
   private pointerTarget: HTMLElement | null = null;
+  private virtualDown = new Set<LogicalAction>();
+  private virtualPressed = new Set<LogicalAction>();
+  private virtualReleased = new Set<LogicalAction>();
   private gamepadPrevious = { jump: false, action: false };
   private onKeyDown: (event: KeyboardEvent) => void;
   private onKeyUp: (event: KeyboardEvent) => void;
@@ -109,6 +112,7 @@ export class InputManager {
     this.released.clear();
     this.pointerPressed = false;
     this.pointerReleased = false;
+    this.clearVirtual();
     this.gamepadPrevious = { jump: false, action: false };
   }
 
@@ -117,15 +121,37 @@ export class InputManager {
   }
 
   private active(action: LogicalAction): boolean {
-    return (this.map[action] ?? []).some((code) => this.down.has(code));
+    return this.virtualDown.has(action) || (this.map[action] ?? []).some((code) => this.down.has(code));
   }
 
   private wasPressed(action: LogicalAction): boolean {
-    return (this.map[action] ?? []).some((code) => this.pressed.has(code));
+    return this.virtualPressed.has(action) || (this.map[action] ?? []).some((code) => this.pressed.has(code));
   }
 
   private wasReleased(action: LogicalAction): boolean {
-    return (this.map[action] ?? []).some((code) => this.released.has(code));
+    return this.virtualReleased.has(action) || (this.map[action] ?? []).some((code) => this.released.has(code));
+  }
+
+  /** DOM controls call this for held actions (movement toggles). */
+  setAction(action: LogicalAction, held: boolean): void {
+    if (held) {
+      if (!this.virtualDown.has(action)) this.virtualPressed.add(action);
+      this.virtualDown.add(action);
+    } else if (this.virtualDown.delete(action)) {
+      this.virtualReleased.add(action);
+    }
+  }
+
+  /** An impulse control: down for one short frame, then released. */
+  tapAction(action: LogicalAction): void {
+    this.setAction(action, true);
+    window.setTimeout(() => this.setAction(action, false), 90);
+  }
+
+  clearVirtual(): void {
+    this.virtualDown.clear();
+    this.virtualPressed.clear();
+    this.virtualReleased.clear();
   }
 
   private gamepad(): { left: boolean; right: boolean; up: boolean; down: boolean; jump: boolean; action: boolean } {
@@ -147,7 +173,8 @@ export class InputManager {
 
   snapshot(): InputFrame {
     const gamepad = this.gamepad();
-    const keyboardJumpless = this.down.size === 0 && this.pressed.size === 0 && this.released.size === 0;
+    const keyboardJumpless = this.down.size === 0 && this.pressed.size === 0 && this.released.size === 0
+      && this.virtualDown.size === 0 && this.virtualPressed.size === 0 && this.virtualReleased.size === 0;
     if (keyboardJumpless && !this.pointerDown && !this.pointerPressed && !this.pointerReleased && !gamepad.left && !gamepad.right && !gamepad.up && !gamepad.down && !gamepad.jump && !gamepad.action) {
       const previous = this.gamepadPrevious;
       this.gamepadPrevious = { jump: gamepad.jump, action: gamepad.action };
@@ -172,6 +199,8 @@ export class InputManager {
     this.gamepadPrevious = { jump: gamepad.jump, action: gamepad.action };
     this.pressed.clear();
     this.released.clear();
+    this.virtualPressed.clear();
+    this.virtualReleased.clear();
     this.pointerPressed = false;
     this.pointerReleased = false;
     return frame;

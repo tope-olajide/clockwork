@@ -1,0 +1,144 @@
+interface ObjectiveBehavior {
+  type: string;
+}
+
+interface ObjectiveObject {
+  tags: string[];
+  behaviors: ObjectiveBehavior[];
+  transform: { x: number; y: number };
+}
+
+interface ObjectiveHud {
+  variable: string;
+  label: string;
+  visible?: boolean;
+}
+
+interface ObjectiveVariable {
+  name: string;
+  type: string;
+}
+
+interface ObjectiveRuleAction {
+  kind: string;
+  name?: string;
+  value?: unknown;
+}
+
+interface ObjectiveRule {
+  do: ObjectiveRuleAction[];
+}
+
+interface ObjectiveScene {
+  id: string;
+  name: string;
+  objects: ObjectiveObject[];
+  rules: ObjectiveRule[];
+}
+
+export interface KaneProjectDocument {
+  name: string;
+  startSceneId: string;
+  scenes: ObjectiveScene[];
+  variables: ObjectiveVariable[];
+  settings: { ui: { hud: ObjectiveHud[] } };
+}
+
+interface ObjectiveInput {
+  document: KaneProjectDocument;
+  sceneId?: string;
+  goal?: string;
+  seed?: number;
+}
+
+function sceneFor(document: KaneProjectDocument, sceneId?: string) {
+  return document.scenes.find((scene) => scene.id === sceneId)
+    ?? document.scenes.find((scene) => scene.id === document.startSceneId)
+    ?? document.scenes[0];
+}
+
+function coinCount(document: KaneProjectDocument, sceneId?: string): number {
+  const scene = sceneFor(document, sceneId);
+  if (!scene) return 0;
+  return scene.objects.filter((object) =>
+    object.tags.includes("coin")
+    || object.behaviors.some((behavior) => behavior.type === "collectible"),
+  ).length;
+}
+
+function hudLabel(document: KaneProjectDocument, variable: string, fallback: string): string {
+  const widget = document.settings.ui.hud.find((item) => item.variable === variable && item.visible !== false);
+  return widget?.label?.trim() || fallback;
+}
+
+function winVariable(document: KaneProjectDocument): string {
+  for (const scene of document.scenes) {
+    for (const rule of scene.rules) {
+      for (const action of rule.do) {
+        if (action.kind === "set-variable" && action.value === true && action.name) return action.name;
+      }
+    }
+  }
+  return document.variables.find((variable) => variable.type === "boolean" && /win|won|complete/i.test(variable.name))?.name ?? "won";
+}
+
+/** Builds a short objective that talks only in visible AI HUD labels. */
+export function buildAiPlayObjective(input: ObjectiveInput): string {
+  const { document } = input;
+  const scene = sceneFor(document, input.sceneId);
+  const coinTotal = coinCount(document, input.sceneId);
+  const coinsLabel = hudLabel(document, "coins", "COINS");
+  const winName = winVariable(document);
+  // Phrased as a fixed-input verification, not a goal to chase. A goal-shaped
+  // objective makes Kane restart and retry a broken scene until the step cap,
+  // instead of letting the closing assertion report the failure.
+  const goal = input.goal?.trim()
+    || `Run the scene once from its start state. Do not press RESTART or retry.`;
+  const player = scene?.objects.find((object) => object.tags.includes("player"));
+  const targets = scene?.objects.filter((object) =>
+    object.tags.includes("coin") || object.tags.includes("goal"),
+  ) ?? [];
+  // Small test scenes need one movement, not a jump loop; each jump can cost
+  // 15–25 seconds of Kane agent time.
+  const compact = Boolean(player && targets.length > 0 && targets.every((target) =>
+    Math.abs(target.transform.x - player.transform.x) < 520
+    && Math.abs(target.transform.y - player.transform.y) < 260,
+  ));
+  const movement = compact
+    ? `Click "MOVE RIGHT" once.`
+    : `Click "MOVE RIGHT" once. Click "JUMP" only when the player is on the ground, up to 6 times.`;
+
+  // Vague verbs do not persist anything: the documented `store ... as` form is
+  // what lands these values in run_end.final_state.
+  const extract = coinTotal > 0
+    ? `Store the STATUS value from the AI state panel as 'status', store the ${coinsLabel} value as 'coins', store the LAST ERROR value as 'last_error'.`
+    : `Store the STATUS value from the AI state panel as 'status', store the ${winName} value as 'won', store the LAST ERROR value as 'last_error'.`;
+  const outcome = coinTotal > 0
+    ? `Assert the stored status is "WON", the stored coins is "${coinTotal}" and the stored last_error is "none".`
+    : `Assert the stored status is "WON", the stored won is "true" and the stored last_error is "none".`;
+  return [
+    `${goal} ${movement} Wait 3 seconds.`,
+    extract,
+    outcome,
+  ].join("\n");
+}
+
+/** The objective Kane reads when validating the player and AI HUD itself. */
+export function buildPlayerQaObjective(document: KaneProjectDocument, seed = 1234): string {
+  const coinsLabel = hudLabel(document, "coins", "COINS");
+  return [
+    `Open the Clockwork player for ${document.name} at seed ${seed}.`,
+    `Verify the page has a visible "AI PLAY" panel and a "GAME STATE" panel.`,
+    `Verify the buttons "MOVE LEFT", "MOVE RIGHT", "JUMP", "ACTION", "STOP" and "RESTART" are visible.`,
+    `Click "MOVE RIGHT" once and verify its label changes to include ON.`,
+    `Click "JUMP" once and verify the player remains interactive and STATUS is still a visible value.`,
+    `Click "STOP" and store the text next to "STATUS" as "status".`,
+    `Store the text next to "${coinsLabel}" as "coins".`,
+    `Store the text next to "LAST ERROR" as "last_error".`,
+    `Assert last_error is "none".`,
+  ].join("\n");
+}
+
+export function objectivePreview(document: KaneProjectDocument): string {
+  return buildAiPlayObjective({ document });
+}

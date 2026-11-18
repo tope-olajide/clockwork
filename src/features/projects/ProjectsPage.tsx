@@ -328,7 +328,7 @@ export function ProjectsPage() {
               {activeFilterCount(filters) > 0 && <span className="chip coral">{activeFilterCount(filters)}</span>}
               <ChevronDown size={13} />
             </Button>
-            <Button variant="primary" icon={<Plus size={14} />} onClick={() => setDialogOpen(true)} disabled={busy}>
+            <Button variant="primary" icon={<Plus size={14} />} onClick={() => setDialogOpen(true)} disabled={busy} data-testid="project-new">
               New project
             </Button>
           </div>
@@ -414,7 +414,7 @@ export function ProjectsPage() {
               <strong>Create your first project</strong>
               <p>Start blank, pick a playable template, or import a Clockwork file. You can change everything later.</p>
               <div className="empty-actions">
-                <Button variant="primary" onClick={() => setDialogOpen(true)} icon={<Plus size={14} />}>
+                <Button variant="primary" onClick={() => setDialogOpen(true)} icon={<Plus size={14} />} data-testid="project-new-empty">
                   New project
                 </Button>
               </div>

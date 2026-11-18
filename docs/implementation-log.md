@@ -382,3 +382,16 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Added `scripts/check-repo.mjs` and `pnpm check:repo`: rejects `reference/`, stray root Markdown, tracked `dist/`, generated `public/player/clockwork.js`, and missing ledgers/slice log entries. It passes after this entry is present.
 - README rewritten for the actual product: quick start, configuration, storage, architecture, scope and document links.
 - Acceptance is deferred at the user's request: no 1366/1440/1920 visual audit, keyboard-only pass, cold-start 5-minute run, or Kane run has been performed. `docs/known-issues.md` records the gap.
+
+## Slice 10 — Kane engine QA and AI Play (verification in progress)
+
+- Date: 2026-11-17
+- Commit: see this change set.
+- `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json`: pass.
+- Added the Kane runner, NDJSON protocol, objective builders, `/api/kane` routes, AI Play HUD/panel/controller, deterministic embedded-coin repair, agent `verify_with_kane` / `run_ai_play` tools, and the Kane setup/AI Play docs.
+- Real K1 editor run passed with `object_x: "160"` after two moves, two undos and a reload (303.6 s, 62.79 credits). The run exposed and fixed two UX/accessibility defects: selecting an object at 1366 px did not open the inspector, and hierarchy rows were buttons containing a nested Delete button; rows are now labelled `treeitem`s and selection opens the inspector.
+- Real AI Play on the full Neon Runner demo did not finish inside practical time/credit limits; Kane's per-step latency plus the embedded-coin wait exceeded the cap. A reduced one-coin real-Kane smoke (`scripts/kane/ai-play-smoke.ts`) produced a real failed attempt, a deterministic `Move Core A out of Ground` repair, and a real passing retry with `COINS: "1"`, `STATUS: "WON"`.
+- AI Play objectives now use a fixed settle window instead of polling for `WON/LOST`, and compact scenes skip the jump loop. The runner accepts `KANE_TIMEOUT_SECONDS` / `KANE_MAX_STEPS`; the API now loads `.env.local` and supports `LLM_MODEL` / `LLM_BASE_URL` / `LLM_API_KEY` as an OpenAI-compatible fallback.
+- Full Neon Runner AI Play now passes with real Kane: attempt 1 failed in 85.0 s (embedded coin, `COINS: 2`), the deterministic fix applied one undoable `object.update`, and attempt 2 passed in 66.6 s with `STATUS: "WON"`, `COINS: "3"`, `LAST_ERROR: "none"` — 151.6 s total, both with evidence packs.
+- The AI Play ceiling was raised from 50 s / 6 steps to 140 s / 8 steps after real runs were killed at ~55 s mid-assertion and reported as a 0 s cancel; timeouts now report real elapsed time and "verdict is unknown". The objective was rephrased from a goal ("Collect all 3 coins…") to a fixed-input verification ("Run the scene once… Do not press RESTART"), which stopped Kane from restarting a broken scene instead of letting the assertion fail.
+- Honest gaps: K2–K4, the independent negative control, and the agent `KaneRunCard` handshake were not executed with real Kane in this pass; `docs/kane-proof.md` records the evidence and limitations.

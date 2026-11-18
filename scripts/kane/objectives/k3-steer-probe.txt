@@ -1,0 +1,1 @@
+Open the Neon Runner demo project with the demoReset query parameter, then press Play. In Play, click the stage well to the right of the player so the player runs and starts collecting coins. Wait until the player stops, then click the stage further right again. Report whether the player moved and whether the COINS counter went above 0.
