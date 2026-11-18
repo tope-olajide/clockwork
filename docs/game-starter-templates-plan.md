@@ -1,6 +1,6 @@
 # Built-in 2D game starter templates — vertical slice plan
 
-- **Status:** Slices A and B are implemented but their browser acceptance gates remain open. Space Shooter's clean automated scoring proof is still open; the latest Kane attempt stopped before any Space input. Slice B's asteroid splitting/scoring, Space Invaders gameplay/editor effects, win/loss, and console cleanliness remain unverified. Slice C's runtime behaviors, three documents, picker registration and regression cases are now authored, but no validation has been run; its gate remains open. Per the user's request, defer all testing until all twelve game templates are implemented. Slices D–G are not started.
+- **Status:** Slices A–D are implemented, but their acceptance gates remain open. Eight of twelve game documents are registered. Slice C/D regression cases are authored; no tests, builds, typechecks or browser runs have been executed. Per the user's request, defer all validation until all twelve game templates are implemented. Slices E–G remain.
 - **Branch:** `feat/game-starter-templates` (created from `main` at `ecf3f4a`).
 - **Date:** 2026-11-18.
 - **Goal:** twelve editable, genuinely playable starter projects built from the engine's own document, behavior, rule and runtime systems, selectable from the project-creation flow.
@@ -230,9 +230,10 @@ Each slice is end-to-end: document data → behaviors → picker/preview → edi
 
 ### Slice D — Platformer: Platform Jumper, Endless Runner
 
-- Add `duck`, spawner ramping, hazard damage/lives, moving platform support (patrol on a kinematic body; document carrying as a limitation if it is not added).
-- Author both templates with a short level, five coins, spikes, exit, death zone, obstacles and coins.
-- Tests: jump only when grounded, platform landing, coin count, hazard lives/respawn, exit win, duck collision height, bounded obstacle cleanup, scripted win/loss/reset.
+- **Implementation status (2026-11-18):** `duck` collider/visual scaling and elapsed-time spawner interval ramping are implemented. Platform Jumper and Endless Runner documents, catalog/picker integration and focused regression cases are authored. No validation has been run, as requested. The slice gate remains open.
+- Author both templates with a short level, five cores, spikes, an exit gated by all five cores, a death zone, bounded obstacle/core spawners and lives.
+- Moving platforms patrol as kinematic one-way platforms; the current physics does not carry the player along with them.
+- Tests: jump only when grounded, platform landing, core count, hazard lives/respawn, exit win, duck collider height, bounded obstacle cleanup, scripted win/loss/reset.
 - Gate: same checklist; change jump force, gravity and obstacle interval and observe each effect.
 
 ### Slice E — Top-down survival: Arena Survival, Falling Objects, Maze Escape

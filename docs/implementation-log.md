@@ -446,3 +446,12 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Validation: **not run by request.** No tests, typecheck, build, repo check or browser/Kane session was started.
 - Acceptance: implementation is authored but Slice C's automated and browser gates remain open. Slice A/B browser gates remain open too; no feature was added to `features.md`.
 - Known limitations: Ping Pong AI beatability, ball tunneling/sticking under real play, Flappy gap reachability and all editor-to-Play effects remain unverified. Complete validation after all twelve templates are implemented.
+
+## Slice D — Platform Jumper and Endless Runner
+
+- Date: 2026-11-18
+- Implemented: added the `duck` behavior (held action shrinks the collision height while preserving the player's feet position) and elapsed-time spawner interval decay with a configurable minimum; added Platform Jumper's five-core relay, hazards, respawning lives and patrol-driven moving platform; added Endless Runner's jump/duck player, scrolling obstacle and bonus-core prefabs, pass scoring and bounded accelerating spawners.
+- Integration: registered both origins in the schema/catalog/build route, labels, summaries and project covers. Corrected the missing `ping-pong`, `brick-breaker` and `flappy-flyer` schema origins from Slice C. Added Slice D regression-test source and updated starter gravity expectations.
+- Validation: **not run by request.** No tests, typecheck, build, repo check or browser/Kane session was started.
+- Acceptance: implementation is authored but Slices A–D validation gates remain open; four templates remain. No feature was added to `features.md`.
+- Known limitation: kinematic moving platforms do not carry the player. Gameplay, editor-to-Play tuning, reset behavior and console cleanliness remain unverified.

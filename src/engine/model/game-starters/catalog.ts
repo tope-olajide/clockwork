@@ -7,6 +7,8 @@ export const GAME_STARTER_IDS = [
   "ping-pong",
   "brick-breaker",
   "flappy-flyer",
+  "platform-jumper",
+  "endless-runner",
 ] as const;
 
 export type GameStarterId = (typeof GAME_STARTER_IDS)[number];
@@ -68,6 +70,22 @@ export const GAME_STARTERS: GameStarterSpec[] = [
     blurb: "Flap through moving gates and survive as long as you can.",
     mechanics: "Space or click to flap. Pass each gate to score; one collision ends the run.",
     accent: "#ffd47c",
+  },
+  {
+    id: "platform-jumper",
+    name: "Platform Jumper",
+    category: "Platformer",
+    blurb: "Collect five cores, dodge spikes, and reach the relay.",
+    mechanics: "A / D move, Space jump. Five collectibles, lives, hazards and a moving platform.",
+    accent: "#a9b4ff",
+  },
+  {
+    id: "endless-runner",
+    name: "Endless Runner",
+    category: "Arcade",
+    blurb: "Jump or duck through an accelerating obstacle stream.",
+    mechanics: "Space jump, Down duck. Pass obstacles and collect bonus cores.",
+    accent: "#ff856f",
   },
 ];
 

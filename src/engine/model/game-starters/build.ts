@@ -6,6 +6,8 @@ import { asteroidFieldTemplate } from "./asteroid-field";
 import { pingPongTemplate } from "./ping-pong";
 import { brickBreakerTemplate } from "./brick-breaker";
 import { flappyFlyerTemplate } from "./flappy-flyer";
+import { platformJumperTemplate } from "./platform-jumper";
+import { endlessRunnerTemplate } from "./endless-runner";
 
 export function createGameStarterDocument(id: GameStarterId, name: string): ProjectDocument {
   switch (id) {
@@ -21,5 +23,9 @@ export function createGameStarterDocument(id: GameStarterId, name: string): Proj
       return brickBreakerTemplate(name);
     case "flappy-flyer":
       return flappyFlyerTemplate(name);
+    case "platform-jumper":
+      return platformJumperTemplate(name);
+    case "endless-runner":
+      return endlessRunnerTemplate(name);
   }
 }

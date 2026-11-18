@@ -25,7 +25,17 @@ test("every starter is a valid primitive-only document", () => {
     const parsed = projectDocumentSchema.parse(createGameStarterDocument(id, `Test ${id}`));
     assert.equal(parsed.templateOrigin, id);
     assert.ok(parsed.scenes.some((scene) => scene.id === parsed.startSceneId));
-    assert.equal(parsed.settings.gravity.y, id === "flappy-flyer" ? 720 : 0);
+    const expectedGravity = {
+      "space-shooter": 0,
+      "space-invaders": 0,
+      "asteroid-field": 0,
+      "ping-pong": 0,
+      "brick-breaker": 0,
+      "flappy-flyer": 720,
+      "platform-jumper": 980,
+      "endless-runner": 1200,
+    } as const;
+    assert.equal(parsed.settings.gravity.y, expectedGravity[id]);
 
     for (const scene of parsed.scenes) {
       for (const object of scene.objects) {

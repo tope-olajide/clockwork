@@ -609,6 +609,8 @@ export function createProjectFromTemplate(template: Exclude<TemplateOrigin, "bri
     case "ping-pong":
     case "brick-breaker":
     case "flappy-flyer":
+    case "platform-jumper":
+    case "endless-runner":
       return createGameStarterDocument(template, name);
     case "platformer":
       return platformerTemplate(name);
@@ -638,6 +640,10 @@ export function templateSummary(template: TemplateId): { label: string; blurb: s
       return { label: "Brick Breaker", blurb: "Clear the brick wall before you run out of ships.", accent: "#ff7d9a" };
     case "flappy-flyer":
       return { label: "Flappy Flyer", blurb: "Flap through moving gates and survive as long as you can.", accent: "#ffd47c" };
+    case "platform-jumper":
+      return { label: "Platform Jumper", blurb: "Collect five cores, dodge spikes, and reach the relay.", accent: "#a9b4ff" };
+    case "endless-runner":
+      return { label: "Endless Runner", blurb: "Jump or duck through an accelerating obstacle stream.", accent: "#ff856f" };
     case "platformer":
       return { label: "Platformer", blurb: "Run, jump, collect, reach a goal.", accent: coral };
     case "topdown":

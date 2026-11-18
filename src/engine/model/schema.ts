@@ -11,6 +11,11 @@ export const TEMPLATE_ORIGINS = [
   "space-shooter",
   "space-invaders",
   "asteroid-field",
+  "platform-jumper",
+  "endless-runner",
+  "ping-pong",
+  "brick-breaker",
+  "flappy-flyer",
   "brief",
   "import",
 ] as const;
@@ -126,6 +131,7 @@ export const behaviorTypeSchema = z.enum([
   "paddle",
   "ai-paddle",
   "flap",
+  "duck",
 ]);
 
 export const behaviorInstanceSchema = z.object({

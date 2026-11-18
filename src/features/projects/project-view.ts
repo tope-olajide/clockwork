@@ -19,6 +19,8 @@ export const TEMPLATE_LABELS: Record<TemplateOrigin, string> = {
   "ping-pong": "Ping Pong",
   "brick-breaker": "Brick Breaker",
   "flappy-flyer": "Flappy Flyer",
+  "platform-jumper": "Platform Jumper",
+  "endless-runner": "Endless Runner",
   platformer: "Platformer",
   topdown: "Top-down",
   puzzle: "Puzzle",

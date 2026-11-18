@@ -109,6 +109,8 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
       { key: "maxX", label: "Max X", type: "number", default: 1280, unit: "px" },
       { key: "minY", label: "Min Y", type: "number", default: 0, unit: "px" },
       { key: "maxY", label: "Max Y", type: "number", default: 0, unit: "px" },
+      { key: "intervalDecayPerSecond", label: "Interval decay", type: "number", default: 0, min: 0, unit: "ms/s", help: "Reduce the interval over elapsed time." },
+      { key: "minIntervalMs", label: "Minimum interval", type: "number", default: 250, min: 16, unit: "ms" },
       { key: "limit", label: "Live limit", type: "number", default: 20, min: 1, step: 1, help: "Cap on simultaneous objects from this prefab." },
     ],
   },
@@ -294,6 +296,16 @@ export const BEHAVIOR_CATALOG: BehaviorSpec[] = [
       { key: "floor", label: "Floor", type: "number", default: 720, min: 0, unit: "px" },
       { key: "loseVariable", label: "Loss variable", type: "string", default: "lost" },
       { key: "hazardTags", label: "Hazard tags", type: "string", default: "hazard,pipe,ground" },
+    ],
+  },
+  {
+    type: "duck",
+    label: "Duck",
+    description: "Shorten a moving character's collider and visual while the configured action is held.",
+    params: [
+      { key: "trigger", label: "Duck trigger", type: "string", default: "down", help: "down, action, or jump." },
+      { key: "bodyHeight", label: "Duck collider height", type: "number", default: 24, min: 1, unit: "px" },
+      { key: "visualScaleY", label: "Duck visual scale Y", type: "number", default: 0.65, min: 0.1, max: 1, step: 0.05 },
     ],
   },
 ];

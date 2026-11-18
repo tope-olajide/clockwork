@@ -445,6 +445,7 @@ export class Runtime {
       this.updateAiPaddle(object, deltaMs);
       this.updateBall(object, input, deltaMs);
       this.updateFlap(object, input);
+      this.updateDuck(object, input);
     }
     this.updateFormations();
   }
@@ -770,6 +771,35 @@ export class Runtime {
     }
   }
 
+  private updateDuck(object: RuntimeObject, input: InputFrame): void {
+    const behavior = behaviorOf(object.source, "duck");
+    if (!behavior) return;
+    const params = behavior.params;
+    const baseHeightKey = `${behavior.id}:base-height`;
+    const baseScaleKey = `${behavior.id}:base-scale`;
+    const stateKey = `${behavior.id}:ducking`;
+    if (object.behaviorTimers[baseHeightKey] === undefined) {
+      object.behaviorTimers[baseHeightKey] = object.source.body?.height ?? bodyDims(object.source).h;
+      object.behaviorTimers[baseScaleKey] = object.scaleY;
+    }
+
+    const trigger = stringParam(params, "trigger", "down");
+    const ducking = trigger === "down" ? input.down : trigger === "action" ? input.action : input.jump;
+    const wasDucking = object.behaviorTimers[stateKey] === 1;
+    if (ducking === wasDucking) return;
+
+    const baseHeight = object.behaviorTimers[baseHeightKey]!;
+    const duckHeight = Math.min(baseHeight, Math.max(1, numberParam(params, "bodyHeight", baseHeight / 2)));
+    if (object.source.body) {
+      object.y += ducking ? (baseHeight - duckHeight) / 2 : -(baseHeight - duckHeight) / 2;
+      object.source.body.height = ducking ? duckHeight : baseHeight;
+    }
+    const baseScale = object.behaviorTimers[baseScaleKey]!;
+    const visualScale = Math.max(0.1, Math.min(1, numberParam(params, "visualScaleY", 0.65)));
+    object.scaleY = ducking ? baseScale * visualScale : baseScale;
+    object.behaviorTimers[stateKey] = ducking ? 1 : 0;
+  }
+
   private updateRotateThrust(object: RuntimeObject, input: InputFrame): void {
     const behavior = behaviorOf(object.source, "rotate-thrust");
     if (!behavior) return;
@@ -973,7 +1003,10 @@ export class Runtime {
     for (const spawner of behaviorsOf(object.source, "spawner")) {
       const params = spawner.params;
       if (this.elapsed * 1000 < numberParam(params, "startDelayMs", 0)) continue;
-      const interval = Math.max(16, numberParam(params, "intervalMs", 1000));
+      const baseInterval = Math.max(16, numberParam(params, "intervalMs", 1000));
+      const decay = Math.max(0, numberParam(params, "intervalDecayPerSecond", 0));
+      const minimum = decay > 0 ? Math.max(16, numberParam(params, "minIntervalMs", 250)) : 16;
+      const interval = Math.max(minimum, baseInterval - this.elapsed * decay);
       const timer = (object.behaviorTimers[spawner.id] ?? 0) + FIXED_DT * 1000;
       if (timer < interval) {
         object.behaviorTimers[spawner.id] = timer;

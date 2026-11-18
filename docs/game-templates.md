@@ -1,6 +1,6 @@
 # Built-in game starter templates
 
-This reference is being filled in as starter implementations are added. Slice C is documented below. Slice A/B gameplay gates and all Slice C validation are still open; do not treat these implementations as verified.
+This reference is being filled in as starter implementations are added. Slices C and D are documented here. Slice A/B browser gates and all Slice C/D validation remain open; do not treat these implementations as verified.
 
 ## Ping Pong
 
@@ -31,3 +31,24 @@ This reference is being filled in as starter implementations are added. Slice C 
 - **Variables/HUD:** `score`; this is an endless score challenge, so no win threshold is authored.
 - **Editor tuning:** change flap `impulse`, `gravityScale` and `maxFallSpeed`; edit the spawner's `intervalMs`/height range and gate mover speed/gap size.
 - **Reset:** R clears the score, removes spawned gates and resets the flyer and spawn timer.
+
+## Platform Jumper
+
+- **Controls:** A/D or Left/Right moves; Space or W jumps; R restarts.
+- **Goal:** collect all five cores, then touch the relay. Spikes and the lower death zone consume lives; the player respawns while lives remain.
+- **Objects:** three ground sections, one-way ledges, a patrol-driven kinematic platform, two spike patches, five cores, a gated relay, and a death zone.
+- **Runtime:** `platformer-controller` handles movement and grounded jumping; `patrol` moves the kinematic platform; `collectible` increments `coins`; `health` applies invulnerability, life loss and respawn.
+- **Variables/HUD:** `coins`, `lives`, `health`, `won`, and `lost`.
+- **Editor tuning:** change player speed/jump, project gravity, platform patrol distance/speed, or health invulnerability.
+- **Limitation:** kinematic moving platforms do not carry the player.
+- **Reset:** R restores three lives, clears cores and returns the player to the starting position.
+
+## Endless Runner
+
+- **Controls:** Space or W jumps; Down or S ducks; R restarts.
+- **Goal:** survive an accelerating stream of cones and collect bonus cores. Each passed cone scores one point; a bonus core adds five.
+- **Objects:** fixed-lane runner, track, obstacle/core prefabs, initial examples, and a director with bounded live counts.
+- **Runtime:** `platformer-controller` provides jumping, `duck` shortens the collider and visual while Down is held, `spawner` ramps obstacle frequency to a minimum interval, `mover` scrolls objects and scores passed cones, and `health` handles three lives and respawn.
+- **Variables/HUD:** `score`, `lives`, `health`, and `lost`.
+- **Editor tuning:** change jump strength, gravity, duck collider height, obstacle interval/decay/floor, and prefab speed/lifetime.
+- **Reset:** R clears score/lives and restores the initial obstacle/core examples and spawn timers.
