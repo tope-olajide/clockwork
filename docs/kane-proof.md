@@ -106,7 +106,7 @@ Cost and time notes from this pass:
 | K1 editor smoke | **passed** | real run above |
 | K5 AI Play closed loop | **passed** | full Neon Runner fail → fix → pass (151.6 s first pass; rerun with extraction 81.5 s + 81.1 s, above) |
 | K2 agent double jump | **failed** (environment, 3 attempts) | real runs, see below |
-| K3 agent repair | **failed** (Play input, after the agent path worked) | real run, see below |
+| K3 agent repair | **passed** | K3a repair+win and K3b undo/redo, both real single flows |
 | K4 agent ↔ Kane handshake | **passed** | in-app card + terminal objective, both real (Bar 3) |
 
 ### K2 — agent double jump (real run, failed)
@@ -115,7 +115,7 @@ Cost and time notes from this pass:
 - Result: `run_end.status: "failed"`, 265.7 s, 47.56 credits. Kane opened Neon Runner, selected Player, opened the agent, sent "Give the player a double jump", hit `No model` / "Build/Plan require a tool-capable model", retried, and both sends ended in a fetch failure.
 - Kane's summary: the panel showed "No model" and the run proceeded anyway; both attempts ended with a fetch failure rather than applying the change. Its recommendation: block the request when the panel shows "No model".
 - This is a **real defect caught by Kane**, not an environment crash: the app disables the Build/Plan tabs but still allows the request path to proceed, and a failed provider stream surfaces as a raw fetch failure instead of an actionable "connect a tool-capable model" message. The first K2 attempt also hit the same `environment_issue/platform_failure` (browser crashed during screenshot) seen in K1, and passed that point on retry after ~800 MB of memory was freed.
-- Consequence: K2's agent behaviour cannot be verified until a tool-capable model is configured in the app; K3 depends on the same capability, so it was not run rather than spending credits on a known block.
+- Consequence: at that point K2's agent behaviour could not be verified until a tool-capable model was configured in the app, and K3 depended on the same capability. Both blockers are now gone: the env provider fix landed and K3a/K3b pass with it.
 
 #### Follow-up: the no-model defect is fixed
 
@@ -180,7 +180,19 @@ One flow did all of it: opened `?demoReset=1`, switched the agent to Build, sent
 
 Why it counts as a real pass rather than a lucky one: on the untouched demo the same click steering stops at 2 coins with `won: false` (local CDP runs and the steer probe both measured that), so `COINS 3` plus the win message can only happen if the buried `Core A` was moved into reach during that session. And `command_rejected: false` is the direct confirmation that the command-reference fix removed the rejected-edit failure that failed `k3d`.
 
-`k3b-undo-redo.txt` is written but not run against Kane; undo/redo after an applied repair is verified locally (one undo entry, Undo enabled), not by a Kane run.
+### K3b — undo/redo in one flow (real pass, single flow, 2026-11-18)
+
+`k3b-undo-redo.ndjson` (`scripts/kane/objectives/k3b-undo-redo.txt`): **`run_end.status: "passed"`**, 218.9 s, 59.29 credits, **`bifurcated: false`, `total_runs: 1`**, exit 0, no bug or assertion events.
+
+One session did the whole sequence: opened `?demo=1`, opened the agent drawer, switched to Build, sent "Move the player object down by 40 units.", read the status bar, pressed Undo once, pressed Redo once. The counters in `final_state` match the assertion at every step:
+
+| Step | Undo | Redo |
+|---|---|---|
+| Applied the agent's change | `1` | `0` |
+| After Undo | `0` | `1` |
+| After Redo | `1` | `0` |
+
+This closes the gap `k3e` left open. `k3e` failed the undo assertion only because Kane split the objective into two flows, and a fresh flow is a re-seeded project with no history; here the edit, the undo and the redo all happened in the one flow that owns that history, so the counters are causally connected rather than coincidental.
 
 **Kane steerability probe** (`scripts/kane/objectives/k3-steer-probe.txt`, 199.4 s, 33.1 credits): `run_end.status: "passed"`, `final_state { player_moved: "true", coins_counter: "2" }`, summary "Clicked to the right of the player … The player moved, and the COINS counter reached 2". Click steering is therefore the input path K3 should use; `k3-agent-repair.txt` was rewritten to click the stage instead of pressing keys.
 - An earlier K3 attempt was killed by a 320 s wrapper mid-repair (no `run_end`, no verdict) and is not evidence either way.
@@ -246,12 +258,11 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 ## Limitations
 
 - The full Neon Runner AI Play loop is verified as fail → fix → pass in 151.6 s (85.0 s + 66.6 s) with the assert-only objective. With the required `store ... as` extraction the passing attempt measured 86.8 s, so the same loop is ~172 s — only 8 s of headroom against the 180 s budget. The saved-test replay path is the margin, and it is still unmeasured.
-- K2 was not executed successfully against real Kane: three runs died on "browser target stopped running during screenshot capture" after selecting Player. K4 and K5 are now real (above); K3b (undo/redo) is still unrun.
+- K2 was not executed successfully against real Kane: three runs died on "browser target stopped running during screenshot capture" after selecting Player. K3a, K3b, K4 and K5 are real passes (above); K2 is the one objective still unproven.
 - K5's failure record does not name the inaccessible coin and stored no values (`final_state: {}`); the embedded `Core A` was identified by the product's deterministic repair, and the passing attempt's `coins: "3"` proves the move was required.
-- K3's undo/redo half is not verified by Kane: `k3b-undo-redo.txt` exists but was not run (credit cost after the 60.1-credit K3a pass). The local check — a repair leaves exactly one undo entry and Undo is enabled — is the only evidence for it.
 - The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
 - The independent negative control (unreachable goal rather than the seeded coin) has not been run.
 - The full Neon Runner loop uses the deterministic embedded-coin repair, not a model-driven diagnosis. The agent path is exercised by the reduced-fixture smoke and the fixture stream, not by an LLM turn on the demo.
 - Evidence packs and run NDJSON stay untracked under `.data/` and `.testmuai/` as intended.
-- The toolbar "Ask agent" button did not open the drawer under a real CDP mouse click at 1366×768 during K4; Ctrl+J did. Not investigated further, so it is recorded as an observation rather than a confirmed defect.
+- The toolbar "Ask agent" button does not open the drawer on a plain click: the whole button is a `DropdownMenu` trigger (`aria-haspopup="menu"`), so the click opens the "Game Director" menu (`Ask about this scene`, `Plan a change`, `Explain this scene`, `Open chat`) and the drawer opens only after choosing `Open chat`, in whatever mode was last active (Ask in the probe). The plan asks for a split button whose main click opens the drawer in Build with the selection attached and whose chevron opens the menu. Reproduced at 1366×768 (`.data/ask-agent-menu.png`); it is a divergence from the plan's toolbar spec, not a dead control.
 - In-app QA needed `KANE_TIMEOUT_SECONDS=300` in this environment. The 140 s budget that fits AI Play does not fit a 12-step engine-QA run; the default remains 180 s in code.
