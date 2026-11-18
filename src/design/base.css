@@ -477,6 +477,23 @@ a {
   gap: 4px;
 }
 
+.split-button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.split-button > .button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right-width: 0;
+}
+
+.split-button > .button:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding: 0 5px;
+}
+
 .toolbar-divider {
   width: 1px;
   height: 20px;

@@ -615,13 +615,28 @@ export function EditorPage() {
             </Menu>
             <div className="toolbar-spacer" />
             {savePill}
-            <Menu trigger={<Button variant="violet" size="sm" data-testid="agent-open"><Sparkles size={13} /><span className="ask-agent-label">Ask agent</span><ChevronDown size={11} /></Button>}>
-              <MenuLabel>Game Director</MenuLabel>
-              <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], "ask"); else { agent.setMode("ask"); setAgentOpen(true); } }}>Ask about this scene</MenuItem>
-              <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], agent.canBuildPlan ? "plan" : "ask"); else { agent.setMode(agent.canBuildPlan ? "plan" : "ask"); setAgentOpen(true); } }} disabled={!agent.canBuildPlan}>Plan a change</MenuItem>
-              <MenuItem onSelect={() => { setLockedSelectionId(null); agent.setMode("ask"); setAgentOpen(true); }}>Explain this scene</MenuItem>
-              <MenuItem onSelect={() => setAgentOpen(true)} shortcut="⌘J">Open chat</MenuItem>
-            </Menu>
+            <div className="split-button" role="group" aria-label="Ask agent">
+              <Button
+                variant="violet"
+                size="sm"
+                data-testid="agent-open"
+                aria-label="Ask agent"
+                onClick={() => {
+                  const nextMode = agent.canBuildPlan ? "build" : "ask";
+                  if (selection[0]) askAgentAbout(selection[0], nextMode);
+                  else { setLockedSelectionId(null); agent.setMode(nextMode); setAgentOpen(true); }
+                }}
+              >
+                <Sparkles size={13} /><span className="ask-agent-label">Ask agent</span>
+              </Button>
+              <Menu trigger={<Button variant="violet" size="sm" data-testid="agent-menu" aria-label="More agent actions"><ChevronDown size={11} /></Button>}>
+                <MenuLabel>Game Director</MenuLabel>
+                <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], "ask"); else { agent.setMode("ask"); setAgentOpen(true); } }}>Ask about this scene</MenuItem>
+                <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], agent.canBuildPlan ? "plan" : "ask"); else { agent.setMode(agent.canBuildPlan ? "plan" : "ask"); setAgentOpen(true); } }} disabled={!agent.canBuildPlan}>Plan a change</MenuItem>
+                <MenuItem onSelect={() => { setLockedSelectionId(null); agent.setMode("ask"); setAgentOpen(true); }}>Explain this scene</MenuItem>
+                <MenuItem onSelect={() => setAgentOpen(true)} shortcut="⌘J">Open chat</MenuItem>
+              </Menu>
+            </div>
             <Button variant="ghost" size="sm" icon={<Play size={13} />} onClick={() => navigate(`/play/${current.id}`)} data-testid="toolbar-play">Play</Button>
             <Button variant="violet" size="sm" icon={<Sparkles size={13} />} onClick={openAiPlay} data-testid="toolbar-ai-play" aria-label="AI Play with Kane">AI Play</Button>
             <Menu trigger={<Button variant="ghost" size="sm">View <ChevronDown size={11} /></Button>}>
