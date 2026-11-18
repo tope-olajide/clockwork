@@ -308,6 +308,9 @@ function ToolCardView({ name, args, status, result }: { name: string; args: unkn
             <span className={`chip ${result.data.status === "passed" ? "success" : "danger"}`} data-testid="verdict-badge">{String(result.data.status ?? "unknown").toUpperCase()}</span>
             <strong>{name === "run_ai_play" ? "KANE PLAY" : "ENGINE QA"}</strong>
             <span>{result.data.steps?.length ?? 0} steps</span>
+            {typeof result.data.durationMs === "number" && result.data.durationMs > 0 && (
+              <span data-testid="kane-run-duration">{(result.data.durationMs / 1000).toFixed(1)}s</span>
+            )}
           </div>
           <p>{String(result.data.summary ?? "")}</p>
           {result.data.finalState && <div className="kane-run-state">{Object.entries(result.data.finalState as Record<string, unknown>).map(([key, value]) => `${key.toUpperCase()}: ${String(value)}`).join(" · ")}</div>}

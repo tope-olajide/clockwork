@@ -277,7 +277,7 @@ export const KANE_TOOL_DEFINITIONS: ToolDefinition[] = [
     type: "function",
     function: {
       name: "verify_with_kane",
-      description: "Run Kane CLI against an immutable snapshot of this project in a real browser and return the verdict, steps and evidence. Use for engine QA; never claim a pass without run_end.status passed.",
+      description: "Run Kane CLI against an immutable snapshot of this project in a real browser and return the verdict, steps, duration and evidence. Use for engine QA; never claim a pass without run_end.status passed. Keep the objective to what the user asked (load the level, collect a coin, reach the goal) and do not add console-error or bundle checks that make the run time out.",
       parameters: {
         type: "object",
         properties: {

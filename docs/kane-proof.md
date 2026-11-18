@@ -6,7 +6,7 @@ This file records real Kane runs only. Fixture output is labelled as fixture out
 
 | | |
 |---|---|
-| Date | 2026-11-17 |
+| Date | 2026-11-17, K4/K5 reruns 2026-11-18 |
 | Branch | `verify/kane-e2e` |
 | Kane CLI | 0.10.5, signed in as `davidtheatomicshift` |
 | Browser | local Chrome, 1366×768 viewport |
@@ -104,10 +104,10 @@ Cost and time notes from this pass:
 | Objective | Verdict | Notes |
 |---|---|---|
 | K1 editor smoke | **passed** | real run above |
-| K5 AI Play closed loop | **passed** | full Neon Runner fail → fix → pass, 151.6 s (above) |
+| K5 AI Play closed loop | **passed** | full Neon Runner fail → fix → pass (151.6 s first pass; rerun with extraction 81.5 s + 81.1 s, above) |
 | K2 agent double jump | **failed** (environment, 3 attempts) | real runs, see below |
 | K3 agent repair | **failed** (Play input, after the agent path worked) | real run, see below |
-| K4 agent ↔ Kane handshake | not run | depends on a stable K2/K3 |
+| K4 agent ↔ Kane handshake | **passed** | in-app card + terminal objective, both real (Bar 3) |
 
 ### K2 — agent double jump (real run, failed)
 
@@ -187,11 +187,47 @@ Why it counts as a real pass rather than a lucky one: on the untouched demo the 
 
 K1 exposed two real UI/accessibility defects (collapsed inspector; unsafe hierarchy-row semantics), both fixed before the passing run. That count is what the evidence supports, not a cap: engine QA runs with `--bug-detection continue`, so any further confirmed defect is recorded here too. The same evidence pack also contains one `environment_issue/platform_failure` (browser target crashed during a screenshot) which is not a product bug and is not counted. No product bug is claimed from the AI Play fixture.
 
+### K5 — full loop rerun with the extraction objective (real pass, 2026-11-18)
+
+Driven through the product UI (`?demoReset=1` → Neon Runner → AI Play → consent → auto-fix → retry), 1366×768, Kane CLI 0.10.5. Both attempts are archived in `.testmuai/runs/`.
+
+| Attempt | `run_end.status` | Duration | Credits | Evidence |
+|---|---|---|---|---|
+| 1 (seed intact) | **failed** | 81.5 s | 22.72 | `.testmuai/runs/k5-attempt1.ndjson`, pack `53593168-30b5-480c-a381-3cfef87d9141` |
+| 2 (after auto-fix) | **passed** | 81.1 s | 23.54 | `.testmuai/runs/k5-attempt2.ndjson`, pack `89c07452-7819-4d7b-82f8-edb4f071c54d` |
+
+- Attempt 1: `result_code 710`, `reason_code: "assertion_error.final_verification"`, `reason: "Final verification failed: \"The stored status is \"WON\", the stored coins is \"3\" and the stored last_error is \"none\".\""`, `final_state: {}`. The panel showed `KANE FAILED`, `Attempt 1 FAILED · 82s · 5 steps · evidence`.
+- Fix: the deterministic `repairAiPlayFailure` found `Core A` embedded in `Ground` and applied one undoable `object.update`; the toast read "Core A is embedded in Ground, so the collider prevents collection. Moving it above the platform makes it reachable." Project revision `0 → 1`, `historyLength 1`, one selection.
+- Attempt 2: `reason_code: "success.complete"`, `final_state { status: "WON", coins: "3", last_error: "none" }`. Panel showed `KANE VERIFIED` with `Attempt 2 PASSED · 81s · 7 steps` and both evidence links.
+- Manual Play after the fix (same project): `WON`, `COINS 3`, no last error, console `collect Core C` → `coins = 3` → `Win when all cores collected fired`.
+- Screenshots: `.data/k5-attempt1.png` (failure + auto-fix toast) and `.data/k5-final.png` (`KANE VERIFIED`).
+
+**Deviation from the scripted K5 narrative:** the plan expected attempt 1 to report `coins = 2` and name `coin_2`. Kane instead ended on its own final-verification assertion with no stored values (`final_state: {}`) and a scenario-shaped summary. The product still diagnosed and fixed the embedded `Core A` (toast, revision, and the three-coin pass prove the move is load-bearing), but the *failure record itself* does not name the coin. Treat K5's fail → fix → pass chain as proven and its "names the inaccessible coin" requirement as met by the product diagnosis, not by Kane's summary.
+
 ## Bar 3 — agent and Kane talked to each other
 
+Both directions are now proven with real runs.
+
+### K4 — in-app `verify_with_kane` (real pass)
+
+Asked in the project's Build chat: "Verify in a real browser that the level loads and the player can collect a coin."
+
+- Card: `PASSED · ENGINE QA · 12 steps · 65.2s`, summary with the snapshot URL and `COIN_COUNT: 2`, plus an `Open evidence` link to `/api/kane/runs/8ea17992-4f77-4e6f-831f-bdb630b0aa55/evidence` (snapshot `YW1CqmcYEt-NZA`).
+- The agent's reply referenced the Kane result (status passed, coin counter 2, evidence path) and said no project changes were made.
+- Before this pass the card rendered verdict, steps, summary and evidence but **no duration** — the runner already returned `durationMs`, the client dropped it. Fixed in `useAgentSession.ts` (forward `durationMs`) and `AgentDrawer.tsx` (`kane-run-duration`), which is what lets the card satisfy all four fields.
+
+### K4 — terminal objective (real pass after one real failure)
+
+| Run | Verdict | Duration | Credits | Reason |
+|---|---|---|---|---|
+| `k4-terminal.ndjson` | **failed** | 263.1 s | 38.45 | `assertion_error.confirmed_product_bug` — "it shows a passed verdict, at least three executed steps, a duration, and an evidence link" |
+| `k4-terminal2.ndjson` | **passed** | 206.7 s | 38.06 | `success.complete`, single flow (`bifurcated: false`, `total_runs: 1`) |
+
+The first terminal run was a genuine product finding: Kane drove the in-app handshake and the card it produced had no duration, so the checkpoint failed. The in-app reproduction above confirmed the same missing field. After the card fix and a raised Kane timeout (300 s for this environment, since 12-step QA runs did not finish inside 140 s), the rerun's `final_state` was `verification_verdict: "PASSED"`, `executed_steps: "12"`, `duration_shown: "true"`, `evidence_link_shown: "true"`, `agent_reply_references_Kane: "true"`.
+
 - In-app AI Play panel: fixture-driven fail → repair → retry smoke passed earlier; real API path verified above.
-- In-app `KaneRunCard`: implemented, not driven in a real agent turn in this pass.
-- Server NDJSON and evidence copies: verified by K1 and the AI Play smoke.
+- Server NDJSON and evidence copies: verified by K1, K4 and both K5 attempts.
+- Tool guidance also changed: `verify_with_kane` now tells the model to keep the objective to what the user asked and not to add console-error/bundle checks. The two earlier in-app runs in this session died on exactly that (one "console check did not finish in time", one 145 s timeout), so the passed run is not independent proof that the old objective shape works.
 
 ## Reproduction commands
 
@@ -210,9 +246,12 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 ## Limitations
 
 - The full Neon Runner AI Play loop is verified as fail → fix → pass in 151.6 s (85.0 s + 66.6 s) with the assert-only objective. With the required `store ... as` extraction the passing attempt measured 86.8 s, so the same loop is ~172 s — only 8 s of headroom against the 180 s budget. The saved-test replay path is the margin, and it is still unmeasured.
-- K2–K5 were not executed against real Kane in this pass. Their objectives remain in `scripts/kane/objectives/`.
+- K2 was not executed successfully against real Kane: three runs died on "browser target stopped running during screenshot capture" after selecting Player. K4 and K5 are now real (above); K3b (undo/redo) is still unrun.
+- K5's failure record does not name the inaccessible coin and stored no values (`final_state: {}`); the embedded `Core A` was identified by the product's deterministic repair, and the passing attempt's `coins: "3"` proves the move was required.
 - K3's undo/redo half is not verified by Kane: `k3b-undo-redo.txt` exists but was not run (credit cost after the 60.1-credit K3a pass). The local check — a repair leaves exactly one undo entry and Undo is enabled — is the only evidence for it.
 - The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
 - The independent negative control (unreachable goal rather than the seeded coin) has not been run.
 - The full Neon Runner loop uses the deterministic embedded-coin repair, not a model-driven diagnosis. The agent path is exercised by the reduced-fixture smoke and the fixture stream, not by an LLM turn on the demo.
 - Evidence packs and run NDJSON stay untracked under `.data/` and `.testmuai/` as intended.
+- The toolbar "Ask agent" button did not open the drawer under a real CDP mouse click at 1366×768 during K4; Ctrl+J did. Not investigated further, so it is recorded as an observation rather than a confirmed defect.
+- In-app QA needed `KANE_TIMEOUT_SECONDS=300` in this environment. The 140 s budget that fits AI Play does not fit a 12-step engine-QA run; the default remains 180 s in code.

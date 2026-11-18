@@ -200,6 +200,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           status: result.status,
           summary: result.summary,
           finalState: result.finalState,
+          durationMs: result.durationMs,
           steps: result.steps.slice(-12),
           runtimeErrors: result.runtimeErrors,
           evidencePath: result.evidencePath,
