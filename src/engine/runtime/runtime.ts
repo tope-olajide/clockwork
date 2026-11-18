@@ -149,6 +149,25 @@ function behaviorsOf(object: GameObject, type: string) {
   return object.behaviors.filter((behavior) => behavior.enabled && behavior.type === type);
 }
 
+type SnakeDirection = "up" | "right" | "down" | "left";
+type GridCell = { x: number; y: number };
+type SnakeSegment = { cell: GridCell; objectId: string };
+type SnakeState = {
+  direction: SnakeDirection;
+  queuedDirection: SnakeDirection | null;
+  elapsedMs: number;
+  segments: SnakeSegment[];
+  initialized: boolean;
+  stopped: boolean;
+};
+
+const snakeVectors: Record<SnakeDirection, GridCell> = {
+  up: { x: 0, y: -1 },
+  right: { x: 1, y: 0 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+};
+
 function tagList(value: string): string[] {
   return value
     .split(",")
@@ -180,6 +199,7 @@ export class Runtime {
   private messageId = 0;
   private rngState = 0;
   private formationDirections = new Map<string, number>();
+  private snakeStates = new Map<string, SnakeState>();
 
   constructor(document: ProjectDocument, sceneId?: string, seed = 1234) {
     this.document = document;
@@ -235,6 +255,7 @@ export class Runtime {
     this.timers.clear();
     this.lastCheckpointId = null;
     this.formationDirections.clear();
+    this.snakeStates.clear();
     this.lastError = null;
     this.rngState = (this.seed >>> 0) || 1;
     this.initializeHealth(options.preserveVariables === true);
@@ -409,16 +430,28 @@ export class Runtime {
       const follow = behaviorOf(object.source, "follow");
       if (follow) {
         const params = follow.params;
-        const target = this.objects.find((candidate) => candidate.active && (candidate.source.id === stringParam(params, "targetId", "") || (stringParam(params, "targetId", "") === "" && this.player() === candidate)));
+        const targetId = stringParam(params, "targetId", "");
+        const targetTag = stringParam(params, "targetTag", "");
+        const target = this.objects.find((candidate) => candidate.active && (
+          (targetId !== "" && candidate.source.id === targetId) ||
+          (targetId === "" && targetTag !== "" && candidate.source.tags.includes(targetTag)) ||
+          (targetId === "" && targetTag === "" && this.player() === candidate)
+        ));
         if (target) {
           const speed = numberParam(params, "speed", 120);
           const stopDistance = numberParam(params, "stopDistance", 12);
-          const dx = target.x - object.x;
-          const dy = target.y - object.y;
-          const length = Math.hypot(dx, dy);
-          if (length > stopDistance) {
-            object.x += (dx / length) * speed * FIXED_DT;
-            object.y += (dy / length) * speed * FIXED_DT;
+          const cellSize = numberParam(params, "cellSize", 0);
+          const wallTags = stringParam(params, "wallTags", "").split(",").map((tag) => tag.trim()).filter(Boolean);
+          if (cellSize > 0 && wallTags.length > 0) {
+            this.moveGridFollower(object, target, speed, cellSize, wallTags);
+          } else {
+            const dx = target.x - object.x;
+            const dy = target.y - object.y;
+            const length = Math.hypot(dx, dy);
+            if (length > stopDistance) {
+              object.x += (dx / length) * speed * FIXED_DT;
+              object.y += (dy / length) * speed * FIXED_DT;
+            }
           }
         }
       }
@@ -446,8 +479,280 @@ export class Runtime {
       this.updateBall(object, input, deltaMs);
       this.updateFlap(object, input);
       this.updateDuck(object, input);
+      this.updateMelee(object, input, deltaMs);
+      this.updateExitGate(object);
+      this.updateSnake(object, input, deltaMs);
     }
     this.updateFormations();
+  }
+
+  private moveGridFollower(object: RuntimeObject, target: RuntimeObject, speed: number, cellSize: number, wallTags: string[]): void {
+    const columns = Math.floor(this.scene.size.w / cellSize);
+    const rows = Math.floor(this.scene.size.h / cellSize);
+    if (columns <= 0 || rows <= 0) return;
+    const toCell = (x: number, y: number) => ({
+      x: Math.max(0, Math.min(columns - 1, Math.floor(x / cellSize))),
+      y: Math.max(0, Math.min(rows - 1, Math.floor(y / cellSize))),
+    });
+    const start = toCell(object.x, object.y);
+    const destination = toCell(target.x, target.y);
+    const keyOf = (x: number, y: number) => y * columns + x;
+    const startKey = keyOf(start.x, start.y);
+    const destinationKey = keyOf(destination.x, destination.y);
+    if (startKey === destinationKey) return;
+
+    const blocked = new Set<number>();
+    for (const candidate of this.objects) {
+      if (!candidate.active || !wallTags.some((tag) => candidate.source.tags.includes(tag))) continue;
+      const box = boxOf(candidate);
+      const minX = Math.max(0, Math.floor(box.left / cellSize));
+      const maxX = Math.min(columns - 1, Math.floor((box.right - 0.001) / cellSize));
+      const minY = Math.max(0, Math.floor(box.top / cellSize));
+      const maxY = Math.min(rows - 1, Math.floor((box.bottom - 0.001) / cellSize));
+      for (let y = minY; y <= maxY; y += 1) {
+        for (let x = minX; x <= maxX; x += 1) blocked.add(keyOf(x, y));
+      }
+    }
+
+    const previous = new Map<number, number>();
+    const queue = [startKey];
+    previous.set(startKey, startKey);
+    const directions = [[1, 0], [0, 1], [-1, 0], [0, -1]] as const;
+    for (let cursor = 0; cursor < queue.length && !previous.has(destinationKey); cursor += 1) {
+      const current = queue[cursor]!;
+      const x = current % columns;
+      const y = Math.floor(current / columns);
+      for (const [dx, dy] of directions) {
+        const nextX = x + dx;
+        const nextY = y + dy;
+        if (nextX < 0 || nextY < 0 || nextX >= columns || nextY >= rows) continue;
+        const next = keyOf(nextX, nextY);
+        if (previous.has(next) || (blocked.has(next) && next !== destinationKey)) continue;
+        previous.set(next, current);
+        queue.push(next);
+      }
+    }
+    if (!previous.has(destinationKey)) return;
+
+    let next = destinationKey;
+    while (previous.get(next) !== startKey && previous.get(next) !== undefined) next = previous.get(next)!;
+    const targetX = (next % columns) * cellSize + cellSize / 2;
+    const targetY = Math.floor(next / columns) * cellSize + cellSize / 2;
+    const dx = targetX - object.x;
+    const dy = targetY - object.y;
+    const distance = Math.hypot(dx, dy);
+    const step = Math.max(0, speed) * FIXED_DT;
+    if (distance <= step) {
+      object.x = targetX;
+      object.y = targetY;
+    } else if (distance > 0) {
+      object.x += (dx / distance) * step;
+      object.y += (dy / distance) * step;
+    }
+  }
+
+  private updateMelee(object: RuntimeObject, input: InputFrame, deltaMs: number): void {
+    for (const melee of behaviorsOf(object.source, "melee")) {
+      const params = melee.params;
+      const remaining = Math.max(0, (object.behaviorTimers[melee.id] ?? 0) - deltaMs);
+      object.behaviorTimers[melee.id] = remaining;
+      const trigger = stringParam(params, "trigger", "action");
+      const pressed =
+        (trigger === "action" && input.actionPressed) ||
+        (trigger === "jump" && input.jumpPressed) ||
+        (trigger === "any" && (input.actionPressed || input.jumpPressed));
+      if (!pressed || remaining > 0) continue;
+      const range = Math.max(1, numberParam(params, "range", 64));
+      const targetTags = stringParam(params, "targetTags", "enemy").split(",").map((tag) => tag.trim()).filter(Boolean);
+      const target = this.objects
+        .filter((candidate) =>
+          candidate.active &&
+          candidate !== object &&
+          targetTags.some((tag) => candidate.source.tags.includes(tag)) &&
+          behaviorOf(candidate.source, "health") !== undefined &&
+          Math.hypot(candidate.x - object.x, candidate.y - object.y) <= range,
+        )
+        .sort((a, b) => Math.hypot(a.x - object.x, a.y - object.y) - Math.hypot(b.x - object.x, b.y - object.y))[0];
+      object.behaviorTimers[melee.id] = Math.max(0, numberParam(params, "cooldownMs", 450));
+      if (!target) continue;
+      this.damageObject(target, Math.max(0, numberParam(params, "damage", 1)));
+      this.event("melee", `${object.source.name} hit ${target.source.name}`, object.source.id);
+    }
+  }
+
+  private updateExitGate(object: RuntimeObject): void {
+    for (const gate of behaviorsOf(object.source, "exit-gate")) {
+      if (object.behaviorTimers[gate.id] === 1) continue;
+      const params = gate.params;
+      const variable = stringParam(params, "variable", "dots");
+      const progress = this.variables[variable];
+      if (typeof progress !== "number" || progress < numberParam(params, "required", 15)) continue;
+      if (object.source.body) object.source.body.type = "none";
+      object.source.tags = object.source.tags.filter((tag) => tag !== "wall");
+      const openColor = stringParam(params, "openColor", "#8fe3c0");
+      const visual = object.source.visual;
+      if (visual?.kind === "rect") visual.color = openColor;
+      else if (visual?.kind === "shape") {
+        for (const shape of visual.shapes) shape.color = openColor;
+      }
+      const openVariable = stringParam(params, "openVariable", "exitOpen");
+      this.setVariable(openVariable, "set", true);
+      object.behaviorTimers[gate.id] = 1;
+    }
+  }
+
+  private updateSnake(object: RuntimeObject, input: InputFrame, deltaMs: number): void {
+    for (const behavior of behaviorsOf(object.source, "snake")) {
+      const params = behavior.params;
+      const cols = Math.max(2, Math.floor(numberParam(params, "cols", 20)));
+      const rows = Math.max(2, Math.floor(numberParam(params, "rows", 15)));
+      const cellSize = Math.max(4, numberParam(params, "cellSize", 32));
+      const originX = numberParam(params, "originX", 0);
+      const originY = numberParam(params, "originY", 0);
+      const positionOf = (cell: GridCell) => ({
+        x: originX + cell.x * cellSize + cellSize / 2,
+        y: originY + cell.y * cellSize + cellSize / 2,
+      });
+      const cellOf = (x: number, y: number): GridCell => ({
+        x: Math.floor((x - originX) / cellSize),
+        y: Math.floor((y - originY) / cellSize),
+      });
+      let state = this.snakeStates.get(object.source.id);
+      if (!state) {
+        state = {
+          direction: "right",
+          queuedDirection: null,
+          elapsedMs: 0,
+          segments: [],
+          initialized: false,
+          stopped: false,
+        };
+        this.snakeStates.set(object.source.id, state);
+      }
+      if (state.stopped) continue;
+
+      const foodTag = stringParam(params, "foodTag", "snake-food");
+      const food = this.objects.find((candidate) => candidate.active && candidate.source.tags.includes(foodTag));
+      if (!food) throw new Error(`Snake food with tag "${foodTag}" was not found`);
+      if (!state.initialized) {
+        const head = cellOf(object.x, object.y);
+        const initialLength = Math.max(1, Math.floor(numberParam(params, "initialLength", 3)));
+        const bodyPrefabId = stringParam(params, "bodyPrefabId", "");
+        for (let index = 1; index < initialLength; index += 1) {
+          const cell = { x: head.x - index, y: head.y };
+          if (!bodyPrefabId) throw new Error("Snake bodyPrefabId is required when initialLength exceeds one");
+          const position = positionOf(cell);
+          const spawned = this.spawnPrefab(bodyPrefabId, position.x, position.y);
+          const segment = spawned.find((candidate) => candidate.source.prefabSlot === "root");
+          if (!segment) throw new Error(`Snake body prefab "${bodyPrefabId}" could not be spawned`);
+          state.segments.push({ cell, objectId: segment.source.id });
+        }
+        state.initialized = true;
+        this.setVariable(stringParam(params, "lengthVariable", "length"), "set", initialLength);
+      }
+
+      const requestedDirection: SnakeDirection | null = input.left
+        ? "left"
+        : input.right
+          ? "right"
+          : input.up
+            ? "up"
+            : input.down
+              ? "down"
+              : null;
+      if (requestedDirection) {
+        const current = snakeVectors[state.direction];
+        const requested = snakeVectors[requestedDirection];
+        if (current.x + requested.x !== 0 || current.y + requested.y !== 0) {
+          state.queuedDirection = requestedDirection;
+        }
+      }
+
+      state.elapsedMs += deltaMs;
+      const stepMs = Math.max(16, numberParam(params, "stepMs", 120));
+      if (state.elapsedMs < stepMs) continue;
+      state.elapsedMs -= stepMs;
+      if (state.queuedDirection) {
+        state.direction = state.queuedDirection;
+        state.queuedDirection = null;
+      }
+
+      const oldHead = cellOf(object.x, object.y);
+      const direction = snakeVectors[state.direction];
+      const nextHead = { x: oldHead.x + direction.x, y: oldHead.y + direction.y };
+      const nextPosition = positionOf(nextHead);
+      const wallTags = tagList(stringParam(params, "wallTags", "wall"));
+      const outside = nextHead.x < 0 || nextHead.y < 0 || nextHead.x >= cols || nextHead.y >= rows;
+      const hitWall = this.objects.some((candidate) => {
+        if (!candidate.active || !wallTags.some((tag) => candidate.source.tags.includes(tag))) return false;
+        const box = boxOf(candidate);
+        return nextPosition.x >= box.left && nextPosition.x < box.right && nextPosition.y >= box.top && nextPosition.y < box.bottom;
+      });
+      const foodCell = cellOf(food.x, food.y);
+      const eating = nextHead.x === foodCell.x && nextHead.y === foodCell.y;
+      const selfCells = state.segments.slice(0, eating ? state.segments.length : Math.max(0, state.segments.length - 1));
+      const hitSelf = selfCells.some((segment) => segment.cell.x === nextHead.x && segment.cell.y === nextHead.y);
+      if ((boolParam(params, "loseOnWall", true) && (outside || hitWall)) ||
+        (boolParam(params, "loseOnSelf", true) && hitSelf)) {
+        state.stopped = true;
+        this.setVariable(stringParam(params, "lostVariable", "lost"), "set", true);
+        return;
+      }
+
+      object.x = nextPosition.x;
+      object.y = nextPosition.y;
+      const nextSegments: GridCell[] = [oldHead, ...state.segments.map((segment) => segment.cell)];
+      if (!eating) nextSegments.pop();
+      const bodyPrefabId = stringParam(params, "bodyPrefabId", "");
+      for (let index = 0; index < nextSegments.length; index += 1) {
+        const cell = nextSegments[index]!;
+        const position = positionOf(cell);
+        let segment = state.segments[index]
+          ? this.objects.find((candidate) => candidate.source.id === state!.segments[index]!.objectId)
+          : undefined;
+        if (!segment) {
+          if (!bodyPrefabId) throw new Error("Snake bodyPrefabId is required to grow the body");
+          const spawned = this.spawnPrefab(bodyPrefabId, position.x, position.y);
+          segment = spawned.find((candidate) => candidate.source.prefabSlot === "root");
+          if (!segment) throw new Error(`Snake body prefab "${bodyPrefabId}" could not be spawned`);
+          state.segments.push({ cell, objectId: segment.source.id });
+        }
+        segment.x = position.x;
+        segment.y = position.y;
+        state.segments[index] = { cell, objectId: segment.source.id };
+      }
+      state.segments.length = nextSegments.length;
+
+      if (eating) {
+        const scoreVariable = stringParam(params, "scoreVariable", "score");
+        this.setVariable(scoreVariable, "add", numberParam(params, "scorePerFood", 10));
+        this.setVariable(stringParam(params, "lengthVariable", "length"), "set", nextSegments.length + 1);
+        const occupied = new Set([nextHead, ...nextSegments].map((cell) => `${cell.x},${cell.y}`));
+        const free: GridCell[] = [];
+        for (let y = 0; y < rows; y += 1) {
+          for (let x = 0; x < cols; x += 1) {
+            if (occupied.has(`${x},${y}`)) continue;
+            const position = positionOf({ x, y });
+            const blocked = this.objects.some((candidate) => {
+              if (!candidate.active || !wallTags.some((tag) => candidate.source.tags.includes(tag))) return false;
+              const box = boxOf(candidate);
+              return position.x >= box.left && position.x < box.right && position.y >= box.top && position.y < box.bottom;
+            });
+            if (!blocked) free.push({ x, y });
+          }
+        }
+        if (free.length === 0) {
+          this.setVariable(stringParam(params, "winVariable", "won"), "set", true);
+        } else {
+          const relocated = positionOf(free[Math.floor(this.random() * free.length)]!);
+          food.x = relocated.x;
+          food.y = relocated.y;
+        }
+        if (Number(this.variables[scoreVariable]) >= numberParam(params, "winScore", 100)) {
+          this.setVariable(stringParam(params, "winVariable", "won"), "set", true);
+        }
+      }
+    }
   }
 
   private updatePaddle(object: RuntimeObject, input: InputFrame): void {
@@ -582,6 +887,7 @@ export class Runtime {
     };
 
     const collide = (axis: "x" | "y", delta: number): boolean => {
+      if (delta === 0) return false;
       const candidate = this.objects.find((other) =>
         other.active &&
         other !== object &&

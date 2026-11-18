@@ -611,6 +611,10 @@ export function createProjectFromTemplate(template: Exclude<TemplateOrigin, "bri
     case "flappy-flyer":
     case "platform-jumper":
     case "endless-runner":
+    case "arena-survival":
+    case "falling-objects":
+    case "maze-escape":
+    case "snake":
       return createGameStarterDocument(template, name);
     case "platformer":
       return platformerTemplate(name);
@@ -644,6 +648,14 @@ export function templateSummary(template: TemplateId): { label: string; blurb: s
       return { label: "Platform Jumper", blurb: "Collect five cores, dodge spikes, and reach the relay.", accent: "#a9b4ff" };
     case "endless-runner":
       return { label: "Endless Runner", blurb: "Jump or duck through an accelerating obstacle stream.", accent: "#ff856f" };
+    case "arena-survival":
+      return { label: "Arena Survival", blurb: "Hold the arena against relentless chasers for sixty seconds.", accent: "#8fe3c0" };
+    case "falling-objects":
+      return { label: "Falling Objects", blurb: "Dodge a meteor storm, catch bonus stars, and last one minute.", accent: "#f4c56a" };
+    case "maze-escape":
+      return { label: "Maze Escape", blurb: "Collect fifteen dots, unlock the gate, and evade the warden.", accent: "#a9b4ff" };
+    case "snake":
+      return { label: "Snake", blurb: "Grow to one hundred points without hitting a wall or yourself.", accent: "#8fe3c0" };
     case "platformer":
       return { label: "Platformer", blurb: "Run, jump, collect, reach a goal.", accent: coral };
     case "topdown":

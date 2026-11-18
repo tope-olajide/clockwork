@@ -1,4 +1,5 @@
 import {
+  circle,
   makeBehavior,
   makeBody,
   makeDocument,
@@ -53,8 +54,8 @@ function coreObject(layerId: string, x: number, y: number, name: string): GameOb
     height: 24,
     color: gold,
     visual: makeShape(24, 24, [
-      { kind: "circle", width: 22, height: 22, color: gold, stroke: "#fff1bd", strokeWidth: 2 },
-      { kind: "circle", width: 8, height: 8, color: "#fff1bd" },
+      circle(22, gold, { stroke: "#fff1bd", strokeWidth: 2 }),
+      circle(8, "#fff1bd"),
     ]),
     behaviors: [
       makeBehavior("collectible", { variable: "score", amount: 5 }),
@@ -178,6 +179,7 @@ export function endlessRunnerTemplate(name: string): ProjectDocument {
     y: 0,
     width: 1,
     height: 1,
+    color: background,
     behaviors: [
       makeBehavior("spawner", {
         prefabId: obstaclePrefabId,

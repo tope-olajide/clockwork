@@ -22,9 +22,9 @@ test("Platform Jumper collects cores, respawns from spikes, gates the exit, and 
   assert.equal(runtime.variables.coins, 1);
   assert.equal(core.active, false);
 
-  const spikes = runtime.objects.find((object) => object.source.name === "Spike patch A")!;
-  player.x = spikes.x;
-  player.y = spikes.y;
+  const spike = runtime.objects.find((object) => object.source.name === "Spike patch A")!;
+  player.x = spike.x;
+  player.y = spike.y;
   runtime.step(emptyInput());
   assert.equal(runtime.variables.lives, 2);
   assert.equal(player.active, true, "the player respawns while lives remain");

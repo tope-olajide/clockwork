@@ -34,6 +34,10 @@ test("every starter is a valid primitive-only document", () => {
       "flappy-flyer": 720,
       "platform-jumper": 980,
       "endless-runner": 1200,
+      "arena-survival": 0,
+      "falling-objects": 0,
+      "maze-escape": 0,
+      snake: 0,
     } as const;
     assert.equal(parsed.settings.gravity.y, expectedGravity[id]);
 

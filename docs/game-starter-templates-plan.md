@@ -1,6 +1,6 @@
 # Built-in 2D game starter templates — vertical slice plan
 
-- **Status:** Slices A–D are implemented, but their acceptance gates remain open. Eight of twelve game documents are registered. Slice C/D regression cases are authored; no tests, builds, typechecks or browser runs have been executed. Per the user's request, defer all validation until all twelve game templates are implemented. Slices E–G remain.
+- **Status:** Slices A–F are implemented and all twelve game documents are registered. After implementation completed, the combined local validation passed: 30/30 tests, typecheck, build and repository check. Browser acceptance remains open, especially gameplay/input/editor-to-Play gates for every starter; see `docs/known-issues.md`.
 - **Branch:** `feat/game-starter-templates` (created from `main` at `ecf3f4a`).
 - **Date:** 2026-11-18.
 - **Goal:** twelve editable, genuinely playable starter projects built from the engine's own document, behavior, rule and runtime systems, selectable from the project-creation flow.
@@ -197,7 +197,7 @@ Scoring is real: points come from `health.scoreOnDeath` (enemies, asteroids, bri
 
 ## 6. Vertical slices
 
-Each slice is end-to-end: document data → behaviors → picker/preview → editor → Play → automated tests → honest report. The remaining implementation is proceeding by slice as requested; keep earlier gates open and defer all test/build/browser execution until all twelve templates have been implemented.
+Each slice is end-to-end: document data → behaviors → picker/preview → editor → Play → automated tests → honest report. Per the user's request, tests and build checks were deferred until all twelve templates were implemented; local validation has now been run, while browser gates remain open.
 
 ### Slice A — Foundation and Space Shooter
 
@@ -221,7 +221,7 @@ Each slice is end-to-end: document data → behaviors → picker/preview → edi
 
 ### Slice C — Arcade physics: Ping Pong, Brick Breaker, Flappy Flyer
 
-**Implementation status (2026-11-18):** `ball`, `paddle`, `ai-paddle` and `flap` behaviors, all three primitive-only starter documents, catalog/picker integration and focused regression cases have been added. No tests, builds, typechecks or browser runs were executed, as requested. The slice gate is open pending the eventual combined validation pass.
+**Implementation status (2026-11-18):** `ball`, `paddle`, `ai-paddle` and `flap` behaviors, all three primitive-only starter documents, catalog/picker integration and focused regression cases have been added. Combined local validation passes; the browser acceptance gate remains open.
 
 - Add `ball`, `paddle`, `ai-paddle`, `flap`, serve/reset, miss variables, pass scoring.
 - Author the three templates. Ball must not stick or tunnel; AI must be beatable; Flappy gaps must stay reachable.
@@ -230,7 +230,7 @@ Each slice is end-to-end: document data → behaviors → picker/preview → edi
 
 ### Slice D — Platformer: Platform Jumper, Endless Runner
 
-- **Implementation status (2026-11-18):** `duck` collider/visual scaling and elapsed-time spawner interval ramping are implemented. Platform Jumper and Endless Runner documents, catalog/picker integration and focused regression cases are authored. No validation has been run, as requested. The slice gate remains open.
+- **Implementation status (2026-11-18):** `duck` collider/visual scaling and elapsed-time spawner interval ramping are implemented. Platform Jumper and Endless Runner documents, catalog/picker integration and focused regression cases are authored. Combined local validation passes; the browser acceptance gate remains open.
 - Author both templates with a short level, five cores, spikes, an exit gated by all five cores, a death zone, bounded obstacle/core spawners and lives.
 - Moving platforms patrol as kinematic one-way platforms; the current physics does not carry the player along with them.
 - Tests: jump only when grounded, platform landing, core count, hazard lives/respawn, exit win, duck collider height, bounded obstacle cleanup, scripted win/loss/reset.
@@ -238,22 +238,23 @@ Each slice is end-to-end: document data → behaviors → picker/preview → edi
 
 ### Slice E — Top-down survival: Arena Survival, Falling Objects, Maze Escape
 
-- Finish wall-aware `follow`, contact damage/invulnerability, `melee`, fixed-lane movement, maze walls and gated exit.
-- Author the three templates: arena with pursuers and 60 s timer, falling hazards/bonuses with 3 lives, 15-dot maze with one pursuer and an exit that only opens at 15.
+- **Implementation status (2026-11-18):** tag-based/grid-aware `follow`, action-triggered `melee`, progress-driven `exit-gate`, Arena Survival, Falling Objects and Maze Escape documents, picker integration and focused regression cases are authored. Combined local validation passes; the browser acceptance gate remains open.
+- Author the three templates: arena with pursuers and a 60-second timer, falling hazards/bonuses with three lives, and a 15-dot maze whose wall-blocking exit opens at the threshold.
+- Fixed-lane movement uses the top-down controller's locked Y axis; contact damage uses health tags and invulnerability.
 - Tests: pursuit respects walls, contact cooldown, melee kill/score, spawner caps, collectible exhaustion, exit gating, scripted win/loss/reset.
 - Gate: same checklist; change enemy speed, player health and spawn interval and observe each effect.
 
 ### Slice F — Grid puzzle: Snake
 
-- Implement the `snake` behavior in its own module: fixed-interval grid movement, direction queue with no reversals, body segments spawned from a prefab, food relocation into unoccupied cells, wall/self collision, growth and score at 100.
+- **Implementation status (2026-11-18):** fixed-interval grid movement, queued non-reversing turns, prefab body segments, seeded food relocation, growth, wall/self loss and score-threshold win are implemented. The 20×15 Snake document, picker integration and focused regression cases are authored. Combined local validation passes; the browser acceptance gate remains open.
 - Author the 20×15 board, start length 3, 10 points per food, 100-point win.
 - Tests: fixed step timing, no reverse, no food inside the snake, growth, wall/self loss, win at 100, reset restores length 3, bounded body objects.
 - Gate: same checklist; change `stepMs`, grid size and food score and observe each effect.
 
 ### Slice G — Full acceptance and documentation
 
-- Run the complete Part 4 checklist for all twelve templates in one browser session per template, at 1366×768, with the console open. Record pass/fail and any deviation per template.
-- Run the automated suite, `typecheck`, `build` and `check:repo`.
+- **Local validation complete:** `npm test` (30/30), `npm run typecheck`, `npm run build`, and `npm run check:repo` pass. The build emits existing dependency/chunk warnings.
+- Browser acceptance is still required: run the Part 4 checklist for all twelve templates, record pass/fail and deviations, and verify editor-to-Play changes, win/loss/reset, and console behavior. No browser/Kane run was made in the combined local validation.
 - Verify Play from the picker, editor inspection, editor modification → Play, win, loss, restart, share/snapshot and export/import for at least one representative template from each slice (not necessarily all twelve for share/export, but every template for load/play/win/loss/restart/editor-modification).
 - Write `docs/game-template-test-report.md` with the matrix and evidence.
 - Update `docs/game-templates.md`, `docs/implementation-log.md`, `docs/known-issues.md` and `features.md`. `features.md` admits a template only when its checklist is fully verified.

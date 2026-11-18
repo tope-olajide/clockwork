@@ -443,15 +443,44 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Implementation: added swept ball movement with paddle-angle bounces, solid-body reflection/depenetration, health-target damage, miss variables, configurable serving and speed caps; player and AI paddle controllers with bounds, reaction delay and aim error; flap impulse/gravity/floor-ceiling/hazard loss handling.
 - Templates: added primitive-only Ping Pong (human vs. fallible AI, first to five), Brick Breaker (50 health-bearing bricks, lives and capped speed-up), and Flappy Flyer (seeded bounded gate placement, reachable gaps, pass-line scoring and loss on collision).
 - Integration: expanded behavior schema/catalog, starter IDs/catalog/build routing, template labels/summaries and project covers. Added focused regression cases for the new runtime and updated the document-integrity expectation for Flappy gravity.
-- Validation: **not run by request.** No tests, typecheck, build, repo check or browser/Kane session was started.
-- Acceptance: implementation is authored but Slice C's automated and browser gates remain open. Slice A/B browser gates remain open too; no feature was added to `features.md`.
-- Known limitations: Ping Pong AI beatability, ball tunneling/sticking under real play, Flappy gap reachability and all editor-to-Play effects remain unverified. Complete validation after all twelve templates are implemented.
+- Validation: initially deferred until all twelve templates were implemented; the combined local validation later passed (30/30 tests, typecheck, build and repo check).
+- Acceptance: automated tests pass, but Slice C browser gates remain open. Slice A/B browser gates remain open too; no feature was added to `features.md`.
+- Known limitations: Ping Pong AI beatability, ball tunneling/sticking under real play, Flappy gap reachability and all editor-to-Play effects remain unverified in a browser.
 
 ## Slice D — Platform Jumper and Endless Runner
 
 - Date: 2026-11-18
 - Implemented: added the `duck` behavior (held action shrinks the collision height while preserving the player's feet position) and elapsed-time spawner interval decay with a configurable minimum; added Platform Jumper's five-core relay, hazards, respawning lives and patrol-driven moving platform; added Endless Runner's jump/duck player, scrolling obstacle and bonus-core prefabs, pass scoring and bounded accelerating spawners.
 - Integration: registered both origins in the schema/catalog/build route, labels, summaries and project covers. Corrected the missing `ping-pong`, `brick-breaker` and `flappy-flyer` schema origins from Slice C. Added Slice D regression-test source and updated starter gravity expectations.
-- Validation: **not run by request.** No tests, typecheck, build, repo check or browser/Kane session was started.
-- Acceptance: implementation is authored but Slices A–D validation gates remain open; four templates remain. No feature was added to `features.md`.
+- Validation: initially deferred until all twelve templates were implemented; the combined local validation later passed (30/30 tests, typecheck, build and repo check).
+- Acceptance: automated tests pass, but browser gates remain open. No feature was added to `features.md`.
 - Known limitation: kinematic moving platforms do not carry the player. Gameplay, editor-to-Play tuning, reset behavior and console cleanliness remain unverified.
+
+## Slice E — Arena Survival, Falling Objects and Maze Escape
+
+- Date: 2026-11-18
+- Implemented: extended `follow` to resolve target tags and route through a configured cell grid around tagged walls; added action-edge `melee` attacks and a threshold-driven `exit-gate` that changes its visual and removes its collider when progress is met; authored Arena Survival (enemy pursuit/melee/60-second survival), Falling Objects (fixed-lane movement, capped hazard/bonus spawners/lives/timer), and Maze Escape (20×12 maze, fifteen collectibles, wall-aware warden and locked exit).
+- Integration: registered all three origins in the schema/catalog/build route, labels, summaries and project covers. Added focused regression-test source and extended starter integrity gravity expectations.
+- Validation: initially deferred until all twelve templates were implemented; the combined local validation later passed (30/30 tests, typecheck, build and repo check).
+- Acceptance: automated tests pass, but browser gates remain open. No feature was added to `features.md`.
+- Known limitations: maze routing is cell-grid based; its wall routing is covered by a runtime test, but gameplay, editor-to-Play tuning, resets and console cleanliness remain unverified in a browser.
+
+## Slice F — Snake
+
+- Date: 2026-11-18
+- Implemented: fixed-step grid movement with queued turns/no reverse, prefab-backed body segments, food relocation to an unoccupied cell, growth/score, wall/self loss and score-threshold win; reset clears runtime snake state and restores the authored board.
+- Integration: registered the twelfth starter origin and added the 20×15 Snake document, picker labels/summary/cover, behavior editor parameters, and focused regression-test source.
+- Validation: initially deferred until implementation completion; the combined local validation later passed (30/30 tests, typecheck, build and repo check).
+- Acceptance: all twelve starter documents are implemented; browser gameplay and editor-to-Play gates remain open. No feature was added to `features.md`.
+- Known limitations: browser gameplay, preview, reset, score-threshold and console checks have not been performed.
+
+## Slice G — Combined local validation after all twelve starters
+
+- Date: 2026-11-18
+- `npm test`: pass, 30/30 tests.
+- `npm run typecheck`: pass.
+- `npm run build`: pass. Vite reports dependency annotation, mixed dynamic-import and bundle-size warnings.
+- `npm run check:repo`: pass.
+- Regression fixes from validation: zero-delta ball collision checks no longer depenetrate into adjacent bricks; platform hazards are non-solid so contact damage can trigger; Snake board grid uses fewer composite primitives to stay within the schema limit; Endless Runner's director has a defined visual color. Focused test corrections account for floating-point tolerance and the Snake fixed-step interval.
+- Browser/Kane validation: not run. This respects the request to defer the expensive browser gates; picker previews, gameplay controls, editor-to-Play tuning, win/loss/reset and console cleanliness still require browser evidence.
+- Acceptance: automated local gates pass; overall template acceptance remains open until the twelve browser report rows are completed. No template is being claimed as browser-verified here.

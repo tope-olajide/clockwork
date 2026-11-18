@@ -8,6 +8,10 @@ import { brickBreakerTemplate } from "./brick-breaker";
 import { flappyFlyerTemplate } from "./flappy-flyer";
 import { platformJumperTemplate } from "./platform-jumper";
 import { endlessRunnerTemplate } from "./endless-runner";
+import { arenaSurvivalTemplate } from "./arena-survival";
+import { fallingObjectsTemplate } from "./falling-objects";
+import { mazeEscapeTemplate } from "./maze-escape";
+import { snakeTemplate } from "./snake";
 
 export function createGameStarterDocument(id: GameStarterId, name: string): ProjectDocument {
   switch (id) {
@@ -27,5 +31,13 @@ export function createGameStarterDocument(id: GameStarterId, name: string): Proj
       return platformJumperTemplate(name);
     case "endless-runner":
       return endlessRunnerTemplate(name);
+    case "arena-survival":
+      return arenaSurvivalTemplate(name);
+    case "falling-objects":
+      return fallingObjectsTemplate(name);
+    case "maze-escape":
+      return mazeEscapeTemplate(name);
+    case "snake":
+      return snakeTemplate(name);
   }
 }

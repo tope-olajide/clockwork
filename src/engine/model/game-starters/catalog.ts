@@ -9,6 +9,10 @@ export const GAME_STARTER_IDS = [
   "flappy-flyer",
   "platform-jumper",
   "endless-runner",
+  "arena-survival",
+  "falling-objects",
+  "maze-escape",
+  "snake",
 ] as const;
 
 export type GameStarterId = (typeof GAME_STARTER_IDS)[number];
@@ -86,6 +90,38 @@ export const GAME_STARTERS: GameStarterSpec[] = [
     blurb: "Jump or duck through an accelerating obstacle stream.",
     mechanics: "Space jump, Down duck. Pass obstacles and collect bonus cores.",
     accent: "#ff856f",
+  },
+  {
+    id: "arena-survival",
+    name: "Arena Survival",
+    category: "Survival",
+    blurb: "Hold the arena against relentless chasers for sixty seconds.",
+    mechanics: "WASD move, E or click attack. Defeat enemies, protect your hull and survive.",
+    accent: "#8fe3c0",
+  },
+  {
+    id: "falling-objects",
+    name: "Falling Objects",
+    category: "Survival",
+    blurb: "Dodge a meteor storm, catch bonus stars, and last one minute.",
+    mechanics: "A / D move along the catch lane. Three lives, falling hazards and a timer.",
+    accent: "#f4c56a",
+  },
+  {
+    id: "maze-escape",
+    name: "Maze Escape",
+    category: "Puzzle",
+    blurb: "Collect fifteen dots, unlock the gate, and evade the warden.",
+    mechanics: "WASD move. Grid-aware pursuit, maze walls, collectibles and gated exit.",
+    accent: "#a9b4ff",
+  },
+  {
+    id: "snake",
+    name: "Snake",
+    category: "Puzzle",
+    blurb: "Grow to one hundred points without hitting a wall or yourself.",
+    mechanics: "WASD or arrows turn. Fixed-step grid movement, food relocation, growth and self-collision.",
+    accent: "#8fe3c0",
   },
 ];
 

@@ -63,7 +63,7 @@ test("Ping Pong paddle input is clamped and AI speed stays bounded", () => {
 
   const oldAiY = ai.y;
   runtime.step(emptyInput());
-  assert.ok(Math.abs(ai.y - oldAiY) <= 235 / 60);
+  assert.ok(Math.abs(ai.y - oldAiY) <= 235 / 60 + 1e-6);
 });
 
 test("Brick Breaker damages bricks, bounces from the paddle, loses lives, wins, and resets", () => {

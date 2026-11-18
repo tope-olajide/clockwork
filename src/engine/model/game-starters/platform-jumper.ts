@@ -51,8 +51,6 @@ function spikes(layerId: string, name: string, x: number, y: number): GameObject
     visual: makeShape(76, 28, Array.from({ length: 4 }, (_, index) =>
       triangleShape(22, 28, coral, { x: -27 + index * 18, stroke: "#ffd0c7", strokeWidth: 1 }),
     )),
-    bodyType: "static",
-    body: makeBody(76, 28, "static"),
     tags: ["spike", "hazard"],
   });
 }
@@ -156,8 +154,6 @@ export function platformJumperTemplate(name: string): ProjectDocument {
       height: 40,
       color: "#a83d5b",
       visual: makeShape(width, 40, [rectShape(width, 40, "#a83d5b")]),
-      bodyType: "static",
-      body: makeBody(width, 40, "static"),
       tags: ["death-zone", "hazard"],
     }),
   ];
