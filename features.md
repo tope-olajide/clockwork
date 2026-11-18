@@ -12,7 +12,13 @@ Verified in headless browser passes: Slice 1 search, all filters, archived read-
 
 The Slice 1 and Slice 2 gates are closed and their features are listed below. Slice 2’s 2,000-rect run measured **801 fps with rAF uncapped** (≈1.25 ms/frame) in Chrome on Intel UHD graphics; this environment’s display/vsync caps every page at ~40 Hz, so 55 fps cannot be observed directly on-screen, but the measured frame budget is 14× the target.
 
-Slice 4 (runtime and manual Play) is implemented and verified. A runtime harness passed **13/13 checks**, the renderer’s per-layer parallax passed a separate check, and a cold-profile browser pass at 1366×768 verified Play entry from the rail and Overview, pause/step/reset, read-only state, F1 telemetry, goal completion, and zero console errors. With rAF uncapped, Play measured **655 fps average** over 10 seconds (individual samples 560–858 fps). The Slice 3 asset pipeline is committed but its acceptance gate has not been logged in `docs/implementation-log.md`, so no Slice 3 features are listed here.
+Slice 4 (runtime and manual Play) is implemented and verified. A runtime harness passed **13/13 checks**, the renderer’s per-layer parallax passed a separate check, and a cold-profile browser pass at 1366×768 verified Play entry from the rail and Overview, pause/step/reset, read-only state, F1 telemetry, goal completion, and zero console errors. With rAF uncapped, Play measured **655 fps average** over 10 seconds (individual samples 560–858 fps). The Slice 3 asset pipeline is committed and its gate is logged in `docs/implementation-log.md`; its features are listed below. Slice 5 (logic, prefabs, presentation) is also gate-closed with browser evidence in the implementation log.
+
+Slice 6 (agent transport, context, chat shell) is gate-closed on `AI_MOCK=1` evidence, and a real provider tool-call turn is now proven by the 2026-11-18 agent runs. Slice 6.5 (provider vault and settings) is implemented but not gate-closed: key persistence across restart, session-only key loss, the custom-provider chat and the key-absence audit have not been run. Slices 7 and 8 (agent workflows and presence; ship, export, share) are implemented, and their browser acceptance is still unverified.
+
+Slice 9 (hardening and demo readiness) is implemented. Its matrix is only partly covered by the Kane runs, which exercised the editor cold at 1366×768; the `AI_ENABLED=0` manual path, the 1440/1920 and 1024 layouts, the keyboard-only run, the console-warning sweep and refresh-during-save recovery remain open.
+
+Slice 10 (Kane engine QA and in-product AI Play) is implemented and has real evidence in [`docs/kane-proof.md`](docs/kane-proof.md): K1, K3a, K3b, K4 and K5 passed against the real editor, and the independent negative control (an unsatisfiable win rule) failed and then passed after repair. AI Play and the other Kane surfaces are deliberately **not** listed below yet: the Slice 10 gate is still open on the manual/no-model browser pass, the no-model AI Play state, the fixture-driven UI artifact and AI HUD keyboard parity, and this file admits no feature while a blocking entry is open in [`docs/known-issues.md`](docs/known-issues.md).
 
 ## Editor
 
@@ -145,7 +151,7 @@ Completed in Slice 6 · verified at 1366×768 with `AI_MOCK=1`.
 ### Read-only tools and viewport capture
 
 The agent calls read-only tools (`list_scenes`, `get_scene`, `search_entities`/`query_project`, `get_object`/`inspect_entity`, `get_variables`, `get_selection`) and renders tool results in expandable cards; `capture_viewport` returns a PNG into the drawer and into the next step. Chained tool calls resolve to a final answer.
-Completed in Slice 6 · verified at 1366×768 with `AI_MOCK=1`; one real-provider tool-call turn remains unverified.
+Completed in Slice 6 · verified at 1366×768 with `AI_MOCK=1`, and real-provider tool calls were proven on 2026-11-18 (K3a/K3b/K4, `docs/kane-proof.md`).
 
 ### Stop, retry and errors
 

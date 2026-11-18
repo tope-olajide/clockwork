@@ -6,7 +6,7 @@ This file records real Kane runs only. Fixture output is labelled as fixture out
 
 | | |
 |---|---|
-| Date | 2026-11-17, K4/K5 reruns 2026-11-18 |
+| Date | 2026-11-17; K4/K5 reruns and negative control 2026-11-18 |
 | Branch | `verify/kane-e2e` |
 | Kane CLI | 0.10.5, signed in as `davidtheatomicshift` |
 | Browser | local Chrome, 1366×768 viewport |
@@ -222,6 +222,21 @@ Driven through the product UI (`?demoReset=1` → Neon Runner → AI Play → co
 
 **Deviation from the scripted K5 narrative:** the plan expected attempt 1 to report `coins = 2` and name `coin_2`. Kane instead ended on its own final-verification assertion with no stored values (`final_state: {}`) and a scenario-shaped summary. The product still diagnosed and fixed the embedded `Core A` (toast, revision, and the three-coin pass prove the move is load-bearing), but the *failure record itself* does not name the coin. Treat K5's fail → fix → pass chain as proven and its "names the inaccessible coin" requirement as met by the product diagnosis, not by Kane's summary.
 
+### Negative control — unsatisfiable win rule (real fail → fix → pass, 2026-11-18)
+
+K5 and the reduced smoke both fail on a coin that cannot be touched. This control fails for a different reason: the goal itself is unsatisfiable. The compact one-coin fixture is used, with the win rule raised to `coins >= 2` while the scene contains one coin. Reproduce with `node --import tsx scripts/kane/negative-control.ts`; both streams are archived under `.testmuai/runs/`.
+
+| Attempt | `run_end.status` | Duration | Evidence |
+|---|---|---|---|
+| 1 (`coins >= 2`, one coin) | **failed** | 94.1 s | run `b050f47c-9117-48e4-9e92-baa23f0b1ae9`, pack `.data/ai-play/b050f47c-9117-48e4-9e92-baa23f0b1ae9/evidence.evidence` |
+| 2 (rule restored to `coins >= 1`) | **passed** | 81.6 s | run `52baa697-74e6-49f7-bebe-b77009517aee`, pack `.data/ai-play/52baa697-74e6-49f7-bebe-b77009517aee/evidence.evidence` |
+
+- Attempt 1 summary: "The game's win condition did not activate after the required MOVE RIGHT action. The run collected the coin, but the status never changed from PLAYING to WON." Kane's `evidence` field names the contradiction directly: status `PLAYING` while coins are `1` and the last error is `none`, after the required input. `final_state` was `{}` (same Kane extraction quirk as K5 attempt 1).
+- Fix: restore the win rule to the number of coins the scene contains, one rule change, then a fresh snapshot and a same-seed replay. Applied by the harness, not by a model turn.
+- Attempt 2: `run_end.status: "passed"`, `final_state { status: "WON", coins: "1", last_error: "none" }`.
+- What this proves: the failure → replay loop is not tuned to the embedded-coin shape; an unsatisfiable completion rule produces a clean assertion failure and a passing run after the rule is corrected.
+- First attempt at this control, on the full Neon Runner route, never reached an assertion: the six-jump objective exceeded the 145 s AI Play ceiling and was reported as `cancelled` with an unknown verdict (no `run_end`). The compact fixture replaced it; that cancellation is recorded here so it is not mistaken for a pass or a product failure.
+
 ## Bar 3 — agent and Kane talked to each other
 
 Both directions are now proven with real runs.
@@ -256,6 +271,9 @@ sh scripts/kane/run-objective.sh scripts/kane/objectives/k1-editor-smoke.txt htt
 # Real AI Play fail → repair → pass on the reduced fixture
 node --import tsx scripts/kane/ai-play-smoke.ts
 
+# Independent negative control: unsatisfiable win rule, fail → repair → pass
+node --import tsx scripts/kane/negative-control.ts
+
 # Full demo two-attempt loop (real, 151.6 s)
 # http://localhost:5173/?demoReset=1 → Neon Runner → AI Play
 # needs KANE_ENABLED=1 KANE_AI_PLAY_ENABLED=1 KANE_TIMEOUT_SECONDS=140 KANE_MAX_STEPS=8
@@ -267,7 +285,7 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 - K2 is the one objective recorded as environment-blocked: after its defect was found and fixed, three runs died on "browser target stopped running during screenshot capture" after selecting Player, with no product error in NDJSON. K3a, K3b, K4 and K5 are real passes (above); K2 is not claimed as either a pass or a product failure.
 - K5's failure record does not name the inaccessible coin and stored no values (`final_state: {}`); the embedded `Core A` was identified by the product's deterministic repair, and the passing attempt's `coins: "3"` proves the move was required.
 - The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
-- The independent negative control (unreachable goal rather than the seeded coin) has not been run.
+- The independent negative control now passes (unsatisfiable win rule, above), but its repair is applied deterministically by the harness. Model-driven diagnosis of a *non-coin* failure is still only evidenced indirectly by K3a's agent repair and K5's product repair.
 - The full Neon Runner loop uses the deterministic embedded-coin repair, not a model-driven diagnosis. The agent path is exercised by the reduced-fixture smoke and the fixture stream, not by an LLM turn on the demo.
 - Evidence packs and run NDJSON stay untracked under `.data/` and `.testmuai/` as intended.
 - The toolbar "Ask agent" button was a plain `DropdownMenu` trigger, so a click only opened the "Game Director" menu and the drawer needed a second click on `Open chat` (in whatever mode was last active). It is now the plan's split button: `agent-open` is its own button that opens the drawer in Build with the selection attached, and `agent-menu` (the chevron) opens the menu. Real CDP clicks at 1366×768 confirm main → `Build` + `Locked: Hint`, chevron → menu with the drawer still closed (`.data/split-main-click.png`, `.data/split-menu.png`). With no tool-capable model the main click falls back to Ask rather than landing on a disabled Build tab. The menu keeps its fourth entry, `Ask about this scene`, which the plan's three-item list does not name.
