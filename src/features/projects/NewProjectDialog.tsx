@@ -157,7 +157,7 @@ export function NewProjectDialog({
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canCreate}>
+          <Button variant="primary" onClick={submit} disabled={!canCreate} data-testid="project-create">
             Create project
           </Button>
         </>
@@ -171,6 +171,7 @@ export function NewProjectDialog({
               key={item.key}
               className="mode-card"
               aria-pressed={mode === item.key}
+              data-testid={`project-mode-${item.key}`}
               onClick={() => setMode(item.key)}
             >
               <span className="mode-title">
@@ -187,7 +188,7 @@ export function NewProjectDialog({
         {mode !== "import" && (
           <label className="field">
             <span className="field-label">Project name</span>
-            <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Untitled project" autoFocus />
+            <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Untitled project" data-testid="project-name" autoFocus />
           </label>
         )}
 
@@ -196,7 +197,7 @@ export function NewProjectDialog({
             <span className="field-label">{mode === "brief" ? "Style / template (optional base)" : "Template"}</span>
             <div className="template-list" role="group" aria-label="Template">
               {templates.map((item) => (
-                <button key={item.key} className="template-option" aria-pressed={template === item.key} onClick={() => setTemplate(item.key)}>
+                <button key={item.key} className="template-option" aria-pressed={template === item.key} data-testid={`project-template-${item.key}`} onClick={() => setTemplate(item.key)}>
                   <span className="template-name">{item.name}</span>
                   <span className="template-desc">{item.description}</span>
                 </button>

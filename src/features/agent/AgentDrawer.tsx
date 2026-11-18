@@ -223,6 +223,7 @@ export function AgentDrawer(props: AgentDrawerProps) {
         )}
         <textarea
           className="agent-input"
+          data-testid="agent-input"
           rows={1}
           placeholder="Ask, build, or fix anything…"
           value={input}
@@ -235,9 +236,9 @@ export function AgentDrawer(props: AgentDrawerProps) {
         />
         <div className="agent-composer-actions">
           {isBusy ? (
-            <Button variant="secondary" size="sm" onClick={onStop} aria-label="Stop"><Square size={12} /> Stop</Button>
+            <Button variant="secondary" size="sm" onClick={onStop} aria-label="Stop" data-testid="agent-stop"><Square size={12} /> Stop</Button>
           ) : (
-            <Button variant="primary" size="sm" onClick={() => submit()} disabled={!input.trim()} aria-label="Send"><Send size={12} /> Send</Button>
+            <Button variant="primary" size="sm" onClick={() => submit()} disabled={!input.trim()} aria-label="Send" data-testid="agent-send"><Send size={12} /> Send</Button>
           )}
         </div>
         <div className="agent-composer-hint">⏎ send · ⇧⏎ newline · Esc stop</div>
@@ -289,6 +290,8 @@ function ToolCardView({ name, args, status, result }: { name: string; args: unkn
     open_panel: "Opening panel",
     start_playtest: "Starting playtest",
     undo_last_agent_change: "Undoing agent change",
+    verify_with_kane: "Verifying with Kane",
+    run_ai_play: "Kane is playing",
   };
   return (
     <div className={`agent-tool-card ${status}`}>
@@ -299,6 +302,21 @@ function ToolCardView({ name, args, status, result }: { name: string; args: unkn
           {status === "running" ? <><Loader2 size={12} className="spin" /> running</> : status === "done" ? "done" : status === "error" ? "error" : status}
         </span>
       </button>
+      {(name === "verify_with_kane" || name === "run_ai_play") && result?.ok && result.data && (
+        <div className="kane-run-card" data-testid="kane-run-card">
+          <div className="kane-run-head">
+            <span className={`chip ${result.data.status === "passed" ? "success" : "danger"}`} data-testid="verdict-badge">{String(result.data.status ?? "unknown").toUpperCase()}</span>
+            <strong>{name === "run_ai_play" ? "KANE PLAY" : "ENGINE QA"}</strong>
+            <span>{result.data.steps?.length ?? 0} steps</span>
+            {typeof result.data.durationMs === "number" && result.data.durationMs > 0 && (
+              <span data-testid="kane-run-duration">{(result.data.durationMs / 1000).toFixed(1)}s</span>
+            )}
+          </div>
+          <p>{String(result.data.summary ?? "")}</p>
+          {result.data.finalState && <div className="kane-run-state">{Object.entries(result.data.finalState as Record<string, unknown>).map(([key, value]) => `${key.toUpperCase()}: ${String(value)}`).join(" · ")}</div>}
+          {result.data.evidenceUrl && <a href={String(result.data.evidenceUrl)} target="_blank" rel="noreferrer">Open evidence</a>}
+        </div>
+      )}
       {open && (
         <div className="agent-tool-body">
           <div className="agent-tool-section"><div className="agent-tool-key">Input</div><pre>{JSON.stringify(args, null, 2)}</pre></div>

@@ -82,7 +82,7 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 - Share links, Kane engine QA, and AI Play require the local Node server; exported zips do not.
 - Manual editing, manual Play, save, share, and export work with no model, no provider key, and no Kane. AI is additive; `AI_ENABLED=0` hides AI surfaces without breaking the editor.
 - AI features require a provider key (environment variable, in-app vault, or session-only key). `AI_MOCK=1` is a development fixture, not a production model.
-- AI Play requires both a configured model (for diagnosis/fix) and a logged-in Kane CLI (to play). Without either, it is disabled with an explanation; manual Play still works.
+- AI Play requires a logged-in Kane CLI (to play). The current auto-fix is deterministic (embedded-coin geometry), so it does not require a model; a model is only needed for non-rule agent diagnosis. Without Kane, AI Play is disabled; manual Play still works.
 - AI Play is local/self-hosted in v1 because it launches Chrome. A deployed server needs a dedicated runner/display or it cannot use AI Play.
 - AI Play consumes Kane and provider credits and uploads a Test Manager run unless configured otherwise; consent is required before the first run.
 - The `Neon Runner` demo intentionally contains one uncollectible coin for the AI Play negative-control demo. Manual Play can still reach the goal; `?demoReset=1` restores the defect. It is a demo fixture, not a product bug.
@@ -97,7 +97,7 @@ An independent read of the Slice 3–7 code against `docs/clockwork-implementati
 - The end-to-end path must be demonstrated from a cold browser profile, not a warm dev session.
 - The agent ↔ Kane handshake must produce real NDJSON and evidence: engine QA in the verification branch, and the two real AI Play loops in Slice 10. A fixture pass is not enough.
 - The project must run without a model/key/Kane for the editor and manual Play paths; only AI features may be unavailable.
-- The AI Play demo must show a real failure (`COINS: 2`) and a real same-seed pass (`COINS: 3`), not a scripted success card.
+- The full Neon Runner AI Play demo now shows a real failure and a real same-seed pass: attempt 1 `run_end.status: "failed"` in 85.0 s (two coins, still playing), deterministic fix, attempt 2 `"passed"` in 66.6 s with `STATUS: "WON"`, `COINS: "3"`, `LAST ERROR: "none"` (151.6 s total). Evidence is in `docs/kane-proof.md`. The independent negative control is still unverified.
 - The visual target must be checked at 1366×768, not only on a large monitor.
 - Any failing `pnpm typecheck`, `pnpm build`, console error, or unchecked acceptance item must be recorded here with the date and slice.
 

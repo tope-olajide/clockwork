@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "kane-cli": {
+      "source": "LambdaTest/kane-cli",
+      "commit": "e76ec879f2118391b147045971b3e4bbd9988e1e",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/kane-cli/SKILL.md",
+      "computedHash": "61e8bc671c2d31afbc04aa607e33b147bc5c306cac8fb271e294394097038421"
+    }
+  }
+}

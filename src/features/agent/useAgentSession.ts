@@ -10,6 +10,8 @@ import { useEngineStore } from "../../engine/store/engine-store";
 import { deleteChat, readChat, saveChat } from "../../engine/persistence/indexeddb";
 import { runHeadlessPlaytest, type PlaytestInput } from "../../engine/runtime/playtest";
 import { useAgentPresenceStore } from "../../engine/store/agent-presence";
+import { collectProjectAssets, createSnapshot } from "../../engine/io/snapshot";
+import { streamAiPlay, verifyWithKane } from "../../engine/ai/kane-api";
 
 export type AgentStatus = "ready" | "thinking" | "streaming" | "tool" | "error";
 
@@ -113,7 +115,10 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   useEffect(() => { void refreshAiMeta(); }, [refreshAiMeta]);
 
   const providerById = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
-  const effectiveModelId = selectedModelId ?? aiSettings?.defaultModelId ?? "";
+  // An env-only setup exposes a read-only "env" model; select it rather than
+  // showing "No model" while the agent endpoint could answer.
+  const envModelId = models.find((m) => m.providerId === "env")?.id ?? "";
+  const effectiveModelId = selectedModelId ?? aiSettings?.defaultModelId ?? envModelId;
   const effectiveModel = useMemo(() => models.find((m) => m.id === effectiveModelId) ?? null, [models, effectiveModelId]);
   const effectiveProvider = effectiveModel ? providerById.get(effectiveModel.providerId) : undefined;
   const mock = Boolean(aiSettings?.mock);
@@ -173,6 +178,41 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     const revision = doc?.revision ?? 0;
     const ok = (data: unknown, extra?: any) => ({ ok: true as const, data, revision: store.document?.revision ?? revision, name, args: callArgs, ...extra });
     const fail = (error: string, code?: string) => ({ ok: false as const, error, code, revision: store.document?.revision ?? revision, name, args: callArgs });
+
+    if (name === "verify_with_kane" || name === "run_ai_play") {
+      if (!doc) return fail("No project open.");
+      try {
+        const assets = await collectProjectAssets(doc);
+        const snapshot = await createSnapshot(doc, { assets, ttlHours: 1 });
+        const result = name === "verify_with_kane"
+          ? await verifyWithKane({
+            snapshotId: snapshot.id,
+            objective: String(callArgs.objective ?? "Verify the current project in the snapshot player."),
+            seed: 1234,
+          })
+          : await streamAiPlay({
+            snapshotId: snapshot.id,
+            projectId: args.projectId,
+            seed: 1234,
+            goal: typeof callArgs.goal === "string" ? callArgs.goal : undefined,
+          });
+        return ok({
+          status: result.status,
+          summary: result.summary,
+          finalState: result.finalState,
+          durationMs: result.durationMs,
+          steps: result.steps.slice(-12),
+          runtimeErrors: result.runtimeErrors,
+          evidencePath: result.evidencePath,
+          evidenceUrl: result.evidenceUrl,
+          testUrl: result.testUrl,
+          snapshotId: snapshot.id,
+          objective: result.objective,
+        });
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "Kane run failed.");
+      }
+    }
 
     if (name === "select_entities") {
       const ids = Array.isArray(callArgs.ids) ? callArgs.ids.filter((x): x is string => typeof x === "string") : [];
@@ -337,6 +377,38 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     const doc = store.document;
     if (!doc) return;
 
+    // Block before touching the network. Sending anyway produces a raw provider
+    // failure (Kane's K2 run caught this as "fetch failure" with "No model").
+    if (!mock) {
+      if (!effectiveModel) {
+        setError({
+          message: "No model is selected. Choose a model to use the agent; manual editing and Play keep working without one.",
+          code: "no-model",
+          action: "choose-model",
+        });
+        setStatus("error");
+        return;
+      }
+      if (!providerConfigured) {
+        setError({
+          message: `${effectiveModel.label} has no API key configured. Add a key in Settings → AI Models, or choose a model whose provider is connected.`,
+          code: "no-key",
+          action: "open-settings",
+        });
+        setStatus("error");
+        return;
+      }
+      if ((mode === "build" || mode === "plan") && !canUseTools) {
+        setError({
+          message: "Build and Plan need a tool-capable model. Choose one, or switch to Ask.",
+          code: "no-tools",
+          action: "choose-model",
+        });
+        setStatus("error");
+        return;
+      }
+    }
+
     setError(null);
     useAgentPresenceStore.getState().clearPresence();
     const userMsg: DisplayMessage = { id: nanoid(), role: "user", content: trimmed, createdAt: new Date().toISOString() };
@@ -459,13 +531,20 @@ export function useAgentSession(args: UseAgentSessionArgs) {
         setStatus("ready");
         return;
       }
-      const message = e instanceof Error ? e.message : "Agent request failed";
-      setError({ message, action: "retry" });
+      const raw = e instanceof Error ? e.message : "Agent request failed";
+      const unreachable = /fetch|network|load failed|ECONN|socket/i.test(raw);
+      setError({
+        message: unreachable
+          ? `Could not reach the model provider (${raw}). Check the provider key and connection in Settings → AI Models.`
+          : raw,
+        code: unreachable ? "provider-timeout" : undefined,
+        action: unreachable ? "open-settings" : "retry",
+      });
       setStatus("error");
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
     }
-  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, executeAgentTool, messages, mode]);
+  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModel, effectiveModelId, executeAgentTool, messages, mock, mode, providerConfigured, canUseTools]);
 
   const retry = useCallback(() => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");

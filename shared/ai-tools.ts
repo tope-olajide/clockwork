@@ -83,6 +83,15 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "list_commands",
+      description:
+        "List every project command with its argument names, types and required flags. Call this before apply_commands when you are not certain of a command's args.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "capture_viewport",
       description: "Capture the current editor viewport as a PNG image for visual inspection.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -263,12 +272,48 @@ const ALIAS_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
 ];
 
-export const ALL_AGENT_TOOL_DEFINITIONS = [...READ_TOOL_DEFINITIONS, ...ALIAS_TOOL_DEFINITIONS, ...WRITE_TOOL_DEFINITIONS];
+export const KANE_TOOL_DEFINITIONS: ToolDefinition[] = [
+  {
+    type: "function",
+    function: {
+      name: "verify_with_kane",
+      description: "Run Kane CLI against an immutable snapshot of this project in a real browser and return the verdict, steps, duration and evidence. Use for engine QA; never claim a pass without run_end.status passed. Keep the objective to what the user asked (load the level, collect a coin, reach the goal) and do not add console-error or bundle checks that make the run time out.",
+      parameters: {
+        type: "object",
+        properties: {
+          objective: { type: "string", description: "Plain-English verification objective under 1,000 characters" },
+          sceneId: { type: "string", description: "Optional scene to start from" },
+        },
+        required: ["objective"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_ai_play",
+      description: "Run the in-product AI Play loop: Kane plays a read-only snapshot through the visible AI HUD and returns status, final_state, steps and evidence. On failure, diagnose and apply one non-destructive fix, then retry with the same seed at most once.",
+      parameters: {
+        type: "object",
+        properties: {
+          goal: { type: "string", description: "Optional gameplay goal for this run" },
+          sceneId: { type: "string", description: "Optional start scene" },
+          maxAttempts: { type: "number", description: "1 or 2, default 1" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+];
 
-export function toolDefinitionsForRequest(opts: { toolsEnabled: boolean; visionEnabled: boolean; allowWrites: boolean }) {
+export const ALL_AGENT_TOOL_DEFINITIONS = [...READ_TOOL_DEFINITIONS, ...ALIAS_TOOL_DEFINITIONS, ...WRITE_TOOL_DEFINITIONS, ...KANE_TOOL_DEFINITIONS];
+
+export function toolDefinitionsForRequest(opts: { toolsEnabled: boolean; visionEnabled: boolean; allowWrites: boolean; allowKane?: boolean }) {
   const base = opts.toolsEnabled ? [...READ_TOOL_DEFINITIONS] : [];
   const filtered = base.filter((t) => opts.visionEnabled || t.function.name !== "capture_viewport");
   if (opts.toolsEnabled) filtered.push(...ALIAS_TOOL_DEFINITIONS);
   if (opts.toolsEnabled && opts.allowWrites) filtered.push(...WRITE_TOOL_DEFINITIONS);
+  if (opts.toolsEnabled && opts.allowKane) filtered.push(...KANE_TOOL_DEFINITIONS);
   return filtered;
 }

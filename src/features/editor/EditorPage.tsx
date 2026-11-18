@@ -38,6 +38,9 @@ import { EngineInspector, EngineLeftDock, EngineWorkspace,
 } from "./EngineDocks";
 import { AgentDrawer } from "../agent/AgentDrawer";
 import { useAgentSession } from "../agent/useAgentSession";
+import { AiPlayPanel } from "../ai-play/AiPlayPanel";
+import { useAiPlay } from "../ai-play/useAiPlay";
+import { repairAiPlayFailure } from "../../engine/ai/ai-play-repair";
 
 const WORKSPACE_TABS: Array<{ key: WorkspaceTab; label: string }> = [
   { key: "scene", label: "Scene" },
@@ -127,6 +130,7 @@ export function EditorPage() {
   const [hierarchyDrawer, setHierarchyDrawer] = useState(false);
   const [inspectorDrawer, setInspectorDrawer] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [aiPlayOpen, setAiPlayOpen] = useState(false);
   const [lockedSelectionId, setLockedSelectionId] = useState<string | null>(null);
   const [debug, setDebug] = useState(searchParams.get("debug") === "1");
 
@@ -175,9 +179,12 @@ export function EditorPage() {
   useEffect(() => {
     if (selection.length > 0) {
       setInspectorTab("object");
-      if (huge) setInspectorOpen(true);
+      // At 1366–1599 the inspector starts collapsed; selecting an object must
+      // reveal the fields the user just selected. Only the >=1600 layout keeps
+      // it permanently open.
+      if (wide) setInspectorOpen(true);
     }
-  }, [selection, huge]);
+  }, [selection, wide]);
 
   function setTab(next: WorkspaceTab) {
     const sp = new URLSearchParams(searchParams);
@@ -330,6 +337,34 @@ export function EditorPage() {
     lockedSelectionId,
   });
 
+  const aiPlay = useAiPlay({
+    projectId: current?.id ?? projectId,
+    getDocument: () => useEngineStore.getState().document,
+    saveNow,
+    onRepair: async (result) => {
+      const doc = useEngineStore.getState().document;
+      if (!doc) return false;
+      const repair = repairAiPlayFailure(doc, result);
+      if (!repair) return false;
+      const outcome = dispatch(repair.command.type, repair.command.args, { transactionId: `ai-play-repair-${Date.now()}` });
+      if (!outcome.ok) {
+        toast.push("AI fix rejected", outcome.error);
+        return false;
+      }
+      setActiveScene(repair.sceneId);
+      setSelection([repair.objectId]);
+      setInspectorTab("object");
+      await saveNow();
+      toast.push("AI Play auto-fix", repair.diagnosis);
+      return true;
+    },
+  });
+
+  function openAiPlay() {
+    setAiPlayOpen(true);
+    setAgentOpen(false);
+  }
+
   const lockedSelection = lockedSelectionId
     ? current?.scenes.flatMap((item) => item.objects).find((object) => object.id === lockedSelectionId) ?? null
     : null;
@@ -379,7 +414,7 @@ export function EditorPage() {
     onHierarchy: openHierarchy,
     onInspector: openInspector,
     onPlay: () => navigate(`/play/${current?.id ?? projectId}`),
-    onAiPlay: () => toast.push("AI Play", "AI Play arrives with Kane in Slice 10."),
+    onAiPlay: openAiPlay,
     onSettings: () => navigate(`/project/${current?.id ?? projectId}?section=ai`),
     onToast: toast.push,
   });
@@ -414,6 +449,12 @@ export function EditorPage() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         void saveNow().then(() => toast.push("Saved", "Project saved to this browser."));
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        if (event.shiftKey) openAiPlay();
+        else navigate(`/play/${current?.id ?? projectId}`);
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
@@ -574,14 +615,30 @@ export function EditorPage() {
             </Menu>
             <div className="toolbar-spacer" />
             {savePill}
-            <Menu trigger={<Button variant="violet" size="sm"><Sparkles size={13} /><span className="ask-agent-label">Ask agent</span><ChevronDown size={11} /></Button>}>
-              <MenuLabel>Game Director</MenuLabel>
-              <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], "ask"); else { agent.setMode("ask"); setAgentOpen(true); } }}>Ask about this scene</MenuItem>
-              <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], agent.canBuildPlan ? "plan" : "ask"); else { agent.setMode(agent.canBuildPlan ? "plan" : "ask"); setAgentOpen(true); } }} disabled={!agent.canBuildPlan}>Plan a change</MenuItem>
-              <MenuItem onSelect={() => { setLockedSelectionId(null); agent.setMode("ask"); setAgentOpen(true); }}>Explain this scene</MenuItem>
-              <MenuItem onSelect={() => setAgentOpen(true)} shortcut="⌘J">Open chat</MenuItem>
-            </Menu>
-            <Button variant="ghost" size="sm" icon={<Play size={13} />} onClick={() => navigate(`/play/${current.id}`)}>Play</Button>
+            <div className="split-button" role="group" aria-label="Ask agent">
+              <Button
+                variant="violet"
+                size="sm"
+                data-testid="agent-open"
+                aria-label="Ask agent"
+                onClick={() => {
+                  const nextMode = agent.canBuildPlan ? "build" : "ask";
+                  if (selection[0]) askAgentAbout(selection[0], nextMode);
+                  else { setLockedSelectionId(null); agent.setMode(nextMode); setAgentOpen(true); }
+                }}
+              >
+                <Sparkles size={13} /><span className="ask-agent-label">Ask agent</span>
+              </Button>
+              <Menu trigger={<Button variant="violet" size="sm" data-testid="agent-menu" aria-label="More agent actions"><ChevronDown size={11} /></Button>}>
+                <MenuLabel>Game Director</MenuLabel>
+                <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], "ask"); else { agent.setMode("ask"); setAgentOpen(true); } }}>Ask about this scene</MenuItem>
+                <MenuItem onSelect={() => { if (selection[0]) askAgentAbout(selection[0], agent.canBuildPlan ? "plan" : "ask"); else { agent.setMode(agent.canBuildPlan ? "plan" : "ask"); setAgentOpen(true); } }} disabled={!agent.canBuildPlan}>Plan a change</MenuItem>
+                <MenuItem onSelect={() => { setLockedSelectionId(null); agent.setMode("ask"); setAgentOpen(true); }}>Explain this scene</MenuItem>
+                <MenuItem onSelect={() => setAgentOpen(true)} shortcut="⌘J">Open chat</MenuItem>
+              </Menu>
+            </div>
+            <Button variant="ghost" size="sm" icon={<Play size={13} />} onClick={() => navigate(`/play/${current.id}`)} data-testid="toolbar-play">Play</Button>
+            <Button variant="violet" size="sm" icon={<Sparkles size={13} />} onClick={openAiPlay} data-testid="toolbar-ai-play" aria-label="AI Play with Kane">AI Play</Button>
             <Menu trigger={<Button variant="ghost" size="sm">View <ChevronDown size={11} /></Button>}>
               <MenuItem onSelect={openHierarchy} shortcut={!wide ? "Drawer" : undefined}><Layers size={13} /> Hierarchy</MenuItem>
               <MenuItem onSelect={openInspector} shortcut={!wide ? "Drawer" : undefined}><PanelRight size={13} /> Inspector</MenuItem>
@@ -641,6 +698,13 @@ export function EditorPage() {
           <button type="button" onClick={agent.discardPendingPreview}>Discard</button>
         </div>
       )}
+      <AiPlayPanel
+        open={aiPlayOpen}
+        onClose={() => setAiPlayOpen(false)}
+        aiPlay={aiPlay}
+        modelLabel={agent.modelLabel}
+        onUndoFix={() => { undo(); toast.push("AI fixes undone", "The last editor change was reverted."); }}
+      />
       <AgentDrawer
         open={agentOpen}
         onClose={() => setAgentOpen(false)}

@@ -1,0 +1,1 @@
+Open the Neon Runner demo project. Select the player object. Open the agent and ask: "Give the player a double jump." Wait for the change summary. Verify the inspector shows that double jump is enabled. Press Play, press Space twice, and verify the player leaves the ground twice. Stop Play, press Undo once, and verify the double jump setting is off again.

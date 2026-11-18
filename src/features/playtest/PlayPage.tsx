@@ -29,6 +29,9 @@ export function PlayPage() {
   const runtimeRef = useRef<Runtime | null>(null);
   const inputRef = useRef<InputManager | null>(null);
   const pausedRef = useRef(false);
+  // Click-to-move target in world space. Kept until the player reaches it, so
+  // a single click is enough to steer without holding a key.
+  const steerRef = useRef<number | null>(null);
   const seedRef = useRef(1234);
   const textureVersionRef = useRef(0);
   const perfRef = useRef({ step: 0, render: 0 });
@@ -92,6 +95,13 @@ export function PlayPage() {
       app.canvas.style.display = "block";
       host.appendChild(app.canvas);
       inputRef.current?.attachPointer(app.canvas);
+      const onStagePointerDown = (event: PointerEvent) => {
+        const runtime = runtimeRef.current;
+        if (!runtime || event.button !== 0) return;
+        const rect = app.canvas.getBoundingClientRect();
+        steerRef.current = runtime.camera.x + (event.clientX - rect.left - rect.width / 2) / runtime.camera.zoom;
+      };
+      app.canvas.addEventListener("pointerdown", onStagePointerDown);
       renderer.attach(app);
       appRef.current = app;
       rendererRef.current = renderer;
@@ -110,11 +120,26 @@ export function PlayPage() {
         const input = inputRef.current;
         if (runtime && input) {
           const stepStarted = performance.now();
+          const frameForStep = () => {
+            const frame = input.snapshot();
+            const target = steerRef.current;
+            const player = runtime.player();
+            if (target !== null && player) {
+              const dx = target - player.x;
+              if (Math.abs(dx) <= 16) {
+                steerRef.current = null;
+              } else {
+                frame.left = dx < 0;
+                frame.right = dx > 0;
+              }
+            }
+            return frame;
+          };
           if (!pausedRef.current && runtime.status === "running") {
             accumulator += delta;
             let guard = 0;
             while (accumulator >= FIXED_DT && guard < 8) {
-              runtime.step(input.snapshot());
+              runtime.step(frameForStep());
               accumulator -= FIXED_DT;
               guard += 1;
               if (runtime.status !== "running") break;
@@ -156,6 +181,10 @@ export function PlayPage() {
       });
       observer.observe(host);
 
+      const clearSteer = () => {
+        steerRef.current = null;
+      };
+      window.addEventListener("keydown", clearSteer);
       const onKey = (event: KeyboardEvent) => {
         if (event.key === "Escape") {
           navigate(`/project/${projectId}`);
@@ -170,6 +199,8 @@ export function PlayPage() {
       window.addEventListener("keydown", onKey);
       (app as unknown as { __cleanup?: () => void }).__cleanup = () => {
         window.removeEventListener("keydown", onKey);
+        window.removeEventListener("keydown", clearSteer);
+        app.canvas.removeEventListener("pointerdown", onStagePointerDown);
         observer.disconnect();
         cancelAnimationFrame(raf);
       };
@@ -294,6 +325,7 @@ export function PlayPage() {
           {scene?.name ?? "Scene"} · seed {seedRef.current} · {formatTime(snapshot?.elapsed ?? 0)}
         </span>
         <span className="chip">Read-only</span>
+        <span className="project-meta">Click the stage to move</span>
         <Button variant="secondary" size="sm" onClick={togglePause}>
           {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? "Resume" : "Pause"}
         </Button>

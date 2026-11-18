@@ -51,11 +51,37 @@ function writeStore(file: AiSettingsFile) {
   fs.writeFileSync(STORE_PATH, JSON.stringify(file, null, 2), "utf8");
 }
 
+/**
+ * A single-provider `.env.local` setup (LLM_MODEL/LLM_BASE_URL/LLM_API_KEY) is
+ * usable by the server, so surface it to the client as a read-only provider.
+ * Otherwise the app looks model-less while the agent endpoint would work.
+ */
+export function envModelConfig() {
+  const model = process.env.LLM_MODEL?.trim() || process.env.AI_MODEL?.trim();
+  const baseUrl = process.env.LLM_BASE_URL?.trim() || process.env.AI_BASE_URL?.trim();
+  const apiKey = process.env.LLM_API_KEY?.trim() || process.env.AI_API_KEY?.trim();
+  if (!model || !baseUrl || !apiKey) return null;
+  return { model, baseUrl, envKeyName: process.env.LLM_API_KEY ? "LLM_API_KEY" : "AI_API_KEY" };
+}
+
 export function listProviders() {
   const store = readStore();
   const builtIn = BUILT_IN_PROVIDERS.map((p) => ({ ...p, builtIn: true as const }));
   const custom = store.customProviders.map((p) => ({ ...p, modelsEndpoint: false, local: p.baseUrl.includes("localhost") || p.baseUrl.includes("127.0.0.1"), builtIn: false as const }));
-  return [...builtIn, ...custom];
+  const env = envModelConfig();
+  const envProvider = env
+    ? [{
+      id: "env",
+      name: "Environment (.env)",
+      apiStyle: "openai-compatible" as const,
+      baseUrl: env.baseUrl,
+      envKeyName: env.envKeyName,
+      modelsEndpoint: false,
+      local: false,
+      builtIn: true as const,
+    }]
+    : [];
+  return [...envProvider, ...builtIn, ...custom];
 }
 
 export function getProvider(providerId: string) {
@@ -111,7 +137,18 @@ export function removeProviderKey(providerId: string) {
 export function listAllModels(): (ModelMeta & { custom?: boolean })[] {
   const store = readStore();
   const custom: (ModelMeta & { custom: boolean })[] = store.customModels.map((m) => ({ ...m, custom: true }));
-  return [...CURATED_MODELS, ...custom];
+  const env = envModelConfig();
+  const envModels: (ModelMeta & { custom?: boolean })[] = env
+    ? [{
+      id: `env:${env.model}`,
+      providerId: "env",
+      label: `${env.model} (env)`,
+      contextWindow: 128_000,
+      tools: true,
+      vision: false,
+    }]
+    : [];
+  return [...envModels, ...CURATED_MODELS, ...custom];
 }
 
 export function getModel(modelId: string) {
