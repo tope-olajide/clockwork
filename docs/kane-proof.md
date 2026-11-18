@@ -105,7 +105,7 @@ Cost and time notes from this pass:
 |---|---|---|
 | K1 editor smoke | **passed** | real run above |
 | K5 AI Play closed loop | **passed** | full Neon Runner fail → fix → pass (151.6 s first pass; rerun with extraction 81.5 s + 81.1 s, above) |
-| K2 agent double jump | **failed** (environment, 3 attempts) | real runs, see below |
+| K2 agent double jump | **caught a defect; verification environment-blocked** | defect fixed, 3 post-fix runs died in Kane's browser, see below |
 | K3 agent repair | **passed** | K3a repair+win and K3b undo/redo, both real single flows |
 | K4 agent ↔ Kane handshake | **passed** | in-app card + terminal objective, both real (Bar 3) |
 
@@ -126,6 +126,12 @@ Cost and time notes from this pass:
 #### K2 after the fix: still an environment failure
 
 Three further real runs all ended the same way: `run_end.status: "failed"` at 51–60 s, reason "browser target stopped running during screenshot capture", immediately after selecting Player in the hierarchy. Cost 3.1–13.1 credits per attempt. The NDJSON shows no product error and no rejected request. This is the same `environment_issue/platform_failure` recorded in K1's evidence; it is a local Chrome/graphics stability limit, not a regression.
+
+**Decision: K2 is recorded as environment-blocked, not as a pass and not as a product failure.** The reasoning:
+
+- The product half of K2 is already evidenced elsewhere: Kane caught the no-model request path on the first K2 run, and the fix is verified at the API level (env provider, preflight block, actionable errors) plus by the K3a/K3b/K4 runs, which use the same Build path on the same machine.
+- All three post-fix attempts died in Kane's own browser before the objective could assert anything, with no product error in NDJSON. More attempts would buy the same crash, not new information, so no further credits are spent on it.
+- The objective stays in `scripts/kane/objectives/k2-agent-double-jump.txt` for reproduction. It becomes provable on a machine where Kane's Chrome survives screenshot capture (more memory, or its own display), and that is the only condition that would change this verdict.
 
 ### K3 — agent repair (real run, failed on Play input)
 
@@ -258,7 +264,7 @@ node --import tsx scripts/kane/ai-play-smoke.ts
 ## Limitations
 
 - The full Neon Runner AI Play loop is verified as fail → fix → pass in 151.6 s (85.0 s + 66.6 s) with the assert-only objective. With the required `store ... as` extraction the passing attempt measured 86.8 s, so the same loop is ~172 s — only 8 s of headroom against the 180 s budget. The saved-test replay path is the margin, and it is still unmeasured.
-- K2 was not executed successfully against real Kane: three runs died on "browser target stopped running during screenshot capture" after selecting Player. K3a, K3b, K4 and K5 are real passes (above); K2 is the one objective still unproven.
+- K2 is the one objective recorded as environment-blocked: after its defect was found and fixed, three runs died on "browser target stopped running during screenshot capture" after selecting Player, with no product error in NDJSON. K3a, K3b, K4 and K5 are real passes (above); K2 is not claimed as either a pass or a product failure.
 - K5's failure record does not name the inaccessible coin and stored no values (`final_state: {}`); the embedded `Core A` was identified by the product's deterministic repair, and the passing attempt's `coins: "3"` proves the move was required.
 - The saved-test replay path (`KANE_AI_PLAY_TEST`) is verified against the documented stream contract only. It needs one real authored run to produce `output-ai-play-demo/` recordings before replay can be measured; that run was not made here.
 - The independent negative control (unreachable goal rather than the seeded coin) has not been run.
