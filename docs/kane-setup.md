@@ -47,6 +47,8 @@ KANE_CLI=kane-cli
 CLOCKWORK_PUBLIC_URL=http://localhost:5173
 ```
 
+The 180 s default fits an 8-step AI Play attempt but not a 12-step in-app engine-QA run: the K4 reruns here used `KANE_TIMEOUT_SECONDS=300` (configuration, not a code change). The runner clamps the value to 30–900 s and adds a 5 s grace on top of the process timer.
+
 With `KANE_ENABLED=0`, both `/api/kane/qa` and `/api/kane/ai-play` return 404 and no Kane tool is advertised to the model. Manual Play, editing, persistence, share, and export continue to work.
 
 `AI_MOCK=1` only mocks the model. It does not mock Kane.
@@ -80,13 +82,16 @@ kane-cli run "<objective>" \
   --max-steps 40 \
   --timeout 180 \
   --assertion-mode dom \
-  --final-validation on \
+  --final-validation off \
+  --skip-code-validation \
   --bug-detection off
 ```
 
+- `--final-validation off` is deliberate: every objective already ends in explicit assertions, and the synthesized checkpoint costs another agent step (and credits) per run.
 - Engine QA uses `--bug-detection continue` so a confirmed bug is recorded while the remaining steps run.
 - AI Play uses `--bug-detection off`: a game-design failure is not a product bug.
 - AI Play always targets an immutable snapshot (`/s/<id>?ai=1&seed=1234`), never the editor with IndexedDB state.
+- A saved-test replay uses `kane-cli testmd run <file>` with `--no-adaptive-heal`, so a replay failure fails fast instead of re-authoring steps.
 - `KANE_HEADLESS=1` adds `--headless`; leave it unset for a demo so the audience sees Chrome play.
 - The objective is capped at 1,000 characters and the URL is formed server-side. The client cannot pass an arbitrary command, base URL, or key.
 
@@ -156,11 +161,16 @@ open "http://localhost:5173/?demoReset=1"
 Then run the objectives in `scripts/kane/objectives/`:
 
 ```bash
-bash scripts/kane/run-objective.sh k1-editor-smoke.txt http://localhost:5173
-bash scripts/kane/run-objective.sh k2-agent-double-jump.txt "http://localhost:5173/?demo=1&kane=1"
-bash scripts/kane/run-objective.sh k3-agent-repair.txt "http://localhost:5173/?demoReset=1&kane=1"
-bash scripts/kane/run-objective.sh k4-kane-handshake.txt "http://localhost:5173/?demo=1&kane=1"
+bash scripts/kane/run-objective.sh scripts/kane/objectives/k1-editor-smoke.txt http://localhost:5173
+bash scripts/kane/run-objective.sh scripts/kane/objectives/k3a-repair-win.txt "http://localhost:5173/?demo=1"
+bash scripts/kane/run-objective.sh scripts/kane/objectives/k3b-undo-redo.txt "http://localhost:5173/?demo=1"
+bash scripts/kane/run-objective.sh scripts/kane/objectives/k4-kane-handshake.txt "http://localhost:5173/?demo=1"
+# K2 and the older single-flow K3 are kept for reproduction:
+bash scripts/kane/run-objective.sh scripts/kane/objectives/k2-agent-double-jump.txt "http://localhost:5173/?demo=1"
+bash scripts/kane/run-objective.sh scripts/kane/objectives/k3-agent-repair.txt "http://localhost:5173/?demo=1"
 ```
+
+The script writes `.testmuai/runs/<objective>.ndjson` and `.stderr.log` and prints the parsed `run_end`. Keep the objective to one flow: Kane splits a long objective into independent runs, and a fresh flow re-seeds the demo, so state (undo history, an applied edit) does not cross the boundary.
 
 K2–K4 require a configured tool-capable model for the agent portion. AI Play (K5) does **not** require a model for the deterministic auto-fix path, but a real product demo should disclose that the repair is the built-in Clockwork repair policy unless the agent's `run_ai_play` tool is being used with a model.
 
@@ -175,3 +185,33 @@ K2–K4 require a configured tool-capable model for the agent portion. AI Play (
 | AI Play says snapshot unavailable | create a new snapshot; snapshots expire and are capped at 20 MB |
 | Agent tool missing | set `KANE_ENABLED=1` before starting the API and restart it |
 | Evidence empty | the pack lives under the session `evidence/` folder; check `stderr.log` in the run directory |
+
+## 9. What Kane caught and proved
+
+A row only claims what `run_end.status === "passed"` plus stored `final_state` and the evidence pack support. Full narratives, screenshots and NDJSON paths are in `docs/kane-proof.md`; this is the short ledger.
+
+### Caught — product defects Kane surfaced
+
+| Run | What Kane reported | Fix that followed |
+|---|---|---|
+| K1 editor smoke | The inspector could not be collapsed; hierarchy rows had unsafe interactive semantics | Both UI/accessibility defects fixed before K1 passed |
+| K2 double jump | Build/Plan accepted a request while the panel said "No model", then failed as a bare fetch error | Env-provider detection, a pre-flight block with actionable guidance, and Settings-pointing errors |
+| K3d repair | The Build agent's `apply_commands` was rejected and nothing was saved | `list_commands` + `command-reference` signatures from the zod schemas, and rejected-command hints (`PROMPT_VERSION` 3) |
+| K4 terminal | The in-app verification card showed verdict, steps and evidence but **no duration**, so the checkpoint could not pass | `durationMs` forwarded in `useAgentSession.ts`, rendered as `kane-run-duration` |
+
+### Proved — passing runs, all single-flow
+
+| Objective | Duration | Credits | `final_state` |
+|---|---|---|---|
+| K3 steer probe | 199.4 s | 33.1 | `player_moved: true`, `coins_counter: 2` |
+| K3a repair + win (`k3a-repair-win.txt`) | 282.1 s | 60.1 | `coin_counter: 3`, `stage_loaded: true`, `command_rejected: false` |
+| K3b undo/redo (`k3b-undo-redo.txt`) | 218.9 s | 59.29 | undo/redo `1/0` → `0/1` → `1/0` |
+| K4 in-app `verify_with_kane` | 65.2 s | not recorded in the result | card `PASSED · 12 steps · 65.2s` + evidence link, run `8ea17992…` |
+| K4 terminal handshake | 206.7 s | 38.06 | `verification_verdict: PASSED`, `executed_steps: 12`, duration/evidence/reference flags `true` |
+| K5 AI Play attempt 2 | 81.1 s | 23.54 | `status: WON`, `coins: 3`, `last_error: none` |
+
+### Not credited to the product
+
+- K2's three runs that ended with "browser target stopped running during screenshot capture" are an `environment_issue/platform_failure`; no product bug is claimed from them.
+- K5 attempt 1 failed on Kane's own final-verification assertion with `final_state: {}` and did not name the inaccessible coin; the embedded `Core A` was identified by Clockwork's deterministic repair, and the three-coin passing attempt proves the move mattered.
+- Fixture-driven runs (`scripts/kane/fake-kane.mjs`, `KANE_FIXTURE_NO_RUN_END=1`) test the client contract only and are never counted as Kane evidence.
