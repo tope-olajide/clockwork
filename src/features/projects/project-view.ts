@@ -7,12 +7,18 @@ export type ProjectSummary = {
   sceneCount: number;
   editedLabel: string;
   archived: boolean;
-  cover: "dusk" | "puzzle" | "blank";
+  cover: "dusk" | "puzzle" | "blank" | "space";
   coverDataUrl?: string;
   updatedAt: string;
 };
 
 export const TEMPLATE_LABELS: Record<TemplateOrigin, string> = {
+  "space-shooter": "Space Shooter",
+  "space-invaders": "Space Invaders",
+  "asteroid-field": "Asteroid Field",
+  "ping-pong": "Ping Pong",
+  "brick-breaker": "Brick Breaker",
+  "flappy-flyer": "Flappy Flyer",
   platformer: "Platformer",
   topdown: "Top-down",
   puzzle: "Puzzle",
@@ -37,6 +43,14 @@ export function formatEdited(value: string): string {
 }
 
 export function coverFor(template: TemplateOrigin): ProjectSummary["cover"] {
+  if (
+    template === "space-shooter" ||
+    template === "space-invaders" ||
+    template === "asteroid-field" ||
+    template === "ping-pong" ||
+    template === "brick-breaker" ||
+    template === "flappy-flyer"
+  ) return "space";
   if (template === "puzzle") return "puzzle";
   if (template === "topdown" || template === "blank" || template === "brief" || template === "import") return "blank";
   return "dusk";

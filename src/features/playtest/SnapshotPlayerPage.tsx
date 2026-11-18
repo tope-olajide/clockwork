@@ -237,6 +237,7 @@ export function SnapshotPlayerPage() {
 
 function pausedLabel(status: string | undefined): string {
   if (status === "won") return "WON";
+  if (status === "lost") return "LOST";
   if (status === "stopped") return "STOPPED";
   if (status === "paused") return "PAUSED";
   return "PLAYING";

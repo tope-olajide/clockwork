@@ -1193,6 +1193,13 @@ a {
     linear-gradient(180deg, #121421 0%, #252033 48%, #151820 100%);
 }
 
+.cover-space {
+  background:
+    radial-gradient(circle at 70% 24%, rgba(121, 230, 255, 0.22), transparent 26%),
+    radial-gradient(circle at 24% 74%, rgba(255, 125, 156, 0.18), transparent 30%),
+    linear-gradient(180deg, #070b1a, #101a33 60%, #05070f);
+}
+
 .cover-puzzle {
   background:
     linear-gradient(90deg, rgba(181, 162, 255, 0.12) 1px, transparent 1px),
@@ -1563,6 +1570,100 @@ a {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.game-starters-field .field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-starter-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.game-starter-filter-button {
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.game-starter-filter-button[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  background: var(--bg-1);
+  color: var(--text);
+}
+
+.game-starter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.game-starter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-starter-card:hover,
+.game-starter-card[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  background: var(--bg-1);
+}
+
+.game-starter-cover {
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.game-starter-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.game-starter-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.game-starter-category {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.game-starter-blurb {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.game-starter-mechanics {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .template-option {

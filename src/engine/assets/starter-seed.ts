@@ -2,6 +2,7 @@ import type { Asset, GameObject, ProjectDocument } from "../model/schema";
 import { writeAssetBlob } from "../persistence/indexeddb";
 import { generateThumbnail, sha256Bytes } from "./asset-store";
 import { STARTER_ASSETS, STARTER_ASSET_IDS } from "./starter-manifest";
+import { isGameStarterOrigin } from "../model/game-starters/catalog";
 
 async function fetchBlob(url: string): Promise<Blob> {
   const response = await fetch(url);
@@ -153,6 +154,7 @@ function upgradeObject(object: GameObject): void {
  * tinted rect rather than breaking the project.
  */
 export function applyStarterVisuals(document: ProjectDocument): ProjectDocument {
+  if (isGameStarterOrigin(document.templateOrigin)) return document;
   for (const scene of document.scenes) {
     for (const object of scene.objects) upgradeObject(object);
   }

@@ -40,6 +40,10 @@ export interface RuntimeObject {
   coyoteMs: number;
   jumpBufferMs: number;
   timerMs: number;
+  /** Per-behavior timers, so one object can run several spawners or shooters. */
+  behaviorTimers: Record<string, number>;
+  hp?: number;
+  invulnMs: number;
   animationKey: string;
   animationTime: number;
   animationFrame?: number;
@@ -51,7 +55,7 @@ export interface RuntimeSnapshot {
   messages: RuntimeMessage[];
   frame: number;
   elapsed: number;
-  status: "running" | "paused" | "won" | "stopped";
+  status: "running" | "paused" | "won" | "lost" | "stopped";
   camera: { x: number; y: number; zoom: number };
 }
 
@@ -81,6 +85,7 @@ function stringParam(params: Record<string, unknown>, key: string, fallback: str
 function bodyDims(object: GameObject): { w: number; h: number } {
   if (object.body) return { w: object.body.width, h: object.body.height };
   if (object.visual?.kind === "rect") return { w: object.visual.width, h: object.visual.height };
+  if (object.visual?.kind === "shape") return { w: object.visual.width, h: object.visual.height };
   if (object.visual?.kind === "sprite") return { w: object.visual.width ?? 32, h: object.visual.height ?? 32 };
   if (object.visual?.kind === "tilemap") return { w: object.visual.cols * object.visual.tileSize, h: object.visual.rows * object.visual.tileSize };
   if (object.visual?.kind === "text") {
@@ -140,6 +145,17 @@ function behaviorOf(object: GameObject, type: string) {
   return object.behaviors.find((behavior) => behavior.enabled && behavior.type === type);
 }
 
+function behaviorsOf(object: GameObject, type: string) {
+  return object.behaviors.filter((behavior) => behavior.enabled && behavior.type === type);
+}
+
+function tagList(value: string): string[] {
+  return value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
 export class Runtime {
   readonly document: ProjectDocument;
   readonly seed: number;
@@ -152,7 +168,7 @@ export class Runtime {
   fpsSamples: number[] = [];
   frame = 0;
   elapsed = 0;
-  status: "running" | "paused" | "won" | "stopped" = "running";
+  status: "running" | "paused" | "won" | "lost" | "stopped" = "running";
   camera = { x: 0, y: 0, zoom: 1 };
   viewport = { width: 1280, height: 720 };
   checkpoint = { x: 0, y: 0 };
@@ -162,12 +178,15 @@ export class Runtime {
   private timers = new Map<string, number>();
   private lastCheckpointId: string | null = null;
   private messageId = 0;
+  private rngState = 0;
+  private formationDirections = new Map<string, number>();
 
   constructor(document: ProjectDocument, sceneId?: string, seed = 1234) {
     this.document = document;
     this.seed = seed;
     this.scene = document.scenes.find((scene) => scene.id === sceneId) ?? document.scenes.find((scene) => scene.id === document.startSceneId) ?? document.scenes[0]!;
     this.viewport = { width: document.settings.width, height: document.settings.height };
+    this.rngState = (seed >>> 0) || 1;
     this.reset();
   }
 
@@ -189,6 +208,8 @@ export class Runtime {
       coyoteMs: 0,
       jumpBufferMs: 0,
       timerMs: 0,
+      behaviorTimers: {},
+      invulnMs: 0,
       animationKey: "",
       animationTime: 0,
       animationFrame: undefined,
@@ -213,8 +234,32 @@ export class Runtime {
     this.blockedRules.clear();
     this.timers.clear();
     this.lastCheckpointId = null;
+    this.formationDirections.clear();
     this.lastError = null;
+    this.rngState = (this.seed >>> 0) || 1;
+    this.initializeHealth(options.preserveVariables === true);
     this.event("start", `Started ${this.scene.name}`);
+  }
+
+  /** Deterministic float in [0, 1) for spawners and enemy fire. */
+  random(): number {
+    this.rngState = (this.rngState + 0x6d2b79f5) >>> 0;
+    let t = this.rngState;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  private initializeHealth(preserveVariables: boolean): void {
+    for (const object of this.objects) {
+      const health = behaviorOf(object.source, "health");
+      if (!health) continue;
+      const max = Math.max(1, numberParam(health.params, "max", 1));
+      const variable = stringParam(health.params, "variable", "");
+      const carried = preserveVariables && variable ? Number(this.variables[variable]) : NaN;
+      object.hp = Number.isFinite(carried) && carried > 0 ? carried : max;
+      if (variable) this.variables[variable] = object.hp;
+    }
   }
 
   player(): RuntimeObject | undefined {
@@ -241,6 +286,7 @@ export class Runtime {
     }
     this.event("variable", `${name} = ${String(this.variables[name])}`);
     if (name === "won" && this.variables[name] === true) this.status = "won";
+    if (name === "lost" && this.variables[name] === true) this.status = "lost";
   }
 
   private solids(): Solid[] {
@@ -272,8 +318,11 @@ export class Runtime {
       this.elapsed += FIXED_DT;
       this.updateBehaviors(input);
       this.integratePhysics();
+      this.checkProjectileHits();
+      this.checkDamageContacts();
       this.checkInteractions();
       this.evaluateRules(input);
+      this.pruneInactiveSpawned();
       this.updateAnimations();
       this.updateCamera();
       this.updateMessages();
@@ -287,14 +336,16 @@ export class Runtime {
   }
 
   private updateBehaviors(input: InputFrame): void {
+    const deltaMs = FIXED_DT * 1000;
     for (const object of this.objects) {
       if (!object.active) continue;
+      object.invulnMs = Math.max(0, object.invulnMs - deltaMs);
       const controller = behaviorOf(object.source, "platformer-controller");
       if (controller) {
         const params = controller.params;
         const speed = numberParam(params, "speed", 280);
         const jumpVelocity = numberParam(params, "jumpVelocity", numberParam(params, "jump", 640));
-        const doubleJump = boolParam(params, "doubleJump", false);
+        const airJumpCount = Math.max(0, Math.round(numberParam(params, "maxAirJumps", boolParam(params, "doubleJump", false) ? 1 : 0)));
         const coyoteMs = numberParam(params, "coyoteMs", 100);
         const bufferMs = numberParam(params, "bufferMs", 120);
         const gravityScale = numberParam(params, "gravityScale", 1);
@@ -302,7 +353,7 @@ export class Runtime {
         object.vx = input.left ? -speed : input.right ? speed : 0;
         if (object.grounded) {
           object.coyoteMs = coyoteMs;
-          object.airJumps = doubleJump ? 1 : 0;
+          object.airJumps = airJumpCount;
         } else {
           object.coyoteMs = Math.max(0, object.coyoteMs - FIXED_DT * 1000);
         }
@@ -314,7 +365,7 @@ export class Runtime {
             object.grounded = false;
             object.coyoteMs = 0;
             object.jumpBufferMs = 0;
-            object.airJumps = doubleJump ? 1 : 0;
+            object.airJumps = airJumpCount;
             this.event("jump", `${object.source.name} jumped`, object.source.id);
           } else if (object.airJumps > 0) {
             object.vy = -jumpVelocity;
@@ -329,8 +380,9 @@ export class Runtime {
       if (hasBehavior(object.source, "top-down-controller")) {
         const params = behaviorOf(object.source, "top-down-controller")!.params;
         const speed = numberParam(params, "speed", 250);
-        object.vx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-        object.vy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+        const lockAxis = stringParam(params, "lockAxis", "none");
+        object.vx = lockAxis === "x" ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        object.vy = lockAxis === "y" ? 0 : (input.down ? 1 : 0) - (input.up ? 1 : 0);
         if (object.vx !== 0 && object.vy !== 0) {
           object.vx *= 0.7071;
           object.vy *= 0.7071;
@@ -374,14 +426,670 @@ export class Runtime {
       const timer = behaviorOf(object.source, "timer");
       if (timer) {
         const duration = numberParam(timer.params, "durationMs", 1000);
-        object.timerMs += FIXED_DT * 1000;
+        object.timerMs += deltaMs;
         if (object.timerMs >= duration) {
           object.timerMs = 0;
           this.event("timer", `${object.source.name} timer`, object.source.id);
           if (!boolParam(timer.params, "repeat", true)) timer.enabled = false;
         }
       }
+
+      this.updateMover(object, deltaMs);
+      if (!object.active) continue;
+      this.updateRotateThrust(object, input);
+      this.updateProjectile(object, deltaMs);
+      this.updateShooter(object, input, deltaMs);
+      this.updateSpawner(object);
+      this.updateCountdown(object);
+      this.updatePaddle(object, input);
+      this.updateAiPaddle(object, deltaMs);
+      this.updateBall(object, input, deltaMs);
+      this.updateFlap(object, input);
     }
+    this.updateFormations();
+  }
+
+  private updatePaddle(object: RuntimeObject, input: InputFrame): void {
+    const behavior = behaviorOf(object.source, "paddle");
+    if (!behavior) return;
+    const params = behavior.params;
+    const axis = stringParam(params, "axis", "x") === "y" ? "y" : "x";
+    const halfSize = bodyDims(object.source)[axis === "x" ? "w" : "h"] / 2;
+    const min = numberParam(params, "min", halfSize);
+    const max = numberParam(params, "max", (axis === "x" ? this.scene.size.w : this.scene.size.h) - halfSize);
+    const direction = axis === "x"
+      ? Number(input.right) - Number(input.left)
+      : Number(input.down) - Number(input.up);
+    const speed = Math.max(0, numberParam(params, "speed", 480));
+    if (axis === "x") {
+      object.x = Math.max(min, Math.min(max, object.x + direction * speed * FIXED_DT));
+      object.vx = 0;
+      object.vy = 0;
+    } else {
+      object.y = Math.max(min, Math.min(max, object.y + direction * speed * FIXED_DT));
+      object.vx = 0;
+      object.vy = 0;
+    }
+  }
+
+  private updateAiPaddle(object: RuntimeObject, deltaMs: number): void {
+    const behavior = behaviorOf(object.source, "ai-paddle");
+    if (!behavior) return;
+    const params = behavior.params;
+    const axis = stringParam(params, "axis", "y") === "x" ? "x" : "y";
+    const targetTag = stringParam(params, "targetTag", "ball");
+    const target = this.objects.find((candidate) => candidate.active && candidate.source.tags.includes(targetTag));
+    if (!target) return;
+
+    const reactionKey = `${behavior.id}:reaction`;
+    const errorKey = `${behavior.id}:error`;
+    const reactionMs = Math.max(0, numberParam(params, "reactionMs", 220));
+    let remaining = object.behaviorTimers[reactionKey] ?? 0;
+    if (object.behaviorTimers[errorKey] === undefined || remaining <= 0) {
+      const error = Math.max(0, numberParam(params, "error", 36));
+      object.behaviorTimers[errorKey] = (this.random() * 2 - 1) * error;
+      remaining = reactionMs;
+    }
+    remaining = Math.max(0, remaining - deltaMs);
+    object.behaviorTimers[reactionKey] = remaining;
+
+    const targetPosition = (axis === "x" ? target.x : target.y) + (object.behaviorTimers[errorKey] ?? 0);
+    const currentPosition = axis === "x" ? object.x : object.y;
+    const maxStep = Math.max(0, numberParam(params, "speed", 240)) * FIXED_DT;
+    const nextPosition = currentPosition + Math.max(-maxStep, Math.min(maxStep, targetPosition - currentPosition));
+    const min = numberParam(params, "min", 0);
+    const max = numberParam(params, "max", axis === "x" ? this.scene.size.w : this.scene.size.h);
+    if (axis === "x") {
+      object.x = Math.max(min, Math.min(max, nextPosition));
+      object.vx = 0;
+      object.vy = 0;
+    } else {
+      object.y = Math.max(min, Math.min(max, nextPosition));
+      object.vx = 0;
+      object.vy = 0;
+    }
+  }
+
+  private updateBall(object: RuntimeObject, input: InputFrame, deltaMs: number): void {
+    const behavior = behaviorOf(object.source, "ball");
+    if (!behavior) return;
+    const params = behavior.params;
+    const stateKey = `${behavior.id}:state`;
+    const waitKey = `${behavior.id}:wait`;
+    const directionKey = `${behavior.id}:serve-direction`;
+    const hitsKey = `${behavior.id}:hits`;
+    const initialDirection = stringParam(params, "serveDirection", "up");
+    if (object.behaviorTimers[stateKey] === undefined) {
+      object.behaviorTimers[stateKey] = 1;
+      object.behaviorTimers[waitKey] = 0;
+      object.behaviorTimers[hitsKey] = 0;
+      object.behaviorTimers[directionKey] = initialDirection === "left" ? -1 : initialDirection === "right" ? 1 : 0;
+    }
+
+    if (object.behaviorTimers[stateKey] === 1) {
+      object.vx = 0;
+      object.vy = 0;
+      const attachTag = stringParam(params, "attachToTag", "");
+      const attached = attachTag
+        ? this.objects.find((candidate) => candidate.active && candidate !== object && candidate.source.tags.includes(attachTag))
+        : undefined;
+      if (attached) {
+        object.x = attached.x + numberParam(params, "offsetX", 0);
+        object.y = attached.y + numberParam(params, "offsetY", 0);
+      } else {
+        object.x = this.scene.size.w / 2;
+        object.y = this.scene.size.h / 2;
+      }
+
+      const waited = (object.behaviorTimers[waitKey] ?? 0) + deltaMs;
+      object.behaviorTimers[waitKey] = waited;
+      if (waited < Math.max(0, numberParam(params, "serveDelayMs", 350))) return;
+      const trigger = stringParam(params, "serveTrigger", "jump");
+      const pressed =
+        trigger === "auto" ||
+        (trigger === "jump" && (input.jumpPressed || input.jump)) ||
+        (trigger === "action" && (input.actionPressed || input.action)) ||
+        (trigger === "any" && (input.jumpPressed || input.jump || input.actionPressed || input.action));
+      if (!pressed) return;
+
+      this.serveBall(object, behavior.id, initialDirection, directionKey);
+      return;
+    }
+
+    const size = bodyDims(object.source);
+    const halfW = size.w / 2;
+    const halfH = size.h / 2;
+    const maxStep = Math.max(4, Math.min(size.w, size.h) / 2);
+    const substeps = Math.max(1, Math.min(32, Math.ceil(Math.max(Math.abs(object.vx), Math.abs(object.vy)) * FIXED_DT / maxStep)));
+    const substepDt = FIXED_DT / substeps;
+    const paddleTag = stringParam(params, "paddleTag", "paddle");
+    const targetTags = tagList(stringParam(params, "targetTags", ""));
+    const damaged = new Set<string>();
+
+    const countHit = () => {
+      const hits = (object.behaviorTimers[hitsKey] ?? 0) + 1;
+      object.behaviorTimers[hitsKey] = hits;
+      const speedUpEvery = Math.max(0, Math.round(numberParam(params, "speedUpEvery", 0)));
+      const speedUpBy = Math.max(0, numberParam(params, "speedUpBy", 0));
+      if (speedUpEvery === 0 || speedUpBy === 0 || hits % speedUpEvery !== 0) return;
+      const speed = Math.hypot(object.vx, object.vy);
+      const nextSpeed = Math.min(Math.max(1, numberParam(params, "maxSpeed", 620)), speed + speedUpBy);
+      if (speed > 0) {
+        object.vx = (object.vx / speed) * nextSpeed;
+        object.vy = (object.vy / speed) * nextSpeed;
+      }
+    };
+
+    const collide = (axis: "x" | "y", delta: number): boolean => {
+      const candidate = this.objects.find((other) =>
+        other.active &&
+        other !== object &&
+        (other.source.body?.type === "static" || other.source.body?.type === "kinematic") &&
+        overlaps(object, other),
+      );
+      if (!candidate) return false;
+      const ballBox = boxOf(object);
+      const targetBox = boxOf(candidate);
+      if (axis === "x") {
+        object.x += delta > 0 ? targetBox.left - ballBox.right : targetBox.right - ballBox.left;
+      } else {
+        object.y += delta > 0 ? targetBox.top - ballBox.bottom : targetBox.bottom - ballBox.top;
+      }
+
+      const isPaddle = paddleTag.length > 0 && candidate.source.tags.includes(paddleTag);
+      if (isPaddle) {
+        const angleLimit = Math.min(80, Math.max(0, numberParam(params, "bounceAngle", 58))) * Math.PI / 180;
+        const speed = Math.min(
+          Math.max(1, numberParam(params, "maxSpeed", 620)),
+          Math.max(1, Math.hypot(object.vx, object.vy)),
+        );
+        if (axis === "x") {
+          const ratio = Math.max(-1, Math.min(1, (object.y - candidate.y) / Math.max(1, bodyDims(candidate.source).h / 2)));
+          const angle = ratio * angleLimit;
+          object.vx = -Math.sign(delta) * speed * Math.cos(angle);
+          object.vy = speed * Math.sin(angle);
+        } else {
+          const ratio = Math.max(-1, Math.min(1, (object.x - candidate.x) / Math.max(1, bodyDims(candidate.source).w / 2)));
+          const angle = ratio * angleLimit;
+          object.vy = -Math.sign(delta) * speed * Math.cos(angle);
+          object.vx = speed * Math.sin(angle);
+        }
+        countHit();
+      } else {
+        if (axis === "x") object.vx = -object.vx;
+        else object.vy = -object.vy;
+        if (
+          candidate.hp !== undefined &&
+          candidate.hp > 0 &&
+          !damaged.has(candidate.source.id) &&
+          (targetTags.length === 0 ? !candidate.source.tags.includes(paddleTag) : targetTags.some((tag) => candidate.source.tags.includes(tag)))
+        ) {
+          damaged.add(candidate.source.id);
+          this.damageObject(candidate, Math.max(1, numberParam(params, "damage", 1)));
+          countHit();
+        }
+      }
+      return true;
+    };
+
+    for (let index = 0; index < substeps; index += 1) {
+      const stepX = object.vx * substepDt;
+      object.x += stepX;
+      collide("x", stepX);
+      const stepY = object.vy * substepDt;
+      object.y += stepY;
+      collide("y", stepY);
+
+      if (object.x + halfW < 0 && stringParam(params, "missLeftVariable", "")) {
+        this.missBall(object, params, "left", directionKey, stateKey, waitKey, hitsKey);
+        return;
+      }
+      if (object.x - halfW > this.scene.size.w && stringParam(params, "missRightVariable", "")) {
+        this.missBall(object, params, "right", directionKey, stateKey, waitKey, hitsKey);
+        return;
+      }
+      if (object.y + halfH > this.scene.size.h && stringParam(params, "missBottomVariable", "")) {
+        this.missBall(object, params, "bottom", directionKey, stateKey, waitKey, hitsKey);
+        return;
+      }
+      if (object.x - halfW < 0) {
+        object.x = halfW;
+        object.vx = Math.abs(object.vx);
+      } else if (object.x + halfW > this.scene.size.w) {
+        object.x = this.scene.size.w - halfW;
+        object.vx = -Math.abs(object.vx);
+      }
+      if (object.y - halfH < 0) {
+        object.y = halfH;
+        object.vy = Math.abs(object.vy);
+      } else if (object.y + halfH > this.scene.size.h) {
+        object.y = this.scene.size.h - halfH;
+        object.vy = -Math.abs(object.vy);
+      }
+    }
+  }
+
+  private serveBall(object: RuntimeObject, behaviorId: string, initialDirection: string, directionKey: string): void {
+    const params = behaviorOf(object.source, "ball")?.params ?? {};
+    const speed = Math.max(1, numberParam(params, "speed", 390));
+    const direction = object.behaviorTimers[directionKey] ?? 0;
+    const horizontal = direction !== 0 || initialDirection === "left" || initialDirection === "right";
+    const serveDirection = direction !== 0 ? direction : initialDirection === "left" ? -1 : initialDirection === "right" ? 1 : 0;
+    const sign = serveDirection || (this.random() < 0.5 ? -1 : 1);
+    const angleRange = Math.min(65, Math.max(0, numberParam(params, "bounceAngle", 58))) * Math.PI / 180 * 0.35;
+    const angle = (this.random() * 2 - 1) * angleRange;
+    if (horizontal) {
+      object.vx = sign * speed * Math.cos(angle);
+      object.vy = speed * Math.sin(angle);
+    } else {
+      const vertical = initialDirection === "down" ? 1 : -1;
+      object.vx = sign * speed * Math.sin(angle);
+      object.vy = vertical * speed * Math.cos(angle);
+    }
+    object.behaviorTimers[`${behaviorId}:state`] = 2;
+    object.behaviorTimers[`${behaviorId}:wait`] = 0;
+    const size = bodyDims(object.source);
+    if (!stringParam(params, "attachToTag", "")) {
+      object.x = this.scene.size.w / 2;
+      object.y = this.scene.size.h / 2;
+    } else {
+      object.y = Math.max(size.h / 2, Math.min(this.scene.size.h - size.h / 2, object.y));
+    }
+    this.event("serve", `${object.source.name} served`, object.source.id);
+  }
+
+  private missBall(
+    object: RuntimeObject,
+    params: Record<string, unknown>,
+    side: "left" | "right" | "bottom",
+    directionKey: string,
+    stateKey: string,
+    waitKey: string,
+    hitsKey: string,
+  ): void {
+    const variable = stringParam(params, `miss${side[0]!.toUpperCase()}${side.slice(1)}Variable`, "");
+    if (variable) this.setVariable(variable, "add", numberParam(params, "missAmount", 1));
+    if (side === "left") object.behaviorTimers[directionKey] = 1;
+    else if (side === "right") object.behaviorTimers[directionKey] = -1;
+    else object.behaviorTimers[directionKey] = 0;
+    object.behaviorTimers[stateKey] = 1;
+    object.behaviorTimers[waitKey] = 0;
+    object.behaviorTimers[hitsKey] = 0;
+    object.vx = 0;
+    object.vy = 0;
+    if (!stringParam(params, "attachToTag", "")) {
+      object.x = this.scene.size.w / 2;
+      object.y = this.scene.size.h / 2;
+    }
+    this.event("miss", `${object.source.name} missed at the ${side}`, object.source.id);
+  }
+
+  private updateFlap(object: RuntimeObject, input: InputFrame): void {
+    const behavior = behaviorOf(object.source, "flap");
+    if (!behavior) return;
+    const params = behavior.params;
+    const trigger = stringParam(params, "trigger", "jump");
+    const flap =
+      (trigger === "jump" && input.jumpPressed) ||
+      (trigger === "action" && input.actionPressed) ||
+      (trigger === "any" && (input.jumpPressed || input.actionPressed));
+    if (flap) {
+      object.vy = -Math.max(0, numberParam(params, "impulse", 320));
+      this.event("flap", `${object.source.name} flapped`, object.source.id);
+    }
+    if (boolParam(params, "lockX", true)) {
+      object.x = object.spawnX;
+      object.vx = 0;
+    }
+    const gravityScale = Math.max(0, numberParam(params, "gravityScale", 1));
+    const maxFallSpeed = Math.max(0, numberParam(params, "maxFallSpeed", 560));
+    object.vy = Math.min(maxFallSpeed, object.vy + this.document.settings.gravity.y * gravityScale * FIXED_DT);
+
+    const dims = bodyDims(object.source);
+    const halfW = dims.w / 2;
+    const halfH = dims.h / 2;
+    const nextX = object.x + object.vx * FIXED_DT;
+    const nextY = object.y + object.vy * FIXED_DT;
+    const nextBox = {
+      left: nextX - halfW,
+      right: nextX + halfW,
+      top: nextY - halfH,
+      bottom: nextY + halfH,
+    };
+    const hazardTags = tagList(stringParam(params, "hazardTags", "hazard,pipe,ground"));
+    const hitHazard = this.objects.some((candidate) => {
+      if (!candidate.active || candidate === object || !hazardTags.some((tag) => candidate.source.tags.includes(tag))) return false;
+      const box = boxOf(candidate);
+      return nextBox.left < box.right && nextBox.right > box.left && nextBox.top < box.bottom && nextBox.bottom > box.top;
+    });
+    const ceiling = numberParam(params, "ceiling", 0);
+    const floor = numberParam(params, "floor", this.scene.size.h);
+    const hitBounds = nextBox.top <= ceiling || nextBox.bottom >= floor;
+    if ((hitHazard || hitBounds) && this.variables[stringParam(params, "loseVariable", "lost")] !== true) {
+      this.setVariable(stringParam(params, "loseVariable", "lost"), "set", true);
+    }
+  }
+
+  private updateRotateThrust(object: RuntimeObject, input: InputFrame): void {
+    const behavior = behaviorOf(object.source, "rotate-thrust");
+    if (!behavior) return;
+    const params = behavior.params;
+    const turn = (Number(input.right) - Number(input.left)) * numberParam(params, "turnSpeed", 210);
+    object.rotation = (object.rotation + turn * FIXED_DT + 360) % 360;
+    if (input.jump) {
+      const radians = (object.rotation * Math.PI) / 180;
+      const thrust = numberParam(params, "thrust", 360) * FIXED_DT;
+      object.vx += Math.sin(radians) * thrust;
+      object.vy -= Math.cos(radians) * thrust;
+    }
+    const drag = Math.max(0, numberParam(params, "drag", 0.35));
+    const dragScale = Math.max(0, 1 - drag * FIXED_DT);
+    object.vx *= dragScale;
+    object.vy *= dragScale;
+    const maxSpeed = Math.max(0, numberParam(params, "maxSpeed", 420));
+    const speed = Math.hypot(object.vx, object.vy);
+    if (speed > maxSpeed && speed > 0) {
+      object.vx = (object.vx / speed) * maxSpeed;
+      object.vy = (object.vy / speed) * maxSpeed;
+    }
+    object.x += object.vx * FIXED_DT;
+    object.y += object.vy * FIXED_DT;
+    if (boolParam(params, "wrap", true)) {
+      const dims = bodyDims(object.source);
+      if (object.x < -dims.w / 2) object.x = this.scene.size.w + dims.w / 2;
+      else if (object.x > this.scene.size.w + dims.w / 2) object.x = -dims.w / 2;
+      if (object.y < -dims.h / 2) object.y = this.scene.size.h + dims.h / 2;
+      else if (object.y > this.scene.size.h + dims.h / 2) object.y = -dims.h / 2;
+    }
+  }
+
+  private updateFormations(): void {
+    const groups = new Map<string, { members: RuntimeObject[]; config: RuntimeObject }>();
+    for (const object of this.objects) {
+      if (!object.active) continue;
+      const behavior = behaviorOf(object.source, "formation");
+      if (!behavior) continue;
+      const groupId = stringParam(behavior.params, "groupId", "default");
+      const groupTag = stringParam(behavior.params, "groupTag", "");
+      const members = groupTag
+        ? this.objects.filter((candidate) => candidate.active && candidate.source.tags.includes(groupTag))
+        : this.objects.filter((candidate) => {
+            const candidateBehavior = behaviorOf(candidate.source, "formation");
+            return candidate.active && candidateBehavior && stringParam(candidateBehavior.params, "groupId", "default") === groupId;
+          });
+      if (members.length > 0 && !groups.has(groupId)) groups.set(groupId, { members, config: object });
+    }
+
+    for (const [groupId, group] of groups) {
+      const members = group.members;
+      const behavior = behaviorOf(group.config.source, "formation")!;
+      const params = behavior.params;
+      const margin = Math.max(0, numberParam(params, "edgeMargin", 40));
+      const left = Math.min(...members.map((object) => object.x - bodyDims(object.source).w / 2));
+      const right = Math.max(...members.map((object) => object.x + bodyDims(object.source).w / 2));
+      let direction = this.formationDirections.get(groupId) ?? 1;
+      const speed = numberParam(params, "speed", 70);
+      const nextLeft = left + direction * speed * FIXED_DT;
+      const nextRight = right + direction * speed * FIXED_DT;
+      if ((direction > 0 && nextRight > this.scene.size.w - margin) || (direction < 0 && nextLeft < margin)) {
+        direction *= -1;
+        this.formationDirections.set(groupId, direction);
+        const drop = Math.max(0, numberParam(params, "dropDistance", 24));
+        for (const member of members) member.y += drop;
+      } else {
+        this.formationDirections.set(groupId, direction);
+      }
+      const deltaX = direction * speed * FIXED_DT;
+      for (const member of members) member.x += deltaX;
+
+      const breachY = numberParam(params, "breachY", this.scene.size.h);
+      const breachVariable = stringParam(params, "breachVariable", "");
+      if (breachVariable && members.some((member) => member.y + bodyDims(member.source).h / 2 >= breachY)) {
+        this.setVariable(breachVariable, "set", true);
+      }
+    }
+  }
+
+  private behaviorTimer(object: RuntimeObject, behaviorId: string, deltaMs: number): number {
+    const next = (object.behaviorTimers[behaviorId] ?? 0) + deltaMs;
+    object.behaviorTimers[behaviorId] = next;
+    return next;
+  }
+
+  private updateMover(object: RuntimeObject, deltaMs: number): void {
+    for (const mover of behaviorsOf(object.source, "mover")) {
+      const params = mover.params;
+      const timer = this.behaviorTimer(object, mover.id, deltaMs);
+      const lifetimeMs = numberParam(params, "lifetimeMs", 0);
+      if (lifetimeMs > 0 && timer >= lifetimeMs) {
+        object.active = false;
+        continue;
+      }
+      object.x += numberParam(params, "vx", 0) * FIXED_DT;
+      object.y += numberParam(params, "vy", 0) * FIXED_DT;
+      const spin = numberParam(params, "spin", 0);
+      if (spin !== 0) object.rotation = (object.rotation + spin * FIXED_DT) % 360;
+
+      const passX = params.passX;
+      const passVariable = stringParam(params, "passVariable", "");
+      if (typeof passX === "number" && passVariable && !object.behaviorTimers[`${mover.id}:passed`]) {
+        const previousX = object.x - numberParam(params, "vx", 0) * FIXED_DT;
+        if (previousX > passX && object.x <= passX) {
+          object.behaviorTimers[`${mover.id}:passed`] = 1;
+          this.setVariable(passVariable, "add", numberParam(params, "passAmount", 1));
+        }
+      }
+
+      const dims = bodyDims(object.source);
+      if (boolParam(params, "wrap", false)) {
+        const margin = 24;
+        if (object.x < -dims.w / 2 - margin) object.x = this.scene.size.w + dims.w / 2;
+        else if (object.x > this.scene.size.w + dims.w / 2 + margin) object.x = -dims.w / 2;
+        if (object.y < -dims.h / 2 - margin) object.y = this.scene.size.h + dims.h / 2;
+        else if (object.y > this.scene.size.h + dims.h / 2 + margin) object.y = -dims.h / 2;
+      } else if (boolParam(params, "destroyOffscreen", true)) {
+        const margin = 120;
+        if (
+          object.x < -dims.w - margin ||
+          object.x > this.scene.size.w + dims.w + margin ||
+          object.y < -dims.h - margin ||
+          object.y > this.scene.size.h + dims.h + margin
+        ) {
+          object.active = false;
+        }
+      }
+    }
+  }
+
+  private updateProjectile(object: RuntimeObject, deltaMs: number): void {
+    for (const projectile of behaviorsOf(object.source, "projectile")) {
+      const params = projectile.params;
+      const timer = this.behaviorTimer(object, projectile.id, deltaMs);
+      if (object.vx === 0 && object.vy === 0) {
+        const speed = numberParam(params, "speed", 640);
+        const direction = stringParam(params, "direction", "up");
+        const aim = direction === "aim" ? (object.rotation * Math.PI) / 180 : undefined;
+        object.vx = aim !== undefined ? Math.sin(aim) * speed : direction === "left" ? -speed : direction === "right" ? speed : 0;
+        object.vy = aim !== undefined ? -Math.cos(aim) * speed : direction === "up" ? -speed : direction === "down" ? speed : 0;
+      }
+      object.x += object.vx * FIXED_DT;
+      object.y += object.vy * FIXED_DT;
+      const lifetimeMs = numberParam(params, "lifetimeMs", 0);
+      if (lifetimeMs > 0 && timer >= lifetimeMs) object.active = false;
+      const dims = bodyDims(object.source);
+      if (
+        object.x < -dims.w - 120 ||
+        object.x > this.scene.size.w + dims.w + 120 ||
+        object.y < -dims.h - 120 ||
+        object.y > this.scene.size.h + dims.h + 120
+      ) {
+        object.active = false;
+      }
+    }
+  }
+
+  private updateShooter(object: RuntimeObject, input: InputFrame, deltaMs: number): void {
+    for (const shooter of behaviorsOf(object.source, "shooter")) {
+      const params = shooter.params;
+      const timer = this.behaviorTimer(object, shooter.id, deltaMs);
+      const cooldown = Math.max(16, numberParam(params, "cooldownMs", 250));
+      if (timer < cooldown) continue;
+      const trigger = stringParam(params, "trigger", "jump");
+      let wants = false;
+      if (trigger === "jump") wants = input.jump || input.jumpPressed;
+      else if (trigger === "action") wants = input.action || input.actionPressed;
+      else if (trigger === "any") wants = input.jump || input.jumpPressed || input.action || input.actionPressed;
+      else if (trigger === "auto") wants = this.random() <= Math.max(0, Math.min(1, numberParam(params, "chance", 1)));
+      if (!wants) continue;
+      const prefabId = stringParam(params, "prefabId", "");
+      if (!prefabId) continue;
+      const maxAlive = Math.max(0, Math.round(numberParam(params, "maxAlive", 0)));
+      if (maxAlive > 0) {
+        const alive = this.objects.filter((candidate) => candidate.active && candidate.source.prefabId === prefabId).length;
+        if (alive >= maxAlive) continue;
+      }
+      object.behaviorTimers[shooter.id] = 0;
+      const speed = numberParam(params, "speed", 640);
+      const direction = stringParam(params, "direction", "up");
+      const aim = direction === "aim" ? (object.rotation * Math.PI) / 180 : undefined;
+      const vx = aim !== undefined ? Math.sin(aim) * speed : direction === "left" ? -speed : direction === "right" ? speed : 0;
+      const vy = aim !== undefined ? -Math.cos(aim) * speed : direction === "up" ? -speed : direction === "down" ? speed : 0;
+      const spawned = this.spawnPrefab(
+        prefabId,
+        object.x + (aim !== undefined ? Math.sin(aim) * Math.hypot(numberParam(params, "offsetX", 0), numberParam(params, "offsetY", 0)) : numberParam(params, "offsetX", 0)),
+        object.y + (aim !== undefined ? -Math.cos(aim) * Math.hypot(numberParam(params, "offsetX", 0), numberParam(params, "offsetY", 0)) : numberParam(params, "offsetY", 0)),
+      );
+      for (const bullet of spawned) {
+        if (bullet.source.prefabSlot !== "root") continue;
+        bullet.vx = vx;
+        bullet.vy = vy;
+        bullet.rotation = aim !== undefined ? object.rotation : vy < 0 ? 0 : vy > 0 ? 180 : vx < 0 ? -90 : 90;
+      }
+      this.event("shoot", `${object.source.name} fired`, object.source.id);
+    }
+  }
+
+  private updateSpawner(object: RuntimeObject): void {
+    for (const spawner of behaviorsOf(object.source, "spawner")) {
+      const params = spawner.params;
+      if (this.elapsed * 1000 < numberParam(params, "startDelayMs", 0)) continue;
+      const interval = Math.max(16, numberParam(params, "intervalMs", 1000));
+      const timer = (object.behaviorTimers[spawner.id] ?? 0) + FIXED_DT * 1000;
+      if (timer < interval) {
+        object.behaviorTimers[spawner.id] = timer;
+        continue;
+      }
+      object.behaviorTimers[spawner.id] = 0;
+      const prefabId = stringParam(params, "prefabId", "");
+      if (!prefabId) continue;
+      const limit = Math.max(1, Math.round(numberParam(params, "limit", 20)));
+      const alive = this.objects.filter((candidate) => candidate.active && candidate.source.prefabId === prefabId).length;
+      if (alive >= limit) continue;
+      const minX = numberParam(params, "minX", 0);
+      const maxX = numberParam(params, "maxX", this.scene.size.w);
+      const minY = numberParam(params, "minY", 0);
+      const maxY = numberParam(params, "maxY", 0);
+      const x = minX + this.random() * Math.max(0, maxX - minX);
+      const y = minY + this.random() * Math.max(0, maxY - minY);
+      this.spawnPrefab(prefabId, x, y);
+    }
+  }
+
+  private updateCountdown(object: RuntimeObject): void {
+    for (const countdown of behaviorsOf(object.source, "countdown")) {
+      const params = countdown.params;
+      const durationMs = Math.max(0, numberParam(params, "durationMs", 60000));
+      const variable = stringParam(params, "variable", "timeLeft");
+      const remaining = Math.max(0, durationMs - this.elapsed * 1000);
+      const value = Math.ceil(remaining / 1000);
+      if (this.variables[variable] !== value) this.setVariable(variable, "set", value);
+    }
+  }
+
+  private checkProjectileHits(): void {
+    for (const bullet of this.objects) {
+      if (!bullet.active) continue;
+      const projectile = behaviorOf(bullet.source, "projectile");
+      if (!projectile) continue;
+      const targetTags = tagList(stringParam(projectile.params, "targetTags", ""));
+      if (targetTags.length === 0) continue;
+      const damage = numberParam(projectile.params, "damage", 1);
+      const target = this.objects.find(
+        (candidate) =>
+          candidate.active &&
+          candidate !== bullet &&
+          candidate.hp !== undefined &&
+          targetTags.some((tag) => candidate.source.tags.includes(tag)) &&
+          overlaps(bullet, candidate),
+      );
+      if (!target) continue;
+      this.damageObject(target, damage);
+      if (boolParam(projectile.params, "destroyOnHit", true)) bullet.active = false;
+    }
+  }
+
+  private checkDamageContacts(): void {
+    for (const object of this.objects) {
+      if (!object.active || object.hp === undefined || object.hp <= 0 || object.invulnMs > 0) continue;
+      const health = behaviorOf(object.source, "health");
+      if (!health) continue;
+      const damageTags = tagList(stringParam(health.params, "damageTags", ""));
+      if (damageTags.length === 0) continue;
+      const source = this.objects.find(
+        (candidate) =>
+          candidate.active &&
+          candidate !== object &&
+          damageTags.some((tag) => candidate.source.tags.includes(tag)) &&
+          overlaps(object, candidate),
+      );
+      if (!source) continue;
+      this.damageObject(object, numberParam(health.params, "contactDamage", 1));
+    }
+  }
+
+  private damageObject(object: RuntimeObject, amount: number): void {
+    const health = behaviorOf(object.source, "health");
+    if (!health || amount <= 0) return;
+    object.hp = Math.max(0, (object.hp ?? numberParam(health.params, "max", 1)) - amount);
+    object.invulnMs = Math.max(0, numberParam(health.params, "invulnMs", 0));
+    const variable = stringParam(health.params, "variable", "");
+    if (variable) this.variables[variable] = object.hp;
+    this.event("damage", `${object.source.name} took ${amount} damage (${object.hp} left)`, object.source.id);
+    if (object.hp > 0) return;
+    this.event("death", `${object.source.name} destroyed`, object.source.id);
+    const scoreVariable = stringParam(health.params, "scoreVariable", "");
+    if (scoreVariable) this.setVariable(scoreVariable, "add", numberParam(health.params, "scoreOnDeath", 0));
+    const deathVariable = stringParam(health.params, "deathVariable", "");
+    if (deathVariable) this.setVariable(deathVariable, "add", numberParam(health.params, "deathAmount", -1));
+    if (boolParam(health.params, "respawnOnHit", false) && deathVariable && Number(this.variables[deathVariable]) > 0) {
+      object.active = true;
+      object.hp = Math.max(1, numberParam(health.params, "max", 1));
+      object.x = object.spawnX;
+      object.y = object.spawnY;
+      object.vx = 0;
+      object.vy = 0;
+      object.invulnMs = Math.max(0, numberParam(health.params, "invulnMs", 0));
+      if (variable) this.variables[variable] = object.hp;
+      this.event("respawn", `${object.source.name} respawned`, object.source.id);
+      return;
+    }
+    object.active = false;
+    const deathPrefabId = stringParam(health.params, "deathPrefabId", "");
+    if (deathPrefabId) {
+      const count = Math.max(1, Math.round(numberParam(health.params, "deathSpawnCount", 1)));
+      if (deathVariable) this.setVariable(deathVariable, "add", count);
+      for (let index = 0; index < count; index += 1) {
+        const spread = numberParam(health.params, "spawnSpread", 0);
+        const offsetX = spread > 0 ? (this.random() - 0.5) * spread : 0;
+        const offsetY = spread > 0 ? (this.random() - 0.5) * spread : 0;
+        this.spawnPrefab(deathPrefabId, object.x + offsetX, object.y + offsetY);
+      }
+    }
+  }
+
+  private pruneInactiveSpawned(): void {
+    if (this.frame % 120 !== 0 || this.objects.length < 400) return;
+    this.objects = this.objects.filter((object) => object.active || !object.source.prefabInstanceId);
   }
 
   private integratePhysics(): void {
@@ -450,7 +1158,7 @@ export class Runtime {
           object.grounded = true;
         }
       }
-      object.rotation = object.source.transform.rotation;
+      if (!hasBehavior(object.source, "rotate-thrust")) object.rotation = object.source.transform.rotation;
     }
   }
 
@@ -579,14 +1287,15 @@ export class Runtime {
     }
   }
 
-  private spawnPrefab(prefabId: string, x: number, y: number): void {
+  private spawnPrefab(prefabId: string, x: number, y: number): RuntimeObject[] {
     const prefab = this.document.prefabs.find((candidate) => candidate.id === prefabId);
-    if (!prefab) return;
+    if (!prefab) return [];
     const sources = [prefab.root, ...prefab.objects];
     const ids = new Map<string, string>();
     const instanceId = `pinst_${this.frame}_${this.objects.length}`;
     const dx = x - prefab.root.transform.x;
     const dy = y - prefab.root.transform.y;
+    const created: RuntimeObject[] = [];
     for (const source of sources) {
       const clone = structuredClone(source);
       clone.id = `obj_${this.frame}_${this.objects.length}_${ids.size}`;
@@ -595,7 +1304,9 @@ export class Runtime {
       clone.prefabId = prefab.id;
       clone.prefabInstanceId = instanceId;
       clone.prefabSlot = source.id === prefab.root.id ? "root" : `obj:${prefab.objects.indexOf(source)}`;
-      this.objects.push({
+      const health = behaviorOf(clone, "health");
+      const maxHealth = health ? Math.max(1, numberParam(health.params, "max", 1)) : undefined;
+      const runtimeObject: RuntimeObject = {
         source: clone,
         x: clone.transform.x,
         y: clone.transform.y,
@@ -612,10 +1323,15 @@ export class Runtime {
         coyoteMs: 0,
         jumpBufferMs: 0,
         timerMs: 0,
+        behaviorTimers: {},
+        hp: maxHealth,
+        invulnMs: 0,
         animationKey: "",
         animationTime: 0,
         animationFrame: undefined,
-      });
+      };
+      this.objects.push(runtimeObject);
+      created.push(runtimeObject);
     }
     for (const object of this.objects) {
       if (object.source.prefabInstanceId !== instanceId || !object.source.parentId) continue;
@@ -623,6 +1339,7 @@ export class Runtime {
       if (!object.source.parentId) delete object.source.parentId;
     }
     this.event("spawn", `${prefab.name} spawned`);
+    return created;
   }
 
   transition(sceneId: string): void {

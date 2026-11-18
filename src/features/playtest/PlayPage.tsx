@@ -188,6 +188,9 @@ export function PlayPage() {
       const onKey = (event: KeyboardEvent) => {
         if (event.key === "Escape") {
           navigate(`/project/${projectId}`);
+        } else if ((event.key === "r" || event.key === "R") && !event.repeat) {
+          event.preventDefault();
+          reset();
         } else if (event.key === "F1") {
           event.preventDefault();
           setDebug((value) => !value);
@@ -319,7 +322,15 @@ export function PlayPage() {
           <ArrowLeft size={13} /> Editor
         </Button>
         <span className="chip violet">
-          {paused ? "PAUSED" : snapshot?.status === "won" ? "WON" : snapshot?.status === "stopped" ? "ERROR" : "PLAYING"}
+          {paused
+            ? "PAUSED"
+            : snapshot?.status === "won"
+              ? "WON"
+              : snapshot?.status === "lost"
+                ? "LOST"
+                : snapshot?.status === "stopped"
+                  ? "ERROR"
+                  : "PLAYING"}
         </span>
         <span className="project-meta">
           {scene?.name ?? "Scene"} · seed {seedRef.current} · {formatTime(snapshot?.elapsed ?? 0)}

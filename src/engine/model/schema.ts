@@ -3,7 +3,17 @@ import { z } from "zod";
 export const INPUT_ACTIONS = ["left", "right", "up", "down", "jump", "action"] as const;
 export type InputAction = (typeof INPUT_ACTIONS)[number];
 
-export const TEMPLATE_ORIGINS = ["blank", "platformer", "topdown", "puzzle", "brief", "import"] as const;
+export const TEMPLATE_ORIGINS = [
+  "blank",
+  "platformer",
+  "topdown",
+  "puzzle",
+  "space-shooter",
+  "space-invaders",
+  "asteroid-field",
+  "brief",
+  "import",
+] as const;
 export type TemplateOrigin = (typeof TEMPLATE_ORIGINS)[number];
 
 export const vec2Schema = z.object({
@@ -39,7 +49,30 @@ export const textStyleSchema = z.object({
   align: z.enum(["left", "center", "right"]).default("left"),
 });
 
+export const shapePrimitiveSchema = z.object({
+  kind: z.enum(["rect", "circle", "triangle", "polygon", "line"]),
+  /** Offset from the object centre. */
+  x: z.number().finite().default(0),
+  y: z.number().finite().default(0),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  color: z.string(),
+  stroke: z.string().optional(),
+  strokeWidth: z.number().nonnegative().default(0),
+  rotation: z.number().finite().default(0),
+  /** Normalised (-1..1) outline for polygons; ignored by other primitives. */
+  points: z.array(vec2Schema).min(3).optional(),
+});
+
+export const shapeVisualSchema = z.object({
+  kind: z.literal("shape"),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  shapes: z.array(shapePrimitiveSchema).min(1).max(32),
+});
+
 export const visualSchema = z.discriminatedUnion("kind", [
+  shapeVisualSchema,
   z.object({
     kind: z.literal("sprite"),
     assetId: z.string().min(1),
@@ -83,6 +116,16 @@ export const behaviorTypeSchema = z.enum([
   "timer",
   "variable-set",
   "health",
+  "shooter",
+  "projectile",
+  "mover",
+  "countdown",
+  "formation",
+  "rotate-thrust",
+  "ball",
+  "paddle",
+  "ai-paddle",
+  "flap",
 ]);
 
 export const behaviorInstanceSchema = z.object({
@@ -307,6 +350,8 @@ export type Layer = z.infer<typeof layerSchema>;
 export type GameObject = z.infer<typeof gameObjectSchema>;
 export type Body = z.infer<typeof bodySchema>;
 export type Visual = z.infer<typeof visualSchema>;
+export type ShapeVisual = z.infer<typeof shapeVisualSchema>;
+export type ShapePrimitive = z.infer<typeof shapePrimitiveSchema>;
 export type BehaviorInstance = z.infer<typeof behaviorInstanceSchema>;
 export type BehaviorType = z.infer<typeof behaviorTypeSchema>;
 export type Rule = z.infer<typeof ruleSchema>;

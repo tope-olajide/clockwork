@@ -20,6 +20,7 @@ import { TopBar } from "../../shell/TopBar";
 import { CommandPalette, buildStubCommands } from "../../shell/CommandPalette";
 import { runCommand } from "../../engine/commands/registry";
 import { createProjectFromTemplate } from "../../engine/model/templates";
+import { isGameStarterOrigin } from "../../engine/model/game-starters/catalog";
 import { applyStarterVisuals, seedStarterAssets } from "../../engine/assets/starter-seed";
 import type { ProjectDocument, TemplateOrigin } from "../../engine/model/schema";
 import {
@@ -169,7 +170,8 @@ export function ProjectsPage() {
         if (created.mode === "brief") {
           document.templateOrigin = "brief";
         }
-        if (created.settings) {
+        const fixedSettings = isGameStarterOrigin(document.templateOrigin);
+        if (created.settings && !fixedSettings) {
           document.settings = {
             ...document.settings,
             width: created.settings.width,
@@ -178,8 +180,10 @@ export function ProjectsPage() {
             gravity: { x: 0, y: created.settings.gravity },
           };
         }
-        document = applyStarterVisuals(document);
-        document = await seedStarterAssets(document);
+        if (!fixedSettings) {
+          document = applyStarterVisuals(document);
+          document = await seedStarterAssets(document);
+        }
       }
       await saveProjectDocument(document);
       if (created.mode === "brief" && created.brief) {
@@ -374,6 +378,7 @@ export function ProjectsPage() {
                     { value: "platformer", label: "Platformer" },
                     { value: "topdown", label: "Top-down" },
                     { value: "puzzle", label: "Puzzle" },
+                    { value: "space-shooter", label: "Space Shooter" },
                     { value: "blank", label: "Blank" },
                     { value: "import", label: "Imported" },
                   ]}

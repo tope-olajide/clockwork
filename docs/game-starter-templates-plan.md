@@ -1,6 +1,6 @@
 # Built-in 2D game starter templates — vertical slice plan
 
-- **Status:** planning only. No template, behavior or picker in this document has been implemented or verified yet.
+- **Status:** Slices A and B are implemented but their browser acceptance gates remain open. Space Shooter's clean automated scoring proof is still open; the latest Kane attempt stopped before any Space input. Slice B's asteroid splitting/scoring, Space Invaders gameplay/editor effects, win/loss, and console cleanliness remain unverified. Slice C's runtime behaviors, three documents, picker registration and regression cases are now authored, but no validation has been run; its gate remains open. Per the user's request, defer all testing until all twelve game templates are implemented. Slices D–G are not started.
 - **Branch:** `feat/game-starter-templates` (created from `main` at `ecf3f4a`).
 - **Date:** 2026-11-18.
 - **Goal:** twelve editable, genuinely playable starter projects built from the engine's own document, behavior, rule and runtime systems, selectable from the project-creation flow.
@@ -118,7 +118,7 @@ Completed:
 | Behavior | Work |
 |---|---|
 | `spawner` | Real interval spawning from a prefab: `prefabId`, `intervalMs`, `startDelayMs`, `minX/maxX/minY/maxY`, `edge`, `limit`, `maxAlive`, `intervalDecayPerSecond`, `minIntervalMs`. Uses the runtime seed. |
-| `health` | `max`, `variable`, `invulnMs`, `damageTags`, `destroyOnZero`, `scoreVariable`, `scoreOnDeath`, `deathVariable`, `deathAmount`, `deathPrefabId`, `deathSpawnCount`, `respawnOnHit`. Initialises its variable on reset. Damage is applied only through explicit damage sources. |
+| `health` | `max`, `variable`, `invulnMs`, `damageTags`, `destroyOnZero`, `scoreVariable`, `scoreOnDeath`, `deathVariable`, `deathAmount`, `deathPrefabId`, `deathSpawnCount`, `respawnOnHit`. Initialises its variable on reset; death-prefab children are added to the death variable so split-object counts remain accurate. Damage is applied only through explicit damage sources. |
 | `follow` | Wall-aware movement, `targetTag`, `stopDistance`, optional `axis` fallback. Keeps the player target default. |
 | `hazard` | `damageVariable`, `damage`, `invulnMs`, `respawn`; no longer forced to teleport. |
 | `platformer-controller` | Read the catalog's `maxAirJumps` (the runtime currently reads an undocumented `doubleJump`), `jump`/`jumpVelocity`, `gravityScale`, `maxFallSpeed`. |
@@ -137,7 +137,7 @@ New:
 | `ai-paddle` | `targetTag`, `speed`, `error`, `reactionMs`, `min`, `max` | Pong |
 | `flap` | `trigger`, `impulse`, `maxFallSpeed`, `lockX`, `ceiling`, `floor` | Flappy |
 | `countdown` | `durationMs`, `variable`, `mode` (`down`/`up`), `tickMs` | Shooter, Arena, Falling Objects |
-| `formation` | `groupId`, `columns`, `spacingX`, `spacingY`, `speed`, `dropDistance`, `edgeMargin`, `breachY`, `breachVariable` | Invaders |
+| `formation` | `groupId`, `groupTag`, `columns`, `spacingX`, `spacingY`, `speed`, `dropDistance`, `edgeMargin`, `breachY`, `breachVariable` | Invaders |
 | `rotate-thrust` | `turnSpeed`, `thrust`, `drag`, `maxSpeed`, `wrap` | Asteroids |
 | `duck` | `trigger`, `bodyHeight`, `visualScaleY` | Endless Runner |
 | `melee` | `trigger`, `cooldownMs`, `range`, `damage`, `targetTags` | Arena Survival |
@@ -190,14 +190,14 @@ New:
 | 8 | Snake | Puzzle | `snake` + body prefab | `score`, `length` | `score >= 100` | wall/self collision |
 | 9 | Space Invaders | Shooter | `paddle`, `shooter`, `projectile`, `formation`, `health`, `spawner` (enemy fire) | `score`, `lives`, `enemies` | `enemies <= 0` | `lives <= 0` or breach |
 | 10 | Maze Escape | Puzzle | `top-down-controller`, `follow` (wall-aware), `collectible`, rules | `dots`, `score` | `dots >= 15` + exit overlap | enemy overlap |
-| 11 | Asteroid Field | Shooter | `rotate-thrust`, `shooter`, `projectile`, `mover`, `health` (split), `countdown`? no | `score`, `lives` | `asteroids <= 0` | `lives <= 0` |
+| 11 | Asteroid Field | Shooter | `rotate-thrust`, `shooter`, `projectile`, `mover`, `health` (split) | `score`, `lives`, `asteroids` | `asteroids <= 0` | `lives <= 0` |
 | 12 | Falling Objects | Survival | `top-down-controller` (locked Y), `spawner`, `mover`, `hazard`, `collectible`, `countdown` | `score`, `lives`, `timeLeft` | `timeLeft <= 0` | `lives <= 0` |
 
 Scoring is real: points come from `health.scoreOnDeath` (enemies, asteroids, bricks) or `collectible` amounts, not from a decorative HUD widget. Survival timers come from `countdown`, not from a text object pretending to tick.
 
 ## 6. Vertical slices
 
-Each slice is end-to-end: document data → behaviors → picker/preview → editor → Play → automated tests → honest report. A slice is not started until the previous one passes its gate.
+Each slice is end-to-end: document data → behaviors → picker/preview → editor → Play → automated tests → honest report. The remaining implementation is proceeding by slice as requested; keep earlier gates open and defer all test/build/browser execution until all twelve templates have been implemented.
 
 ### Slice A — Foundation and Space Shooter
 
@@ -212,12 +212,16 @@ Each slice is end-to-end: document data → behaviors → picker/preview → edi
 
 ### Slice B — Shooter wave: Space Invaders, Asteroid Field
 
+**Implementation status (2026-11-18):** Both documents and the formation/thrust/splitting runtime behaviors are implemented and covered by automated tests. Kane verified create/Play/HUD, input and immediate restart for both Space Invaders and Asteroid Field, and verified that setting Asteroid Field Pilot turn speed to 0 prevents turning in Play. A longer Space Invaders run reached the normal `LOST` state before Kane's delayed running-state assertion; another run's final console extraction timed out and recorded a `/favicon.ico` 404. The browser acceptance gate remains open for asteroid splitting/scoring, Space Invaders gameplay/editor effects, win/loss and console cleanliness. Slice A's separate Space Shooter gameplay gate also remains open.
+
 - Add `formation`, `rotate-thrust`, asteroid splitting via `health.deathPrefabId/deathSpawnCount`, enemy auto-fire, breach detection, barrier health.
 - Author both templates including their win/loss rules and tuned settings.
 - Tests: formation reverse/drop/breach, ship rotation/thrust/wrap, split counts, and scripted win/loss/reset for both.
 - Gate: the Slice A checklist for each template, plus verifying that changing formation speed and asteroid count changes the run.
 
 ### Slice C — Arcade physics: Ping Pong, Brick Breaker, Flappy Flyer
+
+**Implementation status (2026-11-18):** `ball`, `paddle`, `ai-paddle` and `flap` behaviors, all three primitive-only starter documents, catalog/picker integration and focused regression cases have been added. No tests, builds, typechecks or browser runs were executed, as requested. The slice gate is open pending the eventual combined validation pass.
 
 - Add `ball`, `paddle`, `ai-paddle`, `flap`, serve/reset, miss variables, pass scoring.
 - Author the three templates. Ball must not stick or tunnel; AI must be beatable; Flappy gaps must stay reachable.

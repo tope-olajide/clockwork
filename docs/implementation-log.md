@@ -407,3 +407,42 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - The control's repair is applied deterministically by the harness. Kane proves the failure signal and the post-fix replay; model-driven diagnosis of a non-coin failure is still only evidenced by K3a's agent repair and K5's product repair.
 - Docs reconciled with this evidence: `docs/known-issues.md` refreshed to 2026-11-18 with the Slice 10 proven/open split, the stale “no Kane CLI runs” and “AI/agent features not fully implemented” entries replaced, and the negative control marked passed; `features.md` status now lists Slice 5–9 status and explains why AI Play is not yet listed as a feature; `docs/kane-proof.md` gained the negative-control section and its limitations were updated.
 - Still open, and therefore still blocking the Slice 10 gate: the manual/no-model browser pass with `AI_ENABLED=0` (create, edit, save, reopen, play, share, export), the no-model AI Play hidden/disabled state, the fixture-driven AI Play UI artifact, AI HUD keyboard parity, the share/export acceptance run, and the Slice 6.5/7/8/9 verification matrices. K2 needs different hardware; saved-test replay needs one authored real run before its timing claim can be measured.
+
+## Slice A — Engine foundation and Space Shooter
+
+- Date: 2026-11-18
+- Commit: uncommitted on `feat/game-starter-templates` (plan commit `a911f89`).
+- `npm run typecheck`: pass (`tsc -b tsconfig.json tsconfig.node.json`, exit 0).
+- `npm test`: pass, 8/8 tests (`node --import tsx --test tests/*.test.ts`).
+- `npm run build`: pass (Vite 7.3.8, 2,593 modules; existing zod annotation and chunk-size warnings only).
+- `npm run check:repo`: pass.
+- Automated coverage: starter catalog validity, Zod parse, primitive-only visuals, generated SVG preview, deterministic build counts; Space Shooter movement, firing, spawner output and bounded object count, projectile damage/score/death FX, loss, reset, win, and same-seed determinism.
+- Manual browser: **Kane pass succeeded** over New project → Space Shooter card → rename to Kane Shooter → Create → editor → Play. Final state: `/play/prj_s0TUa4Lhgl`, canvas plus SCORE, HULL and TIME all visible (run `7395f442-…`, evidence `7ee615cc-…`, 133.2 s, two flows; sign-in and the projects page were separately confirmed). The later protected-score run recorded `SCORE 1150`, but the user also pressed Space, so it is not clean automated proof. Evidence review found the shooter only checked held input, so it now also accepts `jumpPressed`/`actionPressed`; a one-frame regression test passes. A post-fix run sent six Space presses after the game had already reached `LOST`, yielding no score. The next run set player health to 99 and remained `PLAYING` with a full hull, but Kane's inverse-LOST conditional stopped before any Space action (zero Space actions in the trace). Thus browser scoring is still unverified; no scoring defect is confirmed. Win was reached in the earlier run, but editor colour/speed changes affecting Play and console cleanliness remain unverified; no feature was added to `features.md`.
+- Implemented: `shape` visual with rect/circle/triangle/polygon/line primitives in schema, renderer and bounds; `lost` runtime status and Play/snapshot labels; R/r restart handling in the main Play route; seeded mulberry32 RNG; real `spawner`, `health`, `shooter`, `projectile`, `mover`, `countdown`; projectile hit and contact-damage passes; inactive spawned-object compaction; `maxAirJumps` and top-down `lockAxis`; appearance/body inspector controls; generated starter previews; picker category section; starter-art opt-out; Space Shooter document.
+- Scope: this is Slice A only — **1 of the 12 planned starters**. Ping Pong, Platform Jumper, Endless Runner, Brick Breaker, Flappy Flyer, Arena Survival, Snake, Space Invaders, Maze Escape, Asteroid Field and Falling Objects are not built; the ball/paddle/formation/flap/snake behaviors are not implemented.
+- New known issues: Space Shooter gameplay/editor acceptance remains partial despite the observed loss→R recovery; remaining templates and behaviors are open; composite colour edits target the first primitive; no touch movement.
+
+## Slice B — Shooter wave: Space Invaders and Asteroid Field
+
+- Date: 2026-11-18
+- Commit: uncommitted on `feat/game-starter-templates`.
+- `npm run typecheck`: pass.
+- `npm test`: pass, 14/14 tests.
+- `npm run build`: pass; existing Zod annotation, dynamic-import and chunk-size warnings only.
+- `npm run check:repo`: pass; `git diff --check`: pass.
+- Runtime coverage: formation edge reversal/drop/breach and director-speed tuning; Space Invaders alien win, player respawn/loss/reset; rotate-thrust movement; asteroid death-prefab splitting, editable split count, live asteroid counter, win/loss/reset; all starter documents remain valid primitive-only projects.
+- Implemented: `formation` with tag-grouped membership, boundary reversal/drop and breach variable; `rotate-thrust` with turning, thrust, drag, speed cap and wrap; aimed shooter/projectile direction; health respawn and child-count accounting; Space Invaders formation, auto-fire, player lives, destructible barriers and win/breach/loss rules; Asteroid Field steering, wrapped rocks, splittable shards, score/lives/count and win/loss rules; picker, template origin, label and cover integration.
+- Browser: Space Invaders has a partial interaction run (D/Space, HUD and restart); its final console extraction timed out (270.9 s, 68.64 credits) and recorded one `favicon.ico` 404. A second run reached the normal `LOST` state before its delayed running-state assertion (173.7 s, 41.58 credits), an automation-timing failure rather than a confirmed product defect. A shorter Space Invaders restart run passed, restoring `RUNNING`, `SCORE 0`, `SHIPS 3`, `INVADERS 24` (91.1 s, 27.44 credits). Asteroid Field creation, HUD (`SCORE 0`, `SHIPS 3`, `ROCKS 6`), A/W/E input, and immediate restart/reset passed (117.1 s, 34.92 credits). Its editor-to-Play tuning check also passed: set Pilot turn speed to 0, press D in Play, and confirm the ship stays pointed upward (127.8 s, 36.47 credits). Two attempts before that pass were blocked by screenshot timeout and missing local browser storage, respectively; neither exercised product behavior. Evidence and outcomes are recorded in `docs/kane-proof.md`; asteroid splitting/scoring, win/loss, Space Invaders gameplay effects/editor tuning and console cleanliness remain open.
+- Features completed: none. Slice A's Space Shooter gameplay gate and Slice B's per-template browser gameplay/editor-modification gate are not yet closed.
+- Known limitations: only 3 of 12 starters are implemented; the other nine templates and their behavior modules remain open; touch movement remains unsupported.
+
+## Slice C — Arcade physics: Ping Pong, Brick Breaker and Flappy Flyer
+
+- Date: 2026-11-18
+- Commit: uncommitted on `feat/game-starter-templates`.
+- Implementation: added swept ball movement with paddle-angle bounces, solid-body reflection/depenetration, health-target damage, miss variables, configurable serving and speed caps; player and AI paddle controllers with bounds, reaction delay and aim error; flap impulse/gravity/floor-ceiling/hazard loss handling.
+- Templates: added primitive-only Ping Pong (human vs. fallible AI, first to five), Brick Breaker (50 health-bearing bricks, lives and capped speed-up), and Flappy Flyer (seeded bounded gate placement, reachable gaps, pass-line scoring and loss on collision).
+- Integration: expanded behavior schema/catalog, starter IDs/catalog/build routing, template labels/summaries and project covers. Added focused regression cases for the new runtime and updated the document-integrity expectation for Flappy gravity.
+- Validation: **not run by request.** No tests, typecheck, build, repo check or browser/Kane session was started.
+- Acceptance: implementation is authored but Slice C's automated and browser gates remain open. Slice A/B browser gates remain open too; no feature was added to `features.md`.
+- Known limitations: Ping Pong AI beatability, ball tunneling/sticking under real play, Flappy gap reachability and all editor-to-Play effects remain unverified. Complete validation after all twelve templates are implemented.

@@ -9,6 +9,8 @@ import type {
   ProjectSettings,
   Rule,
   Scene,
+  ShapePrimitive,
+  ShapeVisual,
   TemplateOrigin,
   Visual,
 } from "./schema";
@@ -49,6 +51,42 @@ export function makeBody(width: number, height: number, type: Body["type"] = "st
 
 export function makeRect(width: number, height: number, color: string, stroke?: string): Visual {
   return { kind: "rect", width, height, color, stroke };
+}
+
+export function makePrimitive(primitive: Partial<ShapePrimitive> & Pick<ShapePrimitive, "kind" | "width" | "height" | "color">): ShapePrimitive {
+  return {
+    x: 0,
+    y: 0,
+    strokeWidth: 0,
+    rotation: 0,
+    ...primitive,
+  } as ShapePrimitive;
+}
+
+export function makeShape(width: number, height: number, shapes: ShapePrimitive[]): ShapeVisual {
+  return { kind: "shape", width, height, shapes };
+}
+
+export function circle(size: number, color: string, overrides: Partial<ShapePrimitive> = {}): ShapePrimitive {
+  return makePrimitive({ kind: "circle", width: size, height: size, color, ...overrides });
+}
+
+export function rectShape(width: number, height: number, color: string, overrides: Partial<ShapePrimitive> = {}): ShapePrimitive {
+  return makePrimitive({ kind: "rect", width, height, color, ...overrides });
+}
+
+export function triangleShape(width: number, height: number, color: string, overrides: Partial<ShapePrimitive> = {}): ShapePrimitive {
+  return makePrimitive({ kind: "triangle", width, height, color, ...overrides });
+}
+
+export function polygonShape(
+  width: number,
+  height: number,
+  color: string,
+  points: Array<{ x: number; y: number }>,
+  overrides: Partial<ShapePrimitive> = {},
+): ShapePrimitive {
+  return makePrimitive({ kind: "polygon", width, height, color, points, ...overrides });
 }
 
 export function makeText(text: string, size = 24, color = "#f1f0ed"): Visual {
