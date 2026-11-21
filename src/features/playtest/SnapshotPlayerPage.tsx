@@ -34,6 +34,8 @@ export function SnapshotPlayerPage() {
   const testModeRequested = aiMode && searchParams.get("testMode") === "step";
   const requestedScenario = searchParams.get("scenario");
   const requestedSceneId = searchParams.get("scene");
+  const requestedMaxAdvance = clampBudget(searchParams.get("maxAdvance"), 1, 600, 600);
+  const requestedMaxFrames = clampBudget(searchParams.get("maxFrames"), 1, 3600, 3600);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<Runtime | null>(null);
   const inputRef = useRef<InputManager | null>(null);
@@ -109,7 +111,9 @@ export function SnapshotPlayerPage() {
     const sceneId = requestedSceneId && document.scenes.some((candidate) => candidate.id === requestedSceneId)
       ? requestedSceneId
       : document.startSceneId;
-    const controller = testMode ? new TestController(document, { seed, sceneId }) : null;
+    const controller = testMode
+      ? new TestController(document, { seed, sceneId, maxFramesPerAdvance: requestedMaxAdvance, maxFramesPerPhase: requestedMaxFrames })
+      : null;
     controllerRef.current = controller;
     const runtime = controller?.runtime ?? new Runtime(document, undefined, seed);
     runtimeRef.current = runtime;
@@ -207,7 +211,7 @@ export function SnapshotPlayerPage() {
       renderer.destroy();
       runtimeRef.current = null;
     };
-  }, [state.document, seed, testModeRequested, requestedSceneId]);
+  }, [state.document, seed, testModeRequested, requestedSceneId, requestedMaxAdvance, requestedMaxFrames]);
 
   const document = state.document;
   const runtime = runtimeRef.current;
@@ -322,6 +326,12 @@ export function SnapshotPlayerPage() {
       </div>
     </div>
   );
+}
+
+function clampBudget(value: string | null, min: number, max: number, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(parsed)));
 }
 
 function pausedLabel(status: string | undefined): string {

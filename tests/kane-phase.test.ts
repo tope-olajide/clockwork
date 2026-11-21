@@ -62,7 +62,7 @@ function result(overrides: Partial<AiPlayResult> = {}): AiPlayResult {
     status: "passed",
     summary: "Kane finished.",
     objective: "",
-    finalState: { score: "10", projectiles: "1", accepted_inputs: "2" },
+    finalState: { score: "10", projectiles: "1", accepted_inputs: "2", frames_advanced: "60" },
     steps: [],
     runtimeErrors: [],
     evidenceUrl: "/api/kane/runs/run-1/evidence",
@@ -130,10 +130,13 @@ test("composePhaseObjective includes the goal, controls and extraction clauses o
   const req = request();
   const objective = composePhaseObjective(req, req.plan.phases[0]!);
   assert.match(objective, /Verify shooting destroys an enemy/);
-  assert.match(objective, /Use only these controls: shoot/);
+  assert.match(objective, /Use only these visible controls/);
+  assert.match(objective, /shoot/);
+  assert.match(objective, /click STEP/);
   assert.match(objective, /Score as 'score'/);
   assert.match(objective, /Projectiles as 'projectiles'/);
   assert.match(objective, /accepted_inputs/);
+  assert.match(objective, /frames_advanced/);
   assert.doesNotMatch(objective, /https?:\/\//);
 });
 
@@ -173,22 +176,25 @@ test("judgePhase refuses a pass when the run reported runtime errors", () => {
 });
 
 test("judgePhase classifies a failed assertion as a product failure", () => {
-  const judged = judge({ finalState: { score: "0", projectiles: "1", accepted_inputs: "1" } });
+  const judged = judge({ finalState: { score: "0", projectiles: "1", accepted_inputs: "1", frames_advanced: "60" } });
   assert.equal(judged.verdict, "failed");
   assert.equal(judged.failureKind, "product");
   assert.match(judged.reason, /score/);
 });
 
 test("judgePhase treats a missing observation as inconclusive, not a pass", () => {
-  const judged = judge({ finalState: { score: "10", accepted_inputs: "1" } });
+  const judged = judge({ finalState: { score: "10", accepted_inputs: "1", frames_advanced: "60" } });
   assert.equal(judged.verdict, "inconclusive");
   assert.equal(judged.failureKind, "observation");
 });
 
-test("judgePhase fails when no input was accepted", () => {
-  const judged = judge({ finalState: { score: "10", projectiles: "1", accepted_inputs: "0" } });
-  assert.equal(judged.verdict, "failed");
-  assert.equal(judged.failureKind, "input");
+test("judgePhase treats undelivered input and over-budget frames as inconclusive", () => {
+  const noInput = judge({ finalState: { score: "10", projectiles: "1", accepted_inputs: "0", frames_advanced: "0" } });
+  assert.equal(noInput.verdict, "inconclusive");
+  assert.equal(noInput.failureKind, "input");
+  const overBudget = judge({ finalState: { score: "10", projectiles: "1", accepted_inputs: "1", frames_advanced: "4000" } });
+  assert.equal(overBudget.verdict, "inconclusive");
+  assert.equal(overBudget.failureKind, "budget");
 });
 
 test("PhaseSessionStore admits one run, replays results and enforces the phase budget", () => {

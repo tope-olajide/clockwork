@@ -1,5 +1,6 @@
 import type { GameTestProfile, ProfileObservation } from "../model/game-test-profile";
 import type { ProjectDocument } from "../model/schema";
+import { applyScenarioToDocument, getGameTestScenario, validateScenarioSetup } from "../model/game-test-scenarios";
 import { TestController } from "./test-controller";
 
 export function statusToken(controller: TestController): string {
@@ -33,7 +34,8 @@ export function observationValue(
 }
 
 export function acceptedInputCount(controller: TestController): number {
-  return controller.receipts.filter((receipt) => receipt.accepted).length;
+  // A queued control is not delivered until a frame actually carries it.
+  return controller.receipts.filter((receipt) => receipt.accepted && receipt.pressFrame !== undefined).length;
 }
 
 /**
@@ -45,8 +47,15 @@ export function observationBaselines(
   document: ProjectDocument,
   profile: GameTestProfile,
   seed: number,
+  options: { sceneId?: string; scenarioId?: string } = {},
 ): Record<string, string | number | boolean> {
-  const controller = new TestController(document, { seed });
+  const sceneId = options.sceneId ?? document.startSceneId;
+  let runDocument = document;
+  const scenario = options.scenarioId ? getGameTestScenario(options.scenarioId) : undefined;
+  if (scenario && profile.scenarioIds.includes(scenario.id) && validateScenarioSetup(scenario, document, sceneId).length === 0) {
+    runDocument = applyScenarioToDocument(scenario, document, sceneId);
+  }
+  const controller = new TestController(runDocument, { seed, sceneId });
   const baseline: Record<string, string | number | boolean> = {};
   for (const observation of profile.observations) {
     const value = observationValue(controller, observation);

@@ -75,6 +75,7 @@ export class TestController {
   readonly runtime: Runtime;
   readonly seed: number;
   private readonly maxFrames: number;
+  private readonly maxAdvance: number;
   private pending: PendingInput[] = [];
   private receiptsList: TestInputReceipt[] = [];
   private active = new Set<LogicalAction>();
@@ -82,10 +83,11 @@ export class TestController {
 
   constructor(
     document: ProjectDocument,
-    options: { seed?: number; sceneId?: string; maxFramesPerPhase?: number } = {},
+    options: { seed?: number; sceneId?: string; maxFramesPerPhase?: number; maxFramesPerAdvance?: number } = {},
   ) {
     this.seed = options.seed ?? 1234;
     this.maxFrames = options.maxFramesPerPhase ?? TEST_MODE_LIMITS.maxFramesPerPhase;
+    this.maxAdvance = Math.min(options.maxFramesPerAdvance ?? TEST_MODE_LIMITS.maxFramesPerAdvance, this.maxFrames);
     this.runtime = new Runtime(document, options.sceneId, this.seed);
   }
 
@@ -104,6 +106,14 @@ export class TestController {
 
   get framesRemaining(): number {
     return Math.max(0, this.maxFrames - this.advanced);
+  }
+
+  get maxFramesPerAdvance(): number {
+    return this.maxAdvance;
+  }
+
+  get maxFramesPerPhase(): number {
+    return this.maxFrames;
   }
 
   get receipts(): TestInputReceipt[] {
@@ -161,8 +171,8 @@ export class TestController {
       action: request.action,
       mode: request.mode,
       requestedFrames,
+      // pressFrame is only set by advance() when a real InputFrame carries it.
       accepted: true,
-      pressFrame: startFrame,
     };
     this.receiptsList.push(receipt);
     this.pending.push({ receipt, startFrame, endFrame, applied: false });
@@ -199,7 +209,7 @@ export class TestController {
    */
   advance(requested: number): TestAdvanceResult {
     const fromFrame = this.runtime.frame;
-    const wanted = clampInteger(requested, 1, TEST_MODE_LIMITS.maxFramesPerAdvance);
+    const wanted = clampInteger(requested, 1, this.maxAdvance);
     if (wanted === null) {
       return { fromFrame, toFrame: fromFrame, advancedFrames: 0, requestedFrames: requested, status: this.runtime.status, clamped: false, receipts: this.receipts, reason: "frames must be a number" };
     }

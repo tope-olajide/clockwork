@@ -60,6 +60,10 @@ export interface KanePhaseRequest {
   plan: PlanForPhase;
   /** Visible labels the phase objective may name. Keys must be assertion observation ids. */
   observationLabels?: Record<string, string>;
+  /** Visible control labels from the registered profile. Keys must be allowed controls. */
+  controlLabels?: Record<string, string>;
+  /** Control semantics so the objective tells Kane whether to toggle or click once. */
+  controlModes?: Record<string, "hold" | "pulse">;
   /** Values observed at frame zero, used only for `increased` comparisons. */
   baseline?: Record<string, string | number | boolean>;
 }
@@ -75,6 +79,7 @@ export type PhaseFailureKind =
   | "evidence"
   | "infrastructure"
   | "timeout"
+  | "budget"
   | "cancelled";
 
 export interface PhaseAssertionResult extends PhaseAssertionSpec {
@@ -108,6 +113,8 @@ export interface KanePhaseResult {
   checks: PhaseAssertionResult[];
   finalState: Record<string, string>;
   acceptedInputs: number | null;
+  /** Runtime frames observed at the end of the phase; used to enforce the approved budget. */
+  framesAdvanced: number | null;
   steps: Pick<KaneStep, "step" | "status" | "remark">[];
   runtimeErrors: string[];
   evidenceUrl?: string;

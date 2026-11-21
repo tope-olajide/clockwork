@@ -17,6 +17,7 @@ CSS classes or layout-dependent text.
 | `?ai=1` | Snapshot | Show the AI Play HUD.
 | `?testMode=step` | Snapshot | Opt in to lockstep Test Mode. Ignored by `/play/:projectId`.
 | `?scenario=<id>` | Snapshot + `testMode=step` | Request a registered scenario; must be allowed by the template's profile. |
+| `?maxAdvance=<n>&maxFrames=<n>` | Snapshot + `testMode=step` | Approved per-STEP and per-phase frame limits, composed server-side. |
 
 ## Test Mode contract (snapshot only)
 

@@ -69,6 +69,7 @@ function resultFor(
     })),
     finalState: { "shots-fired": "2", projectiles: "1", accepted_inputs: "1" },
     acceptedInputs: 1,
+    framesAdvanced: 60,
     steps: [],
     runtimeErrors: [],
     evidenceUrl: "https://evidence.example/run/1",

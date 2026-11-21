@@ -74,6 +74,8 @@ export const kanePhaseRequestSchema = z
     phaseId: z.string().regex(ID_TEXT),
     plan: planSchema,
     observationLabels: z.record(z.string().regex(ID_TEXT), z.string().min(1).max(40).regex(SAFE_TEXT)).optional(),
+    controlLabels: z.record(z.string().regex(ID_TEXT), z.string().min(1).max(24).regex(SAFE_TEXT)).optional(),
+    controlModes: z.record(z.string().regex(ID_TEXT), z.enum(["hold", "pulse"])).optional(),
     baseline: z.record(z.string().regex(ID_TEXT), primitive).optional(),
   })
   .strict();
@@ -140,6 +142,13 @@ export function validatePhaseRequest(body: unknown, document: PhaseValidationDoc
       return { ok: false, error: `Observation label "${key}" is not asserted by this phase.` };
     }
   }
+  const allowedControlIds = new Set(phase.allowedControlIds);
+  for (const key of Object.keys(request.controlLabels ?? {})) {
+    if (!allowedControlIds.has(key)) return { ok: false, error: `Control label "${key}" is not allowed by this phase.` };
+  }
+  for (const key of Object.keys(request.controlModes ?? {})) {
+    if (!allowedControlIds.has(key)) return { ok: false, error: `Control mode "${key}" is not allowed by this phase.` };
+  }
   if (request.baseline && Object.keys(request.baseline).length > KANE_PHASE_LIMITS.maxBaselineEntries) {
     return { ok: false, error: "Too many baseline values." };
   }
@@ -161,6 +170,8 @@ export function phaseFingerprint(request: KanePhaseRequest): string {
   const raw = JSON.stringify({
     plan: request.plan,
     observationLabels: request.observationLabels ?? null,
+    controlLabels: request.controlLabels ?? null,
+    controlModes: request.controlModes ?? null,
     baseline: request.baseline ?? null,
   });
   let hash = 5381;
@@ -173,6 +184,8 @@ export function phaseFingerprint(request: KanePhaseRequest): string {
 /** Server-composed objective. Never taken verbatim from the client. */
 export function composePhaseObjective(request: KanePhaseRequest, phase: PhaseSpec): string {
   const labels = request.observationLabels ?? {};
+  const controlLabels = request.controlLabels ?? {};
+  const controlModes = request.controlModes ?? {};
   const lines: string[] = [
     `Approved Clockwork test plan phase "${phase.id}".`,
     `User goal (authoritative, do not replace): ${request.plan.userGoal}`,
@@ -180,12 +193,20 @@ export function composePhaseObjective(request: KanePhaseRequest, phase: PhaseSpe
     `What to do: ${phase.kaneObjective}`,
   ];
   if (phase.allowedControlIds.length) {
-    lines.push(`Use only these controls: ${phase.allowedControlIds.join(", ")}.`);
+    lines.push("Use only these visible controls:");
+    for (const controlId of phase.allowedControlIds) {
+      const label = controlLabels[controlId] ?? controlId;
+      const mode = controlModes[controlId] ?? "pulse";
+      lines.push(`- "${label}" (${controlId}, ${mode === "hold" ? "hold: click once to turn on, click again to turn off" : "pulse: click once"})`);
+    }
   } else {
     lines.push("Do not press gameplay controls in this phase; observe only.");
   }
   lines.push(
-    "The page is in Clockwork Test Mode. The simulation advances only when you take an action; do not reload or re-navigate.",
+    "The page is in Clockwork Test Mode. Pressing a control only queues it; the game does not advance until you click STEP.",
+    "After each control action, set the ADVANCE frame count (1 or more) and click STEP. Never exceed the approved limit in one STEP.",
+    `Approved limits: at most ${request.plan.budget.maxFramesPerAdvance} frames per STEP and ${request.plan.budget.maxFramesPerPhase} frames for the whole phase.`,
+    "Do not reload or re-navigate. If the phase needs more than the approved frame limit, end the run and report that limit reached.",
     "When the phase is complete, read the OBSERVATIONS panel and store each value exactly as instructed:",
   );
   for (const assertion of phase.assertions) {
@@ -194,6 +215,7 @@ export function composePhaseObjective(request: KanePhaseRequest, phase: PhaseSpe
   }
   lines.push(
     "Also store the ACCEPTED INPUTS counter as 'accepted_inputs'.",
+    "Store the FRAME value as 'frames_advanced'.",
     "Then end the run. Do not add checks that are not listed above.",
   );
   const objective = lines.join("\n");
@@ -275,6 +297,7 @@ export function judgePhase(input: PhaseJudgeInput): KanePhaseResult {
     judgeCheck({ ...assertion, status: "missing" }, finalState, request.baseline),
   );
   const acceptedInputs = numeric(finalState.accepted_inputs);
+  const framesAdvanced = numeric(finalState.frames_advanced);
   const runtimeErrors = (result.runtimeErrors ?? []).map(redactLocalPaths);
 
   let verdict: PhaseVerdict = "inconclusive";
@@ -307,9 +330,11 @@ export function judgePhase(input: PhaseJudgeInput): KanePhaseResult {
     failureKind = "input";
     reason = "Kane did not report an accepted-input count, so the plan cannot prove the controls worked.";
   } else if (phase.allowedControlIds.length > 0 && acceptedInputs === 0) {
-    verdict = "failed";
+    // No applied input means Kane did not drive the game, so this cannot be a
+    // product failure. It is an input-delivery/automation failure.
+    verdict = "inconclusive";
     failureKind = "input";
-    reason = "No input was accepted by the game during this phase.";
+    reason = "No input reached the game during this phase; the controls were not delivered.";
   } else if (result.status === "failed") {
     verdict = "failed";
     failureKind = "product";
@@ -320,6 +345,14 @@ export function judgePhase(input: PhaseJudgeInput): KanePhaseResult {
     reason = `Assertion failed: ${failed
       .map((check) => `${check.observationId} expected ${check.operator} ${String(check.expected)}, got ${check.actual}`)
       .join("; ")}.`;
+  } else if (framesAdvanced === null) {
+    verdict = "inconclusive";
+    failureKind = "budget";
+    reason = "Kane did not report the final FRAME value, so the approved frame budget cannot be verified.";
+  } else if (framesAdvanced > request.plan.budget.maxFramesPerPhase) {
+    verdict = "inconclusive";
+    failureKind = "budget";
+    reason = `The phase advanced ${framesAdvanced} frames, exceeding the approved ${request.plan.budget.maxFramesPerPhase}-frame limit.`;
   } else if (runtimeErrors.length) {
     // A gameplay/runtime error means the observed values cannot be trusted as a pass,
     // even when the assertion numbers happen to match.
@@ -352,6 +385,7 @@ export function judgePhase(input: PhaseJudgeInput): KanePhaseResult {
     checks: checks.map((check) => ({ ...check, ...(check.actual !== undefined ? { actual: redactLocalPaths(check.actual) } : {}) })),
     finalState: redactStrings(finalState),
     acceptedInputs,
+    framesAdvanced,
     steps: (result.steps ?? []).map((step) => ({ step: step.step, status: step.status, remark: redactLocalPaths(step.remark) })),
     runtimeErrors,
     evidenceUrl: result.evidenceUrl,

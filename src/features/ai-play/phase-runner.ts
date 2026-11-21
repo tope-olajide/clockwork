@@ -49,7 +49,10 @@ export async function runApprovedPhase(input: RunApprovedPhaseInput): Promise<Ka
   const observationIds = [...new Set(phase.assertions.map((assertion) => assertion.observationId))];
   const baseline: Record<string, string | number | boolean> = {};
   if (phase.assertions.some((assertion) => assertion.operator === "increased")) {
-    const values = observationBaselines(document, profile, draft.seed);
+    const values = observationBaselines(document, profile, draft.seed, {
+      sceneId: draft.sceneId,
+      scenarioId: draft.scenarioId,
+    });
     for (const observationId of observationIds) {
       if (values[observationId] !== undefined) baseline[observationId] = values[observationId];
     }
@@ -61,6 +64,16 @@ export async function runApprovedPhase(input: RunApprovedPhaseInput): Promise<Ka
     phaseId,
     plan,
     observationLabels: observationLabels(profile, observationIds),
+    controlLabels: Object.fromEntries(
+      profile.controls
+        .filter((control) => phase.allowedControlIds.includes(control.id))
+        .map((control) => [control.id, control.label]),
+    ),
+    controlModes: Object.fromEntries(
+      profile.controls
+        .filter((control) => phase.allowedControlIds.includes(control.id))
+        .map((control) => [control.id, control.mode]),
+    ),
     ...(Object.keys(baseline).length ? { baseline } : {}),
   };
   return streamKanePhase(request, handlers);

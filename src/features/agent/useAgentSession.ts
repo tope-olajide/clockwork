@@ -296,6 +296,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           kaneStatus: result.kaneStatus,
           checks: result.checks,
           acceptedInputs: result.acceptedInputs,
+          framesAdvanced: result.framesAdvanced,
           finalState: result.finalState,
           durationMs: result.durationMs,
           steps: result.steps.slice(-12),

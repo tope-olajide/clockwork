@@ -67,6 +67,7 @@ export function TestModeHud({ document, profile, controller, seed, scenarioId, o
         <dl>
           <div><dt>STATUS</dt><dd data-testid="test-hud-status">{statusToken(controller)}</dd></div>
           <div><dt>FRAME</dt><dd data-testid="test-hud-frame">{controller.frame}</dd></div>
+          <div><dt>FRAME LIMIT</dt><dd data-testid="test-hud-frame-limit">{controller.maxFramesPerPhase}</dd></div>
           <div><dt>SEED</dt><dd data-testid="test-hud-seed">{seed}</dd></div>
           <div><dt>SCENE</dt><dd data-testid="test-hud-scene">{controller.runtime.scene.name}</dd></div>
           <div><dt>SCENARIO</dt><dd data-testid="test-hud-scenario">{scenarioId ? `${scenarioId} (setup applied)` : "none"}</dd></div>
@@ -129,17 +130,17 @@ export function TestModeHud({ document, profile, controller, seed, scenarioId, o
           <input
             type="number"
             min={1}
-            max={600}
+            max={controller.maxFramesPerAdvance}
             value={frames}
             data-testid="test-advance-frames"
             aria-label="Frames to advance"
-            onChange={(event) => setFrames(Math.max(1, Math.min(600, Number(event.target.value) || 1)))}
+            onChange={(event) => setFrames(Math.max(1, Math.min(controller.maxFramesPerAdvance, Number(event.target.value) || 1)))}
           />
         </label>
         <button type="button" className="ai-hud-button" data-testid="test-advance" onClick={advance}>
           STEP
         </button>
-        <button type="button" className="ai-hud-button" data-testid="test-advance-10" onClick={() => { setFrames(10); const result = controller.advance(10); setLastAdvance(result); setNotice(result.reason ?? null); onChanged(); }}>
+        <button type="button" className="ai-hud-button" data-testid="test-advance-10" onClick={() => { const step = Math.min(10, controller.maxFramesPerAdvance); setFrames(step); const result = controller.advance(step); setLastAdvance(result); setNotice(result.reason ?? null); onChanged(); }}>
           STEP 10
         </button>
         <button type="button" className="ai-hud-button stop" data-testid="test-reset" onClick={reset}>

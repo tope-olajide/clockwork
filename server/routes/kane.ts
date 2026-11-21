@@ -243,7 +243,9 @@ kaneRoutes.post("/phase", async (c) => {
   if (!validation.ok) return c.json({ ok: false, error: validation.error }, 400);
   const { request, phase, phaseIndex } = validation;
 
-  const key = phaseKey(String(document.id ?? ""), `${request.sessionId}:${phaseFingerprint(request)}`);
+  // The budget/idempotency key is derived server-side from the plan content, so
+  // changing the client-supplied sessionId cannot reset the paid phase budget.
+  const key = phaseKey(String(document.id ?? ""), phaseFingerprint(request));
   const previous = phaseSessions.getResult(key, phase.id);
   if (previous) {
     c.header("Content-Type", "application/x-ndjson; charset=utf-8");
@@ -265,7 +267,13 @@ kaneRoutes.post("/phase", async (c) => {
 
   const objective = composePhaseObjective(request, phase);
   const origin = playerOrigin(c);
-  const params = new URLSearchParams({ ai: "1", testMode: "step", seed: String(request.plan.seed) });
+  const params = new URLSearchParams({
+    ai: "1",
+    testMode: "step",
+    seed: String(request.plan.seed),
+    maxAdvance: String(request.plan.budget.maxFramesPerAdvance),
+    maxFrames: String(request.plan.budget.maxFramesPerPhase),
+  });
   params.set("scene", request.plan.sceneId);
   if (request.plan.scenarioId) params.set("scenario", request.plan.scenarioId);
   const url = `${origin}/s/${encodeURIComponent(snapshotId)}?${params.toString()}`;

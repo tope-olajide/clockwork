@@ -204,7 +204,8 @@ export function TestPlanPanel({ document, modelLabel, onRequestPlan }: TestPlanP
                         ))}
                       </ul>
                       <div className="muted">
-                        Accepted inputs: {result.acceptedInputs ?? "unknown"} · {(result.durationMs / 1000).toFixed(1)}s
+                        Accepted inputs: {result.acceptedInputs ?? "unknown"} · frames: {result.framesAdvanced ?? "unknown"} ·{" "}
+                        {(result.durationMs / 1000).toFixed(1)}s
                       </div>
                       {result.evidenceUrl && (
                         <a href={result.evidenceUrl} data-testid={`test-plan-evidence-${phase.id}`}>Evidence</a>
@@ -283,6 +284,7 @@ export function TestPlanPanel({ document, modelLabel, onRequestPlan }: TestPlanP
             <div className="muted" data-testid="test-plan-budget">
               {estimate.kaneRuns} Kane run{estimate.kaneRuns === 1 ? "" : "s"} · ~{estimate.typicalSeconds}s typical ·{" "}
               {estimate.worstCaseSeconds}s worst case · ≤{estimate.framesPerPhase} frames/phase
+              <br />Running a phase uses the signed-in Kane CLI and consumes TestMu AI credits.
             </div>
           )}
           <div className="muted" data-testid="test-plan-revisions">

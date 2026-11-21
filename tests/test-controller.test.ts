@@ -44,7 +44,7 @@ test("a pulse is one press edge with a deterministic release", () => {
   const session = controller();
   const receipt = session.enqueue({ controlId: "shoot", action: "jump", mode: "pulse", frames: 2 });
   assert.equal(receipt.accepted, true);
-  assert.equal(receipt.pressFrame, 1);
+  assert.equal(receipt.pressFrame, undefined, "a queued control is not delivered yet");
 
   const result = session.advance(4);
   const frames = session.runtime.recordedInputs;
