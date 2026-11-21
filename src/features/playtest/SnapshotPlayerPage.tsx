@@ -115,6 +115,9 @@ export function SnapshotPlayerPage() {
       ? new TestController(document, { seed, sceneId, maxFramesPerAdvance: requestedMaxAdvance, maxFramesPerPhase: requestedMaxFrames })
       : null;
     controllerRef.current = controller;
+    // Refs do not trigger a render. Without this, the first Test Mode paint can
+    // permanently show "TEST MODE UNAVAILABLE" even after the controller exists.
+    setTick((value) => value + 1);
     const runtime = controller?.runtime ?? new Runtime(document, undefined, seed);
     runtimeRef.current = runtime;
     const input = testModeRequested ? null : new InputManager(document.settings.inputMap);

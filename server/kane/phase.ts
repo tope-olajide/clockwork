@@ -197,26 +197,19 @@ export function composePhaseObjective(request: KanePhaseRequest, phase: PhaseSpe
     for (const controlId of phase.allowedControlIds) {
       const label = controlLabels[controlId] ?? controlId;
       const mode = controlModes[controlId] ?? "pulse";
-      lines.push(`- "${label}" (${controlId}, ${mode === "hold" ? "hold: click once to turn on, click again to turn off" : "pulse: click once"})`);
+      lines.push(`- "${label}" (${controlId}, ${mode})`);
     }
   } else {
     lines.push("Do not press gameplay controls in this phase; observe only.");
   }
-  lines.push(
-    "The page is in Clockwork Test Mode. Pressing a control only queues it; the game does not advance until you click STEP.",
-    "After each control action, set the ADVANCE frame count (1 or more) and click STEP. Never exceed the approved limit in one STEP.",
-    `Approved limits: at most ${request.plan.budget.maxFramesPerAdvance} frames per STEP and ${request.plan.budget.maxFramesPerPhase} frames for the whole phase.`,
-    "Do not reload or re-navigate. If the phase needs more than the approved frame limit, end the run and report that limit reached.",
-    "When the phase is complete, read the OBSERVATIONS panel and store each value exactly as instructed:",
-  );
-  for (const assertion of phase.assertions) {
+  const recorded = phase.assertions.map((assertion) => {
     const label = labels[assertion.observationId] ?? assertion.observationId.toUpperCase();
-    lines.push(`- ${label} as '${assertion.observationId}'`);
-  }
+    return `${label} as '${assertion.observationId}'`;
+  });
+  recorded.push("ACCEPTED INPUTS as 'accepted_inputs'", "FRAME as 'frames_advanced'");
   lines.push(
-    "Also store the ACCEPTED INPUTS counter as 'accepted_inputs'.",
-    "Store the FRAME value as 'frames_advanced'.",
-    "Then end the run. Do not add checks that are not listed above.",
+    `Test Mode: control clicks only queue input. Set ADVANCE to 1 or more, click STEP, stay within ${request.plan.budget.maxFramesPerAdvance} frames per STEP and ${request.plan.budget.maxFramesPerPhase} frames total. Do not reload.`,
+    `Record exactly: ${recorded.join("; ")}. Then end the run.`,
   );
   const objective = lines.join("\n");
   return objective.slice(0, KANE_PHASE_LIMITS.maxObjectiveChars);
