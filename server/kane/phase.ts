@@ -72,6 +72,7 @@ export const kanePhaseRequestSchema = z
     sessionId: z.string().regex(SESSION_TEXT),
     snapshotId: z.string().regex(ID_TEXT),
     phaseId: z.string().regex(ID_TEXT),
+    replayTestKey: z.string().regex(/^[a-z0-9-]{1,64}$/).optional(),
     plan: planSchema,
     observationLabels: z.record(z.string().regex(ID_TEXT), z.string().min(1).max(40).regex(SAFE_TEXT)).optional(),
     controlLabels: z.record(z.string().regex(ID_TEXT), z.string().min(1).max(24).regex(SAFE_TEXT)).optional(),
@@ -168,6 +169,7 @@ export function validatePhaseRequest(body: unknown, document: PhaseValidationDoc
  */
 export function phaseFingerprint(request: KanePhaseRequest): string {
   const raw = JSON.stringify({
+    replayTestKey: request.replayTestKey ?? null,
     plan: request.plan,
     observationLabels: request.observationLabels ?? null,
     controlLabels: request.controlLabels ?? null,

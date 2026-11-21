@@ -22,6 +22,8 @@ export interface RunApprovedPhaseInput {
   document: ProjectDocument;
   profile: GameTestProfile;
   phaseId: string;
+  /** Registry key for a recorded replay; omit for a fresh authored run. */
+  replayTestKey?: string;
   handlers?: KanePhaseStreamHandlers;
   onSnapshot?: (snapshotId: string) => void;
 }
@@ -62,6 +64,7 @@ export async function runApprovedPhase(input: RunApprovedPhaseInput): Promise<Ka
     sessionId: phaseSessionId(draft),
     snapshotId: snapshot.id,
     phaseId,
+    ...(input.replayTestKey ? { replayTestKey: input.replayTestKey } : {}),
     plan,
     observationLabels: observationLabels(profile, observationIds),
     controlLabels: Object.fromEntries(

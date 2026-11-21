@@ -74,7 +74,7 @@ interface TestPlanState {
   setDraft: (draft: TestPlanDraft | null) => void;
   setNotice: (notice: string | null) => void;
   recordPhaseResult: (draft: TestPlanDraft, result: KanePhaseResult) => void;
-  runPhase: (input: { draft: TestPlanDraft; document: ProjectDocument; profile: GameTestProfile; phaseId: string }) => Promise<KanePhaseResult | null>;
+  runPhase: (input: { draft: TestPlanDraft; document: ProjectDocument; profile: GameTestProfile; phaseId: string; replayTestKey?: string }) => Promise<KanePhaseResult | null>;
   cancelPhase: () => Promise<void>;
   clear: () => void;
 }
@@ -132,7 +132,7 @@ export const useTestPlanStore = create<TestPlanState>((set, get) => ({
     set({ phaseResults });
   },
 
-  runPhase: async ({ draft, document, profile, phaseId }) => {
+  runPhase: async ({ draft, document, profile, phaseId, replayTestKey }) => {
     if (get().runningPhaseId) {
       set({ phaseError: "Another phase is already running." });
       return null;
@@ -144,6 +144,7 @@ export const useTestPlanStore = create<TestPlanState>((set, get) => ({
         document,
         profile,
         phaseId,
+        ...(replayTestKey ? { replayTestKey } : {}),
         handlers: { onRunId: (runId) => set({ phaseRunId: runId }) },
       });
       get().recordPhaseResult(draft, result);

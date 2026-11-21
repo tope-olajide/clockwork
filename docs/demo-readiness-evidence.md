@@ -130,3 +130,45 @@ Total live-run spend for Phase 4: 4 paid Kane runs.
 - Honest scope note: verified by typecheck + unit tests only. No live Kane
   run was spent proving the handoff end to end; that is Phase 7 demo-video
   material.
+
+## Phase 6 — `testmd` replay path (code complete, measured live, one open limitation)
+
+- **Date:** 2026-11-21. **Kane CLI:** 0.10.6, authenticated. Balances:
+  7550.4534 pre-Phase-6 → 7521.7914 after an early 186.1 s wall-timeout
+  probe (28.66cr) → 7498.9435 after run A (22.85cr) → 7460.9185 after run B
+  (38.02cr) → 7430.0345 after run C (~30.88cr).
+- **Registry:** `server/kane/replay-tests.ts` maps `space-shooter-fire` →
+  `scripts/kane/tests/phases/space-shooter-fire_test.md` → phase
+  `fire-creates-projectile`. The route resolves the key server-side (never a
+  caller path), refuses unknown keys (`kane-replay-missing`) and
+  wrong-phase keys (`kane-replay-mismatch`), both 400. `GET
+  /api/kane/phase-replays` feeds the panel's per-phase "Replay saved test"
+  button. Replay runs use `testmd run <file>` with `--no-adaptive-heal`.
+- **Runs** (all through `POST /api/kane/phase` with a hand-built plan over a
+  fresh starter snapshot — same route, judge and snapshot mechanism as the
+  agent path; only plan authorship differed because the agent model provider
+  returned `fetch failed` all afternoon):
+  - A `be3b1863` (no replay key): Kane `passed` in 57.9 s / 10 steps, but the
+    judge returned `failed` / product — one frame advanced, 0 shots, 0
+    projectiles. Evidence + Test Manager link present.
+  - B `e3befc89` (recorded file): verdict `passed` / none, 121 s, 2/2 steps
+    (0 replayed, 2 authored). Shots 3, projectiles 3, accepted 1, frames 45.
+    Evidence yes, `testUrl` empty (no `share_url` emitted).
+  - C `f4ee134b` (same file, fresh server to clear idempotency): verdict
+    `passed` / none, 120 s, 2/2 (0 replayed, 2 authored) — observations
+    identical to B (3/3/1/45). Evidence yes, `testUrl` empty.
+- **Why no step replayed:** both `test_md_summary` events report
+  `commit: {committed: false, reason: "not_committed"}` and `upload:
+  {succeeded: false}`; the output dir holds only `.internal/meta.json`, no
+  step tapes. With no recordings the CLI authors every step (per the replay
+  rule), so run C is a second authoring through the replay path, not a
+  cache replay — same observations, same ~120 s cost, no speedup.
+- **Fallback (documented, no extra run needed):** omit `replayTestKey` for a
+  fresh authored run; a mismatched key gets a 400 naming the owning phase;
+  healing stays off so a replay failure is fast and visible. The
+  `share_url` → `test_url` mapping and the `--no-adaptive-heal` invocation
+  are covered by `tests/kane-phase-replay.test.ts` (6 tests, pass).
+- **Open limitation:** no run has shown `replay_decisions > 0`, so no replay
+  timing or credit saving is claimed. Do not present run C as a replay win.
+
+Total live-run spend for Phase 6: 4 paid Kane runs (1 timeout probe + A + B + C).

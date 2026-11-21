@@ -10,6 +10,7 @@ import {
   isDraftStale,
 } from "../../engine/model/game-test-draft";
 import { buildTestReport } from "../../engine/model/game-test-report";
+import { fetchPhaseReplays, type PhaseReplayRef } from "../../engine/ai/kane-api";
 import { useTestPlanStore } from "./test-plan-store";
 
 interface TestPlanPanelProps {
@@ -37,6 +38,15 @@ export function TestPlanPanel({ document, modelLabel, onRequestPlan, onPhaseResu
   const runPhase = useTestPlanStore((state) => state.runPhase);
   const cancelPhase = useTestPlanStore((state) => state.cancelPhase);
   const [goal, setGoal] = useState(draft?.userGoal ?? "");
+  const [replays, setReplays] = useState<PhaseReplayRef[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchPhaseReplays()
+      .then((refs) => { if (!cancelled) setReplays(refs); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const revisionRef = useRef(document.revision);
   revisionRef.current = document.revision;
 
@@ -158,6 +168,7 @@ export function TestPlanPanel({ document, modelLabel, onRequestPlan, onPhaseResu
             {draft.phases.map((phase) => {
               const result = phaseResults[phase.id];
               const running = runningPhaseId === phase.id;
+              const replay = replays.find((ref) => ref.phaseId === phase.id) ?? null;
               return (
                 <li key={phase.id} data-testid={`test-plan-phase-${phase.id}`}>
                   <strong>{phase.purpose}</strong>
@@ -178,6 +189,18 @@ export function TestPlanPanel({ document, modelLabel, onRequestPlan, onPhaseResu
                     >
                       {running ? (cancelling ? "Stopping…" : "Running…") : result ? "Replay saved result" : "Run phase"}
                     </Button>
+                    {replay && !running && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`test-plan-replay-${phase.id}`}
+                        disabled={!draft.approval || stale || Boolean(runningPhaseId) || (budgetExhausted && !result)}
+                        onClick={() => void runPhase({ draft, document, profile, phaseId: phase.id, replayTestKey: replay.key })}
+                        title={`Replay the recorded test instead of authoring a fresh run: ${replay.label}. A replay failure stays a failure.`}
+                      >
+                        Replay saved test
+                      </Button>
+                    )}
                     {running && (
                       <Button
                         variant="ghost"

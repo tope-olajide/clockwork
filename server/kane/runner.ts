@@ -320,6 +320,10 @@ export function startKaneRun(options: KaneRunOptions): {
             duration: event.duration_s,
             final_state: lastInnerFinalState ?? {},
             session_id: event.session_id,
+            // The file-level event carries the Test Manager link as
+            // `share_url`; map it so replay results keep the same
+            // evidence/test references as authored runs.
+            ...(typeof event.share_url === "string" ? { test_url: event.share_url } : {}),
           };
           savedTestSession = typeof event.session_id === "string" ? event.session_id : undefined;
           continue;

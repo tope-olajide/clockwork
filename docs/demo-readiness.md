@@ -130,20 +130,34 @@ phase-running paths to see the closed loop.
 
 ## Phase 6 — Use Kane’s saved-test replay for approved phases
 
-- [ ] Identify a stable phase objective that can be replayed safely.
-- [ ] Add `testmd` replay support to the phase runner with an explicit saved-test
+- [x] Identify a stable phase objective that can be replayed safely.
+- [x] Add `testmd` replay support to the phase runner with an explicit saved-test
       path and `--no-adaptive-heal`.
-- [ ] First replay uses a recorded test; replay failure does not silently re-author.
-- [ ] Evidence and Test Manager references remain attached to the replay result.
-- [ ] Measure and record:
-      - [ ] first authored run duration
-      - [ ] replay duration
-      - [ ] credit/cost difference if available
-      - [ ] whether the replay produced the same observations
-- [ ] Document when replay is allowed and when a fresh plan is required.
-- [ ] Update `docs/kane-proof.md` with real replay evidence.
+- [x] First replay uses a recorded test; replay failure does not silently re-author.
+- [x] Evidence and Test Manager references remain attached to the replay result.
+- [x] Measure and record:
+      - [x] first authored run duration
+      - [x] replay duration
+      - [x] credit/cost difference if available
+      - [x] whether the replay produced the same observations
+- [x] Document when replay is allowed and when a fresh plan is required.
+- [x] Update `docs/kane-proof.md` with real replay evidence.
 
 **Gate:** the saved-replay path has a real measured run and a documented fallback.
+
+**Completed:** replay registry + route + panel wired (`7ba6318` follow-up,
+`tests/kane-phase-replay.test.ts` 6 pass, typecheck clean) and three live
+runs through `POST /api/kane/phase`: A one-shot authored (`failed`/product,
+57.9 s, ~22.85cr), B testmd authoring (`passed`, 121 s, ~38.02cr, 0
+replayed/2 authored, shots 3 / projectiles 3 / accepted 1 / frames 45), C
+same file on a fresh server (`passed`, 120 s, ~30.88cr, identical
+observations). Honest limitation recorded in `docs/kane-proof.md` and the
+evidence doc: both `testmd` runs authored (CLI persisted only `meta.json`,
+`commit: not_committed`, `upload: failed`), so no step replayed from cache
+and no replay speedup is claimed. Fallback documented: omit the key for a
+fresh author, mismatch → 400, healing off. Driven via direct HTTP because
+the agent model provider was unreachable; route, judge and snapshot
+mechanism are identical to the agent path.
 
 ## Phase 7 — Browser smoke test or recorded demo fallback
 
@@ -189,6 +203,6 @@ until this phase is fully checked.
 | 3 — Live phase through agent | Complete |
 | 4 — Adaptive/failure proof | Complete |
 | 5 — Panel-to-agent loop | Complete |
-| 6 — `testmd` phase replay | Not started |
+| 6 — `testmd` phase replay | Complete (one open limitation: no cache-replay observed) |
 | 7 — Browser smoke/demo | Not started |
 | 8 — Final verification | Not started |

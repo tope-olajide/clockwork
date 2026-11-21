@@ -12,6 +12,7 @@ import { startKaneRun } from "../kane/runner";
 import { composePhaseObjective, judgePhase, phaseFingerprint, validatePhaseRequest } from "../kane/phase";
 import { redactAiPlayResult } from "../../shared/protocol/redaction";
 import { PhaseSessionStore } from "../kane/phase-session";
+import { listReplayTests, resolveReplayTest } from "../kane/replay-tests";
 import { kaneCreditsExhausted, parseKaneCreditBalance } from "../kane/credits";
 
 export const kaneRoutes = new Hono();
@@ -237,6 +238,8 @@ function phaseKey(projectId: string, sessionId: string): string {
   return `${projectId}:${sessionId}`;
 }
 
+kaneRoutes.get("/phase-replays", (c) => c.json({ ok: true, replays: listReplayTests() }));
+
 kaneRoutes.post("/phase", async (c) => {
   const status = await readStatus();
   if (!status.installed) return c.json({ ok: false, error: status.reason ?? "Kane CLI is not installed.", code: "kane-missing" }, 503);
@@ -258,6 +261,19 @@ kaneRoutes.post("/phase", async (c) => {
   });
   if (!validation.ok) return c.json({ ok: false, error: validation.error }, 400);
   const { request, phase, phaseIndex } = validation;
+
+  // A replay runs the recorded `_test.md` for exactly the phase it was
+  // authored for, with healing disabled: a replay failure stays a failure and
+  // never silently re-authors. Anything else needs a fresh authored run.
+  let savedTest: string | undefined;
+  if (request.replayTestKey) {
+    const resolved = resolveReplayTest(request.replayTestKey);
+    if (!resolved.ok) return c.json({ ok: false, error: resolved.error, code: "kane-replay-missing" }, 400);
+    if (resolved.entry.phaseId !== request.phaseId) {
+      return c.json({ ok: false, error: `Recorded replay "${resolved.entry.key}" belongs to phase "${resolved.entry.phaseId}", not "${request.phaseId}". Run the authored phase first, then save it as a replay.`, code: "kane-replay-mismatch" }, 400);
+    }
+    savedTest = resolved.file;
+  }
 
   // The budget/idempotency key is derived server-side from the plan content, so
   // changing the client-supplied sessionId cannot reset the paid phase budget.
@@ -299,6 +315,7 @@ kaneRoutes.post("/phase", async (c) => {
   try {
     run = startKaneRun({
       objective,
+      ...(savedTest ? { savedTest } : {}),
       url,
       projectId: String(document.id ?? ""),
       snapshotId,

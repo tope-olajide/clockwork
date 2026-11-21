@@ -57,6 +57,12 @@ export interface KanePhaseRequest {
   sessionId: string;
   snapshotId: string;
   phaseId: string;
+  /**
+   * Key into the server's replay registry. When set, the phase runs
+   * `testmd run <recorded file> --url <snapshot> --no-adaptive-heal` instead
+   * of authoring a fresh one-shot run. A replay failure stays a failure.
+   */
+  replayTestKey?: string;
   plan: PlanForPhase;
   /** Visible labels the phase objective may name. Keys must be assertion observation ids. */
   observationLabels?: Record<string, string>;

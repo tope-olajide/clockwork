@@ -285,8 +285,9 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       if (!profile) return fail("No game-test profile is registered for this project.");
       const phaseId = typeof callArgs.phaseId === "string" ? callArgs.phaseId : "";
       if (!phaseId) return fail("A phaseId from the approved plan is required.");
+      const replayTestKey = typeof callArgs.replayTestKey === "string" && callArgs.replayTestKey ? callArgs.replayTestKey : undefined;
       try {
-        const result = await runApprovedPhase({ draft, document: doc, profile, phaseId });
+        const result = await runApprovedPhase({ draft, document: doc, profile, phaseId, ...(replayTestKey ? { replayTestKey } : {}) });
         useTestPlanStore.getState().recordPhaseResult(draft, result);
         // The panel-to-agent handoff builds the same payload, so both paths
         // render one verdict for one stored result.

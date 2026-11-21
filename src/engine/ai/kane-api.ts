@@ -69,6 +69,24 @@ export interface KanePhaseStreamHandlers {
   signal?: AbortSignal;
 }
 
+export interface PhaseReplayRef {
+  key: string;
+  phaseId: string;
+  label: string;
+}
+
+/** Recorded testmd replays the panel can offer per phase. Paths stay server-side. */
+export async function fetchPhaseReplays(): Promise<PhaseReplayRef[]> {
+  try {
+    const response = await fetch("/api/kane/phase-replays");
+    const body = (await response.json().catch(() => null)) as { ok?: boolean; replays?: PhaseReplayRef[] } | null;
+    if (!response.ok || !body || !Array.isArray(body.replays)) return [];
+    return body.replays.filter((replay) => replay && typeof replay.key === "string" && typeof replay.phaseId === "string");
+  } catch {
+    return [];
+  }
+}
+
 export async function streamKanePhase(
   input: KanePhaseRequest,
   handlers: KanePhaseStreamHandlers = {},

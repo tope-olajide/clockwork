@@ -385,6 +385,7 @@ export const KANE_TOOL_DEFINITIONS: ToolDefinition[] = [
         type: "object",
         properties: {
           phaseId: { type: "string", description: "Id of a phase in the approved plan" },
+          replayTestKey: { type: "string", description: "Optional registry key for a recorded testmd replay (e.g. from the phase panel). Omit for a fresh authored run; a replay failure stays a failure and never re-authors." },
         },
         required: ["phaseId"],
         additionalProperties: false,

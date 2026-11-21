@@ -55,7 +55,7 @@ Kane's one-shot `run` pays the **authoring** cost every time: it plans the objec
 
 The structural fix is the one the Kane skill documents for repeated verification: **saved tests replay**. `kane-cli testmd run <file>` authors each step on the first run and then replays the recordings, "mostly avoiding the authoring cost", on every later run. AI Play now supports that path via `KANE_AI_PLAY_TEST=scripts/kane/tests/ai-play-demo_test.md`; the snapshot URL is supplied with `--url`, so replay works across per-attempt snapshots without re-authoring. `--no-adaptive-heal` keeps a replay failure fast instead of silently re-authoring steps.
 
-The runner's saved-test stream handling is verified against the documented NDJSON contract with the `fake-kane` fixture (pass and fail): the verdict comes from `test_md_done`, `test_md_step_start/end` become the visible steps, inner per-step `run_end` events are not treated as the file verdict, `final_state` comes from the last inner `run_end`, and the evidence pack comes from the `coverage.pack` path. No real-Kane timing claim is made for the replay path yet: it has not been driven against a live scene, and the recordings only exist after one authored run.
+The runner's saved-test stream handling is verified against the documented NDJSON contract with the `fake-kane` fixture (pass and fail): the verdict comes from `test_md_done`, `test_md_step_start/end` become the visible steps, inner per-step `run_end` events are not treated as the file verdict, `final_state` comes from the last inner `run_end`, the evidence pack comes from the `coverage.pack` path, and a file-level `share_url` is mapped to `test_url` so replay results keep the same Test Manager reference as authored runs. The replay path has now also been driven against a live scene (Phase 6 below): the mechanism is proven end to end, but no replay speedup is claimed — both live `testmd` runs authored their steps instead of replaying from cache.
 
 ### Full Neon Runner AI Play (real two-attempt loop, 151.6 s)
 
@@ -323,6 +323,24 @@ The first terminal run was a genuine product finding: Kane drove the in-app hand
 
 - The runtime shooter previously checked only whether jump/action was still held on a simulation frame; a quick key press can be released before that frame. Shooters now also respond to the captured `jumpPressed`/`actionPressed` edge, covered by a one-frame press regression test.
 - Kane's browser timing can still let the game reach `LOST` before the agent finishes planning its first gameplay action. A test must protect player health before Play and verify an observed key action plus a score change; do not use the failing inverse-LOST branch pattern from `slice-a-input-proof-stable`. No clean browser-only score proof has been obtained.
+
+## Phase 6 — saved-test replay through the phase route (live, 2026-11-21)
+
+The phase route accepts an optional `replayTestKey` drawn from a server-side registry (`server/kane/replay-tests.ts`), never a caller-supplied path. The key must name a committed `_test.md` file, and it must belong to the phase being run — otherwise the route refuses with `kane-replay-missing` / `kane-replay-mismatch` (400) and the caller falls back to an authored run without the key. Replay runs pass the file to `testmd run` with `--no-adaptive-heal`, so a replay failure stays a failure instead of silently re-authoring. `GET /api/kane/phase-replays` lists the recorded replays for the panel, which offers a "Replay saved test" button per eligible phase.
+
+Recorded test: `scripts/kane/tests/phases/space-shooter-fire_test.md` (key `space-shooter-fire`, phase `fire-creates-projectile`): hold SHOOT, STEP 45 frames, read shots-fired / projectiles / accepted_inputs / frames_advanced, end immediately. The three runs below were driven through `POST /api/kane/phase` with a hand-built plan over a fresh starter snapshot (identical route, judge and snapshot mechanism as the agent path; only plan authorship differed because the agent model provider was unreachable that afternoon).
+
+| Run | Mode | Verdict | Duration | Credits | Steps | Observations |
+|---|---|---|---|---|---|
+| A `be3b1863` | one-shot `run`, no replay key | `failed` / product | 57.9 s | ~22.85 | 10 | accepted 1, frames 1, shots 0, projectiles 0 — Kane passed after a single-frame advance, so both assertions failed honestly |
+| B `e3befc89` | `testmd run` of the recorded file | `passed` / none | 121 s | ~38.02 | 2/2 (0 replayed, 2 authored) | shots 3, projectiles 3, accepted 1, frames 45 |
+| C `f4ee134b` | same file, fresh server (idempotency cleared) | `passed` / none | 120 s | ~30.88 | 2/2 (0 replayed, 2 authored) | shots 3, projectiles 3, accepted 1, frames 45 — identical to B |
+
+Evidence packs were attached for all three runs (`/api/kane/runs/<runId>/evidence`); run A also carries a Test Manager link. Runs B and C carry none: the CLI emitted no file-level `share_url` for these authoring runs (the skill notes it is absent on a pure replay too), so there was nothing to map — the `share_url` → `test_url` mapping itself is fixture-verified.
+
+**The honest limitation:** no cache replay was observed. Both `testmd` runs authored (`author_decisions: 2`) because the CLI persisted only `output-space-shooter-fire/.internal/meta.json` — no step tapes — with `commit: {committed: false, reason: "not_committed"}` and `upload: {succeeded: false}` in both summaries. Run C therefore measures a second authoring through the replay path, not a replay: same observations, same ~120 s cost, no speedup. Older CLI-authored tests under `.testmuai/tests/` do carry tapes (e.g. `output-slice-b-asteroid-smoke/.internal/steps/`), so persistence works there; why this hand-written file outside that tree never commits its recordings is unresolved and needs no more paid runs to document.
+
+**Replay-allowed rules (enforced + documented):** a replay is allowed only for the phase id its steps were recorded for, with an unchanged step text and yaml and no earlier-step invalidation (the CLI's cascade rule); a changed objective, changed assertions or a different phase needs a fresh authored run, which can then be saved as a new registry entry. `--no-adaptive-heal` stays on for every replay so a replay failure is fast and visible. Do not claim a replay speedup until a run shows `replay_decisions > 0`.
 
 ## Reproduction commands
 
