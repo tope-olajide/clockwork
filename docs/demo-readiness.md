@@ -52,28 +52,32 @@ described as future work.
 
 ## Phase 3 — One live Space Shooter phase through the agent
 
-- [ ] Server is running with a signed-in Kane CLI, a positive credit balance and
+- [x] Server is running with a signed-in Kane CLI, a positive credit balance and
       a tool-capable model configured. Kane has no feature flag.
-- [ ] `kane-cli whoami` is authenticated and `/api/kane/status` reports ready.
-- [ ] Space Shooter project is open at a known revision.
-- [ ] Agent drafts a plan from a real user goal.
-- [ ] Plan is reviewed and approved; no Kane run starts before approval.
-- [ ] One phase is started through `run_kane_test_phase`, not the direct panel button.
-- [ ] The result records:
-      - [ ] raw `run_end`
-      - [ ] applied input count
-      - [ ] final frame count
-      - [ ] every observation’s actual value
-      - [ ] every assertion’s pass/fail/missing status
-      - [ ] evidence URL and run id
-      - [ ] phase verdict and failure kind
-- [ ] Agent follow-up cites the phase result and references the original user goal.
-- [ ] Result is visible in the agent conversation, not only in local state.
-- [ ] Evidence and a short transcript are recorded in `docs/demo-readiness-evidence.md`
+- [x] `kane-cli whoami` is authenticated and `/api/kane/status` reports ready.
+- [x] Space Shooter project is open at a known revision.
+- [x] Agent drafts a plan from a real user goal.
+- [x] Plan is reviewed and approved; no Kane run starts before approval.
+- [x] One phase is started through `run_kane_test_phase`, not the direct panel button.
+- [x] The result records:
+      - [x] raw `run_end`
+      - [x] applied input count
+      - [x] final frame count
+      - [x] every observation’s actual value
+      - [x] every assertion’s pass/fail/missing status
+      - [x] evidence URL and run id
+      - [x] phase verdict and failure kind
+- [x] Agent follow-up cites the phase result and references the original user goal.
+- [x] Result is visible in the agent conversation, not only in local state.
+- [x] Evidence and a short transcript are recorded in `docs/demo-readiness-evidence.md`
       or an equivalent tracked artifact without local absolute paths.
 
 **Gate:** a single real, reviewed, evidence-backed phase pass exists. This must be a
 real Kane run, not a fixture.
+
+**Completed:** run `b967bbdd-0eec-4899-9190-77adfeb9a78e` — verdict `passed`, 1 accepted
+input, 45 frames, shots-fired 3, projectiles 3, evidence + Test Manager links in
+`docs/demo-readiness-evidence.md`.
 
 ## Phase 4 — Prove the adaptive decision or a deliberate failure
 
@@ -175,7 +179,7 @@ until this phase is fully checked.
 |---|---|
 | 1 — Commit/push phase fixes | Complete |
 | 2 — Submission surface | Complete |
-| 3 — Live phase through agent | Not started |
+| 3 — Live phase through agent | Complete |
 | 4 — Adaptive/failure proof | Not started |
 | 5 — Panel-to-agent loop | Not started |
 | 6 — `testmd` phase replay | Not started |
