@@ -45,6 +45,7 @@ function colorToNumber(color: string): number {
 export function objectDims(object: GameObject): { w: number; h: number } {
   if (object.body) return { w: object.body.width, h: object.body.height };
   if (object.visual?.kind === "rect") return { w: object.visual.width, h: object.visual.height };
+  if (object.visual?.kind === "shape") return { w: object.visual.width, h: object.visual.height };
   if (object.visual?.kind === "sprite") return { w: object.visual.width ?? 32, h: object.visual.height ?? 32 };
   if (object.visual?.kind === "tilemap") {
     return { w: object.visual.cols * object.visual.tileSize, h: object.visual.rows * object.visual.tileSize };
@@ -113,6 +114,48 @@ function makeObjectVisual(object: GameObject, document: ProjectDocument | null =
   }
 
   const { w, h } = objectDims(object);
+  if (visual?.kind === "shape") {
+    const container = new Container();
+    for (const primitive of visual.shapes) {
+      const graphics = new Graphics();
+      graphics.position.set(w / 2 + primitive.x, h / 2 + primitive.y);
+      graphics.rotation = (primitive.rotation * Math.PI) / 180;
+      const fill = { color: colorToNumber(primitive.color) };
+      const stroke =
+        primitive.stroke && primitive.strokeWidth > 0
+          ? { width: primitive.strokeWidth, color: colorToNumber(primitive.stroke) }
+          : null;
+      if (primitive.kind === "rect") {
+        graphics.rect(-primitive.width / 2, -primitive.height / 2, primitive.width, primitive.height).fill(fill);
+        if (stroke) graphics.rect(-primitive.width / 2, -primitive.height / 2, primitive.width, primitive.height).stroke(stroke);
+      } else if (primitive.kind === "circle") {
+        graphics.ellipse(0, 0, primitive.width / 2, primitive.height / 2).fill(fill);
+        if (stroke) graphics.ellipse(0, 0, primitive.width / 2, primitive.height / 2).stroke(stroke);
+      } else if (primitive.kind === "triangle") {
+        graphics
+          .poly([0, -primitive.height / 2, primitive.width / 2, primitive.height / 2, -primitive.width / 2, primitive.height / 2])
+          .fill(fill);
+      } else if (primitive.kind === "line") {
+        graphics
+          .moveTo(-primitive.width / 2, 0)
+          .lineTo(primitive.width / 2, 0)
+          .stroke({ width: Math.max(1, primitive.strokeWidth || primitive.height), color: colorToNumber(primitive.stroke ?? primitive.color) });
+      } else {
+        const points = primitive.points ?? [
+          { x: 0, y: -1 },
+          { x: 1, y: 0 },
+          { x: 0, y: 1 },
+          { x: -1, y: 0 },
+        ];
+        const flat: number[] = [];
+        for (const point of points) flat.push((point.x * primitive.width) / 2, (point.y * primitive.height) / 2);
+        graphics.poly(flat).fill(fill);
+        if (stroke) graphics.poly(flat).stroke(stroke);
+      }
+      container.addChild(graphics);
+    }
+    return container;
+  }
   if (visual?.kind === "rect") {
     const body = new Container();
     if (visual.stroke) {

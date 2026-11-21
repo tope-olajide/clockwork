@@ -1,5 +1,17 @@
 export type AgentMode = "ask" | "build" | "plan";
 
+export interface ChatAttachment {
+  assetId: string;
+  name: string;
+  kind: "image" | "audio";
+  mime: string;
+  size: number;
+  width?: number;
+  height?: number;
+  /** Small preview kept in chat history; the blob itself stays in IndexedDB. */
+  thumbnail?: string;
+}
+
 export interface AgentChatMessage {
   id: string;
   role: "user" | "assistant" | "tool";
@@ -9,6 +21,7 @@ export interface AgentChatMessage {
   toolName?: string;
   toolArgs?: unknown;
   toolResult?: ToolResult;
+  attachments?: ChatAttachment[];
 }
 
 export interface StepRequest {

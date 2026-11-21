@@ -44,7 +44,7 @@ The one-coin reduced fixture exercised the real Kane CLI and the real product pa
 - Fix: `repairAiPlayFailure` returned `Move Core A out of Ground`, one `object.update` to `(260, 787)`.
 - Second attempt: **passed** in 109.2 s (18 steps), `COINS: "1"`, `STATUS: "WON"`, `LAST_ERROR: "none"`.
   - Evidence: `.data/ai-play/159ac555-2d2a-4584-b940-6301d488b6df/evidence.evidence`
-- Reproduce: `node --import tsx scripts/kane/ai-play-smoke.ts` (requires `KANE_ENABLED=1`, `KANE_AI_PLAY_ENABLED=1`, and a running server).
+- Reproduce: `node --import tsx scripts/kane/ai-play-smoke.ts` (requires a signed-in Kane CLI and a running server; no feature flag).
 
 ### Why runs were slow and expensive
 
@@ -55,7 +55,7 @@ Kane's one-shot `run` pays the **authoring** cost every time: it plans the objec
 
 The structural fix is the one the Kane skill documents for repeated verification: **saved tests replay**. `kane-cli testmd run <file>` authors each step on the first run and then replays the recordings, "mostly avoiding the authoring cost", on every later run. AI Play now supports that path via `KANE_AI_PLAY_TEST=scripts/kane/tests/ai-play-demo_test.md`; the snapshot URL is supplied with `--url`, so replay works across per-attempt snapshots without re-authoring. `--no-adaptive-heal` keeps a replay failure fast instead of silently re-authoring steps.
 
-The runner's saved-test stream handling is verified against the documented NDJSON contract with the `fake-kane` fixture (pass and fail): the verdict comes from `test_md_done`, `test_md_step_start/end` become the visible steps, inner per-step `run_end` events are not treated as the file verdict, `final_state` comes from the last inner `run_end`, and the evidence pack comes from the `coverage.pack` path. No real-Kane timing claim is made for the replay path yet: it has not been driven against a live scene, and the recordings only exist after one authored run.
+The runner's saved-test stream handling is verified against the documented NDJSON contract with the `fake-kane` fixture (pass and fail): the verdict comes from `test_md_done`, `test_md_step_start/end` become the visible steps, inner per-step `run_end` events are not treated as the file verdict, `final_state` comes from the last inner `run_end`, the evidence pack comes from the `coverage.pack` path, and a file-level `share_url` is mapped to `test_url` so replay results keep the same Test Manager reference as authored runs. The replay path has now also been driven against a live scene (Phase 6 below): the mechanism is proven end to end, but no replay speedup is claimed — both live `testmd` runs authored their steps instead of replaying from cache.
 
 ### Full Neon Runner AI Play (real two-attempt loop, 151.6 s)
 
@@ -262,6 +262,86 @@ The first terminal run was a genuine product finding: Kane drove the in-app hand
 - Server NDJSON and evidence copies: verified by K1, K4 and both K5 attempts.
 - Tool guidance also changed: `verify_with_kane` now tells the model to keep the objective to what the user asked and not to add console-error/bundle checks. The two earlier in-app runs in this session died on exactly that (one "console check did not finish in time", one 145 s timeout), so the passed run is not independent proof that the old objective shape works.
 
+## Game-starter browser evidence — Slice B
+
+### Space Invaders Play and restart
+
+- First named run: `slice-b-space-invaders` (`.testmuai/tests/slice-b-space-invaders_test.md`).
+- Outcome: partial, not a clean pass. Kane created the starter, entered Play, exercised D movement and Space firing, verified the HUD/running state, and restarted. The final repeated console-extraction wait timed out after 21 completed progress events; the run took 270.9 s and consumed 68.64 credits.
+- Evidence: `C:\Users\Temitope\.testmuai\kaneai\sessions\f634da15-d973-4554-94d7-1db7156a191e\evidence\213a3788-f814-4e17-a104-8f066298c555.evidence`. The captured console logs contain one browser error: `http://localhost:5173/favicon.ico` returned 404. The later console log contains no error-level entries. This is a missing favicon request, not evidence of a gameplay runtime error; the requested console-clean assertion is not considered passed.
+- The final screenshot showed `LOST` after the three ships had been spent while the long console inspection was running. This was not a loss/reset acceptance check.
+
+### Space Invaders isolated Play and restart replay
+
+- Second named run: `slice-b-space-invaders-play` (`.testmuai/tests/slice-b-space-invaders-play_test.md`).
+- Outcome: failed at the post-input running-state assertion (173.7 s, 41.58 credits). Creation, Play entry, canvas/HUD, and movement/fire inputs completed. By the time Kane checked the state, the game had naturally reached `LOST` with zero ships; the restart and reset-value assertion were not reached. The captured timeline shows the game still playing with three ships at about 10 seconds and lost by about 43 seconds. This is an automation-timing failure, not a confirmed product defect.
+- The objective did not request console inspection, so this run is not console evidence. The failure artifact nevertheless showed the Console panel, contrary to that instruction; no console-clean claim is made.
+- Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\37a43ec7-9a6c-4f37-8e0e-43e209284ae9\evidence\9cd59fb4-8c02-4d2b-9885-18ce63177403.evidence`.
+
+### Space Invaders fast restart
+
+- Named run: `slice-b-space-invaders-fast-restart` (`.testmuai/tests/slice-b-space-invaders-fast-restart_test.md`).
+- Result: **passed**, 91.1 s, 27.44 credits. Kane created the starter, entered Play, verified the canvas and initial HUD, pressed R immediately, then confirmed `RUNNING`, `SCORE 0`, `SHIPS 3`, and `INVADERS 24`.
+- Final state: `http://localhost:5173/play/prj_VrW3mfeR7x`; evidence pack `C:\Users\Temitope\.testmuai\kaneai\sessions\aab7db37-9d1b-4c36-9a05-c4bb23a35aef\evidence\fbaa4003-e59e-4cc1-a406-13a6fe56ae62.evidence`.
+- This isolates restart/reset behavior; it does not verify shooting/scoring, a loss/win path, editor tuning, Asteroid Field, or console cleanliness.
+- Test Manager: [open the recorded run](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PT9G9DS9P28FNFEQ2BPMJ2/dashboard/share/US_AMUS2PCJVEMH8QFZ5YIR2YMJ7S5ITM7YWUSAUWH9AN40U9C38NHJ7OC4XD2ZR8RZ?type=summary&agentView=true&fqdn=summary-page).
+
+### Asteroid Field play and restart smoke
+
+- Named run: `slice-b-asteroid-smoke` (`.testmuai/tests/slice-b-asteroid-smoke_test.md`).
+- Result: **passed**, 117.1 s, 34.92 credits. Kane created the starter, verified the canvas and initial `SCORE 0`, `SHIPS 3`, `ROCKS 6`, exercised A-turn/W-thrust/E-fire inputs, then immediately restarted and confirmed `RUNNING` with all initial HUD values restored.
+- Final state: `http://localhost:5173/play/prj_g6RnQ5gXRQ`; evidence pack `C:\Users\Temitope\.testmuai\kaneai\sessions\d9cfb7e2-91b8-457e-b8d5-9d5a6fda0b28\evidence\6373c9bc-e771-42a8-a021-7c91932fa049.evidence`.
+- This is a Play/input/restart smoke; it does not prove asteroid hits/splitting, score changes, win/loss, editor tuning, or console cleanliness.
+- Test Manager: [open the recorded run](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PVHK01ZV55M7XKMN597ZNN/dashboard/share/US_TZHM0AQSA9XX75FN0URG69971VY9QL3Z6MBTGHCZRZ4A986X18JQ1ALH3YY46IEU?type=summary&agentView=true&fqdn=summary-page).
+
+### Asteroid Field editor tuning
+
+- Initial named attempt: `slice-b-asteroid-turn-tuning` stopped before project creation when Kane's screenshot capture timed out (112.5 s, 13.46 credits). Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\124f7ae1-cf44-4ac5-a1b9-57579084e910\evidence\3ae2ad84-0452-47eb-b1e3-48c15137bf84.evidence`. No product behavior was exercised.
+- Direct-URL retry: `slice-b-asteroid-turn-tuning-direct` could not find the prior run's project in its isolated browser storage (25.2 s, 11.26 credits); no editor or Play check ran. This was test setup, not a product failure.
+- Successful named run: `slice-b-asteroid-turn-tuning-retry` (`.testmuai/tests/slice-b-asteroid-turn-tuning-retry_test.md`) **passed** in 127.8 s (36.47 credits). It set the Pilot's Rotate and thrust **Turn speed from 220 to 0**, then verified in Play that the game remained running and the ship still pointed upward after D was pressed. This proves this editor change affected Play.
+- Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\7cbd987f-1065-4094-b4f3-b30a3379b8ee\evidence\2f2e341b-e5d1-4583-9de1-df0898094794.evidence`.
+- Test Manager: [open the recorded run](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PW6JSJ6ZQPRGC9GN049ANH/dashboard/share/US_C36SAQ5VVFUTR2CKAMX7TELW2JTKNTSMPNQYOR9TQSDAHZ7UF2HH110MD2UEP0M0?type=summary&agentView=true&fqdn=summary-page).
+
+### Space Shooter loss and R restart
+
+- Named run: `slice-a-space-shooter-lost-restart` (`.testmuai/tests/slice-a-space-shooter-lost-restart_test.md`).
+- Kane created Space Shooter, entered Play, reached the normal `LOST` state, then clicked the canvas and pressed R. The subsequent state was `PLAYING` with `SCORE 0` and a full hull bar (`HULL 3`); this is direct evidence that the Play-page restart handler now responds after loss.
+- The run **failed its final checkpoint**, not the restart itself. The failure screenshot shows `PLAYING`, `TIME 59` and a full hull bar after R; the step's text analysis instead reported `TIME 34` and expected a numeric hull value although the HUD represents hull as a bar. The screenshot, together with the observed `SCORE 0`, confirms the reset state; the contradictory delayed text check prevented a clean Kane pass.
+- Duration: 352.2 s; 55.81 credits. Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\044c747b-c3b4-4cb6-8fd2-8f6d7e0a16b9\evidence\0387700d-0148-4b22-beef-d7434e957ee6.evidence`.
+- Test Manager: [open the recorded run](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PWT439GVWJH2DPWV6YPTH0/dashboard/share/US_2PWTLT919WJ1E1GYB98EGLH6SG94IIB4XZECEU7BZBXOZOB2V9XZMUXSL2LKZ88M?type=summary&agentView=true&fqdn=summary-page).
+
+### Space Shooter firing and score check attempts
+
+- First named run: `slice-a-space-shooter-fire-score` (`.testmuai/tests/slice-a-space-shooter-fire-score_test.md`). It created the starter, entered Play, held Space, waited, and released it, but the 10-step limit expired before Kane could assert the score. The failure screenshot showed `SCORE 0`, `HULL` full and `TIME 26`; this is not enough to conclude that firing or scoring is broken because no hit was established. Duration: 125.6 s; 25.92 credits. Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\f9d3432f-a656-473e-b83c-c3273386d532\evidence\599c7956-6003-4b76-a747-a24cebc7b0ef.evidence`. [Test Manager](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PXB51W44J9EGWVDDTAZG2P/dashboard/share/US_B1OKKGWUR5XJEYYLGIOX738X695VPAUCEJ6IK7NSW871A5U5E9RX9CU2SK1X12VA?type=summary&agentView=true&fqdn=summary-page).
+- Retry: `slice-a-space-shooter-fire-score-retry` (`.testmuai/tests/slice-a-space-shooter-fire-score-retry_test.md`). The setup used extra navigation steps, and the 16-step limit expired while the game was still running, before key release or score verification. The failure screenshot showed `SCORE 0`, a full hull bar and `TIME 35`; again, no scoring conclusion can be drawn. Duration: 173.5 s; 22.00 credits. Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\4ecaca57-634d-4bfe-9cc0-eb3504adc307\evidence\1e1ccc92-9e6a-49f0-a67b-4d59612d7802.evidence`. [Test Manager](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PXK5KWG6M9GKST6A1C7D3V/dashboard/share/US_18VIT104N9ZB4JDUZN8226F50Z8D04ZCP4KYSI1IHWXIHL7ERYG03Q3RQHT4IA0F?type=summary&agentView=true&fqdn=summary-page).
+- Higher-step retry: `slice-a-space-shooter-fire-score-aimed` (`.testmuai/tests/slice-a-space-shooter-fire-score-aimed_test.md`). Kane reached the end of the 60-second watch with `WON`, but the score stayed at 0. The evidence and triage show isolated key presses rather than sustained target tracking and fire, so this is not a valid scoring verdict or a confirmed product defect. Duration: 140.6 s; 30.78 credits. Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\d91f9819-95d6-4441-8303-e23fcc6692c5\evidence\efce3c96-5de4-4f7d-ae86-4224325e349b.evidence`. [Test Manager](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PXYTGMHZ0CF6AR4JPJ74E3/dashboard/share/US_Q84BRLNW1BBUZGTX9E70NASWEHBAE0NG8QCGMLDX9BR4XE6AS28QVUQ4CEF0GSW2?type=summary&agentView=true&fqdn=summary-page).
+- Protected-score run: `slice-ab-protected-score` (`.testmuai/tests/slice-ab-protected-score_test.md`) recorded a pass in 212.4 s, extracting `SCORE 1150`. Kane's action trace contains four successful Space key actions, each generated as `await page.keyboard.press('Space')`. The user reports also pressing Space during this run, so the score cannot be attributed solely to Kane and this is not a clean automated scoring pass. Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\ae390f1b-b4a1-4105-a671-a8dd3b870da4\evidence\6607138b-f80b-4852-9ecd-039520373288.evidence`. [Test Manager](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7PZC3Z0V0BN5BZ1ZMZTTXP1/dashboard/share/US_DHKJUWQ5TAY0RVYBV0J6129O89YUI1WUW0WAD9IV480C5O8S3WEC23GKF4VJZQL3?type=summary&agentView=true&fqdn=summary-page).
+- Post-input-fix retry: `slice-a-input-proof-patched` logged six Space key actions, but the assertion screenshot showed `LOST`, `TIME 49` and an empty hull; the game had stopped before those actions could produce shots or score. This is not a clean keyboard test. Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\7124278d-3cf2-478f-aaed-75e71dc2765e\evidence\1de4f668-f938-4c13-980b-813655534134.evidence`.
+- Protected-health retry: `slice-a-input-proof-stable` set player health to 99. The screenshot showed `PLAYING`, `TIME 25` and a full hull, and the analyzer correctly recorded `LOST` as false; nevertheless, Kane selected the stop-on-`LOST` branch and sent zero Space presses. This automation-flow failure took 257.3 s and 52.06 credits; it is not a game failure or a scoring pass. Evidence pack: `C:\Users\Temitope\.testmuai\kaneai\sessions\2ee967be-2e05-4d90-b1f7-e427af16d95c\evidence\cbcbdab5-b4a1-43ca-843c-df51d79db0ee.evidence`. [Test Manager](https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7Q2V5X5P63HV2M7MT9AJSYS/dashboard/share/US_6FNWB6N2JF2N4BSLU1P0TQ94TTE8ZIYJZO4G32V2YRRL3H3Q99WHT0RKKOT8T6N3?type=summary&agentView=true&fqdn=summary-page).
+
+### Space Shooter keyboard-input test rule
+
+- The runtime shooter previously checked only whether jump/action was still held on a simulation frame; a quick key press can be released before that frame. Shooters now also respond to the captured `jumpPressed`/`actionPressed` edge, covered by a one-frame press regression test.
+- Kane's browser timing can still let the game reach `LOST` before the agent finishes planning its first gameplay action. A test must protect player health before Play and verify an observed key action plus a score change; do not use the failing inverse-LOST branch pattern from `slice-a-input-proof-stable`. No clean browser-only score proof has been obtained.
+
+## Phase 6 — saved-test replay through the phase route (live, 2026-11-21)
+
+The phase route accepts an optional `replayTestKey` drawn from a server-side registry (`server/kane/replay-tests.ts`), never a caller-supplied path. The key must name a committed `_test.md` file, and it must belong to the phase being run — otherwise the route refuses with `kane-replay-missing` / `kane-replay-mismatch` (400) and the caller falls back to an authored run without the key. Replay runs pass the file to `testmd run` with `--no-adaptive-heal`, so a replay failure stays a failure instead of silently re-authoring. `GET /api/kane/phase-replays` lists the recorded replays for the panel, which offers a "Replay saved test" button per eligible phase.
+
+Recorded test: `scripts/kane/tests/phases/space-shooter-fire_test.md` (key `space-shooter-fire`, phase `fire-creates-projectile`): hold SHOOT, STEP 45 frames, read shots-fired / projectiles / accepted_inputs / frames_advanced, end immediately. The three runs below were driven through `POST /api/kane/phase` with a hand-built plan over a fresh starter snapshot (identical route, judge and snapshot mechanism as the agent path; only plan authorship differed because the agent model provider was unreachable that afternoon).
+
+| Run | Mode | Verdict | Duration | Credits | Steps | Observations |
+|---|---|---|---|---|---|
+| A `be3b1863` | one-shot `run`, no replay key | `failed` / product | 57.9 s | ~22.85 | 10 | accepted 1, frames 1, shots 0, projectiles 0 — Kane passed after a single-frame advance, so both assertions failed honestly |
+| B `e3befc89` | `testmd run` of the recorded file | `passed` / none | 121 s | ~38.02 | 2/2 (0 replayed, 2 authored) | shots 3, projectiles 3, accepted 1, frames 45 |
+| C `f4ee134b` | same file, fresh server (idempotency cleared) | `passed` / none | 120 s | ~30.88 | 2/2 (0 replayed, 2 authored) | shots 3, projectiles 3, accepted 1, frames 45 — identical to B |
+
+Evidence packs were attached for all three runs (`/api/kane/runs/<runId>/evidence`); run A also carries a Test Manager link. Runs B and C carry none: the CLI emitted no file-level `share_url` for these authoring runs (the skill notes it is absent on a pure replay too), so there was nothing to map — the `share_url` → `test_url` mapping itself is fixture-verified.
+
+**The honest limitation:** no cache replay was observed. Both `testmd` runs authored (`author_decisions: 2`) because the CLI persisted only `output-space-shooter-fire/.internal/meta.json` — no step tapes — with `commit: {committed: false, reason: "not_committed"}` and `upload: {succeeded: false}` in both summaries. Run C therefore measures a second authoring through the replay path, not a replay: same observations, same ~120 s cost, no speedup. Older CLI-authored tests under `.testmuai/tests/` do carry tapes (e.g. `output-slice-b-asteroid-smoke/.internal/steps/`), so persistence works there; why this hand-written file outside that tree never commits its recordings is unresolved and needs no more paid runs to document.
+
+**Replay-allowed rules (enforced + documented):** a replay is allowed only for the phase id its steps were recorded for, with an unchanged step text and yaml and no earlier-step invalidation (the CLI's cascade rule); a changed objective, changed assertions or a different phase needs a fresh authored run, which can then be saved as a new registry entry. `--no-adaptive-heal` stays on for every replay so a replay failure is fast and visible. Do not claim a replay speedup until a run shows `replay_decisions > 0`.
+
 ## Reproduction commands
 
 ```bash
@@ -276,7 +356,7 @@ node --import tsx scripts/kane/negative-control.ts
 
 # Full demo two-attempt loop (real, 151.6 s)
 # http://localhost:5173/?demoReset=1 → Neon Runner → AI Play
-# needs KANE_ENABLED=1 KANE_AI_PLAY_ENABLED=1 KANE_TIMEOUT_SECONDS=140 KANE_MAX_STEPS=8
+# needs a signed-in Kane CLI; no feature flag. KANE_TIMEOUT_SECONDS=140 KANE_MAX_STEPS=8
 ```
 
 ## Limitations

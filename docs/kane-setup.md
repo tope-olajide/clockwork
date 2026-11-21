@@ -36,8 +36,7 @@ Never put the Kane token in the repository, browser, or a prompt. Clockwork's Se
 Copy `.env.example` to `.env` (or export these before `npm run dev`):
 
 ```bash
-KANE_ENABLED=1
-KANE_AI_PLAY_ENABLED=1
+# Kane is built in and enabled by default; no feature flag is needed.
 # Omit KANE_HEADLESS to watch Chrome. Set 1 for CI.
 # KANE_HEADLESS=1
 KANE_TIMEOUT_SECONDS=180
@@ -49,7 +48,7 @@ CLOCKWORK_PUBLIC_URL=http://localhost:5173
 
 The 180 s default fits an 8-step AI Play attempt but not a 12-step in-app engine-QA run: the K4 reruns here used `KANE_TIMEOUT_SECONDS=300` (configuration, not a code change). The runner clamps the value to 30–900 s and adds a 5 s grace on top of the process timer.
 
-With `KANE_ENABLED=0`, both `/api/kane/qa` and `/api/kane/ai-play` return 404 and no Kane tool is advertised to the model. Manual Play, editing, persistence, share, and export continue to work.
+Kane has no enable/disable flag. If the CLI is missing or signed out, the Kane routes return an explicit install/auth error and no Kane tool is advertised to the model. Manual Play, editing, persistence, share, and export continue to work. If the account balance is zero, the run is rejected with an explicit `kane-credits` error.
 
 `AI_MOCK=1` only mocks the model. It does not mock Kane.
 
@@ -183,7 +182,7 @@ K2–K4 require a configured tool-capable model for the agent portion. AI Play (
 | Browser opens the wrong origin | set `CLOCKWORK_PUBLIC_URL` to the Vite/player origin |
 | `run_end` missing with exit 2 | check `kane-cli whoami`, Chrome, and the URL; the run never started |
 | AI Play says snapshot unavailable | create a new snapshot; snapshots expire and are capped at 20 MB |
-| Agent tool missing | set `KANE_ENABLED=1` before starting the API and restart it |
+| Agent tool missing | check that the model supports tools and `kane-cli whoami` succeeds, then restart the API |
 | Evidence empty | the pack lives under the session `evidence/` folder; check `stderr.log` in the run directory |
 
 ## 9. What Kane caught and proved

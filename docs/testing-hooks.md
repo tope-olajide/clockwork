@@ -13,7 +13,65 @@ CSS classes or layout-dependent text.
 | `?section=assets\|ai\|ship\|project` | Project overview | Open a project section. |
 | `?state=empty\|loading\|error` | Projects dashboard | Force a dashboard state. |
 | `?demoReset=1` | Projects dashboard | Delete and reseed Neon Runner with the intentional uncollectible Core B. |
-| `?seed=<number>` | Play | Deterministic runtime seed, default `1234`. |
+| `?seed=<number>` | Play | Deterministic runtime seed, default `1234`.
+| `?ai=1` | Snapshot | Show the AI Play HUD.
+| `?testMode=step` | Snapshot | Opt in to lockstep Test Mode. Ignored by `/play/:projectId`.
+| `?scenario=<id>` | Snapshot + `testMode=step` | Request a registered scenario; must be allowed by the template's profile. |
+| `?maxAdvance=<n>&maxFrames=<n>` | Snapshot + `testMode=step` | Approved per-STEP and per-phase frame limits, composed server-side. |
+
+## Test Mode contract (snapshot only)
+
+`/s/:snapshotId?ai=1&testMode=step&seed=1234` starts the runtime **paused at frame 0**
+with no `requestAnimationFrame` loop. Frames advance only through bounded requests, and
+every queued control has a planned press/release frame, so nothing depends on wall time.
+A template without a registered profile renders `test-mode-unavailable` and stays at
+frame zero instead of falling back to real time.
+
+| Selector | Meaning |
+|---|---|
+| `[data-testid="test-mode-hud"]` | Root. Carries `data-frame`, `data-status`, `data-seed`, `data-scenario`, `data-receipts`, `data-input-accepted` and `data-accepted-inputs`. |
+| `test-control-<controlId>` | Profile-labelled control (`move-left`, `shoot`, ...). Hold controls report `aria-pressed`. |
+| `test-advance` | Advance exactly the frame count in `test-advance-frames`. |
+| `test-advance-10` | Advance 10 frames. |
+| `test-reset` | Restore the same snapshot, seed and frame-zero state. |
+| `test-observation-<id>` | Read-only observation value from the runtime. |
+| `test-observation-accepted_inputs` | Count of accepted input receipts; the plan objective stores it as `accepted_inputs`. |
+| `test-receipts` | Input receipts: accepted frames or the rejection reason. |
+| `test-notice` | Last rejection, clamp or budget message. |
+| `test-mode-unavailable` | No profile for this template. |
+
+Controls can only enqueue a logical action from the profile. There is no endpoint or
+control that writes variables, score, health or win/loss. An allowed scenario is applied
+to a document copy before frame zero. `data-scenario` contains the applied id or an
+empty string; the Test Mode HUD shows `(setup applied)` or `none`. A disallowed or
+invalid scenario stays unapplied and is reported as `none`, never as a successful setup.
+
+## Test plan review selectors
+
+| Selector | Meaning |
+|---|---|
+| `test-plan-panel` | AI Testing plan section (absent when the template has no profile). |
+| `test-plan-objective` | Natural-language goal input. |
+| `test-plan-suggest-<objectiveId>` | Profile-suggested objective; fills the goal input. |
+| `test-plan-request` | Sends the goal to the planning model. Never starts Kane. |
+| `test-plan-errors` | Explicit rejection reasons from plan validation. |
+| `test-plan-draft` | Proposed plan: phases, assertions, budget and revision reasons. |
+| `test-plan-stale` | Draft targets an older project revision; approve is disabled. |
+| `test-plan-approve` / `test-plan-cancel` | Approve the reviewed plan / discard it. |
+| `test-plan-run-<phaseId>` | Run one approved phase. Disabled until approval and when the draft is stale. |
+| `test-plan-cancel-phase` | Stop the active Kane phase; it becomes `cancelled`, not a pass. |
+| `test-plan-result-<phaseId>` | Typed result; `data-verdict` is `passed`, `failed`, `inconclusive` or `cancelled`. |
+| `test-plan-phase-error` | Request/transport error for the phase. |
+| `test-plan-report` | Per-criterion final report; `data-report-verdict` is `passed`, `failed` or `inconclusive`. |
+| `test-plan-report-<assertionId>` | One criterion row; `data-status` is `passed`, `failed` or `inconclusive`. |
+| `test-plan-report-meta` | Plan/project revision, scene, seed and scenario for the run. |
+| `test-plan-report-versions` | Planner model, Kane CLI version, phase budget and frame cap. |
+| `test-plan-report-assessment` | Separates what the engine agent inferred from what Kane directly observed. |
+| `test-plan-report-followups` | Follow-up actions derived from unrun/failed criteria and staleness. |
+| `test-plan-report-limitations` | Coverage, evidence, runtime-error and stale-revision limitations. |
+| `test-plan-report-evidence-<n>` | Evidence bundle link backing the report; includes phase and run id. |
+| `test-plan-roles` | Planner identity and the Kane CLI browser-agent role. |
+| `test-plan-unavailable` | No profile, so no plan can be validated. |
 
 ## Data attributes
 
@@ -32,6 +90,10 @@ CSS classes or layout-dependent text.
 | `data-variables` | Play/snapshot root | JSON snapshot of runtime variables. |
 | `data-player` | Play/snapshot root | JSON player position/velocity/grounded state. |
 | `data-step-ms`, `data-render-ms` | Play root | Per-frame timing. |
+| `data-test-mode` | Snapshot root | `step`, `unavailable` or `off`. |
+| `data-seed` | Snapshot root | Seed the run was created with. |
+| `data-scenario` | Snapshot root | Allowed scenario id, else empty. |
+| `data-testid="test-plan-*"` | AI Play panel | Plan review surface listed above. |
 
 ## Console events
 

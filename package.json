@@ -13,6 +13,8 @@
     "build": "tsc -b tsconfig.json tsconfig.node.json && vite build",
     "typecheck": "tsc -b tsconfig.json tsconfig.node.json",
     "check:repo": "node scripts/check-repo.mjs",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "smoke:phase": "node --import tsx scripts/kane/phase-smoke.mts",
     "preview": "vite preview",
     "start": "node --import tsx server/index.ts"
   },
@@ -36,7 +38,9 @@
     "pixi.js": "^8.23.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.6.2",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.0",
     "zod": "^4.6.7",
     "zustand": "^5.1.0"

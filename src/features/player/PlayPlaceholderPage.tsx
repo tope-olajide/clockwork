@@ -16,10 +16,10 @@ export function PlayPlaceholderPage() {
       <main className="player-stage">
         <div className="player-placeholder">
           <Play size={20} />
-          <h1>The runtime lands in Slice 4.</h1>
+          <h1>Player unavailable</h1>
           <p>
-            This route is reserved for the shared player and exported builds. It will open without the
-            editor, and manual Play will never require a model or Kane.
+            This reserved player route is not used by the current build. Open the project and use Play,
+            or export the project to run its standalone player.
           </p>
           <Link className="button button-secondary" to={`/project/${projectId}`}>
             Return to project

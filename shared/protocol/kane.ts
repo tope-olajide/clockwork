@@ -59,6 +59,7 @@ export interface AiPlayRequest {
   snapshotId: string;
   attempt?: number;
   goal?: string;
+  sceneId?: string;
   seed?: number;
 }
 

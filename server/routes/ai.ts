@@ -213,7 +213,7 @@ app.post("/step", async (c) => {
         visionEnabled: resolved.vision,
         contextWindow: resolved.contextWindow,
         signal: c.req.raw.signal,
-        allowKane: process.env.KANE_ENABLED === "1",
+        allowKane: true,
       })) {
         await stream.write(chunk);
       }

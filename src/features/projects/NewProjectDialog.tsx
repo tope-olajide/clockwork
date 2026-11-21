@@ -1,7 +1,10 @@
-import { FileUp, Layers, LayoutTemplate, PenLine } from "lucide-react";
+import { FileUp, Layers, LayoutTemplate, PenLine, Rocket } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Modal, Select } from "../../components/ui";
 import type { TemplateId } from "../../engine/model/templates";
+import { GAME_STARTERS, isGameStarterId } from "../../engine/model/game-starters/catalog";
+import { createGameStarterDocument } from "../../engine/model/game-starters/build";
+import { previewDataUrl } from "../../engine/model/game-starters/preview";
 
 export type CreationMode = "blank" | "template" | "brief" | "import";
 
@@ -69,6 +72,7 @@ export function NewProjectDialog({
   const [mode, setMode] = useState<CreationMode>("template");
   const [name, setName] = useState("Untitled project");
   const [template, setTemplate] = useState<TemplateId>("platformer");
+  const [category, setCategory] = useState("All");
   const [brief, setBrief] = useState("");
   const [resolution, setResolution] = useState("1280x720");
   const [customWidth, setCustomWidth] = useState("1280");
@@ -77,6 +81,15 @@ export function NewProjectDialog({
   const [gravity, setGravity] = useState("standard");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const categories = useMemo(() => ["All", ...Array.from(new Set(GAME_STARTERS.map((item) => item.category)))], []);
+  const starterPreviews = useMemo(
+    () =>
+      Object.fromEntries(
+        GAME_STARTERS.map((item) => [item.id, previewDataUrl(createGameStarterDocument(item.id, "Preview"))]),
+      ) as Record<string, string>,
+    [],
+  );
+  const visibleStarters = GAME_STARTERS.filter((item) => category === "All" || item.category === category);
 
   const canCreate = useMemo(() => {
     if (mode === "import") return Boolean(importFile);
@@ -94,6 +107,7 @@ export function NewProjectDialog({
     setMode("template");
     setName("Untitled project");
     setTemplate("platformer");
+    setCategory("All");
     setBrief("");
     setResolution("1280x720");
     setCustomWidth("1280");
@@ -115,7 +129,7 @@ export function NewProjectDialog({
       brief: mode === "brief" ? brief.trim() : undefined,
       file: importFile ?? undefined,
       settings:
-        mode === "import"
+        mode === "import" || isGameStarterId(template)
           ? undefined
           : {
               width: Math.round(width),
@@ -172,7 +186,10 @@ export function NewProjectDialog({
               className="mode-card"
               aria-pressed={mode === item.key}
               data-testid={`project-mode-${item.key}`}
-              onClick={() => setMode(item.key)}
+              onClick={() => {
+                setMode(item.key);
+                if (item.key !== "template" && isGameStarterId(template)) setTemplate("platformer");
+              }}
             >
               <span className="mode-title">
                 <Icon size={15} />
@@ -190,6 +207,51 @@ export function NewProjectDialog({
             <span className="field-label">Project name</span>
             <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Untitled project" data-testid="project-name" autoFocus />
           </label>
+        )}
+
+        {mode === "template" && (
+          <div className="field game-starters-field">
+            <span className="field-label"><Rocket size={13} /> Game starters</span>
+            <div className="game-starter-filter" role="group" aria-label="Starter category">
+              {categories.map((item) => (
+                <button
+                  key={item}
+                  className="game-starter-filter-button"
+                  aria-pressed={category === item}
+                  onClick={() => setCategory(item)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+            <div className="game-starter-grid">
+              {visibleStarters.map((item) => (
+                <button
+                  key={item.id}
+                  className="game-starter-card"
+                  aria-pressed={template === item.id}
+                  data-testid={`game-starter-${item.id}`}
+                  onClick={() => setTemplate(item.id)}
+                  style={{ borderColor: template === item.id ? item.accent : undefined }}
+                >
+                  <span className="game-starter-cover" style={{ background: "#0b1020" }}>
+                    {starterPreviews[item.id] ? <img src={starterPreviews[item.id]} alt="" /> : null}
+                  </span>
+                  <span className="game-starter-title">
+                    <strong>{item.name}</strong>
+                    <span className="game-starter-category" style={{ color: item.accent }}>{item.category}</span>
+                  </span>
+                  <span className="game-starter-blurb">{item.blurb}</span>
+                  <span className="game-starter-mechanics">{item.mechanics}</span>
+                </button>
+              ))}
+            </div>
+            {isGameStarterId(template) && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                Game starters keep their tuned resolution, gravity and HUD so the level stays playable.
+              </span>
+            )}
+          </div>
         )}
 
         {(mode === "template" || mode === "brief") && (
@@ -235,7 +297,7 @@ export function NewProjectDialog({
           </div>
         )}
 
-        {mode !== "import" && (
+        {mode !== "import" && !isGameStarterId(template) && (
           <details className="more-settings">
             <summary>More settings</summary>
             <div className="more-settings-body">

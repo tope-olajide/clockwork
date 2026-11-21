@@ -10,6 +10,7 @@ import {
   newId,
 } from "./factory";
 import type { GameObject, Prefab, ProjectDocument, Scene, TemplateOrigin } from "./schema";
+import { createGameStarterDocument } from "./game-starters/build";
 
 const coral = "#ff856f";
 const periwinkle = "#a9b4ff";
@@ -602,6 +603,19 @@ function puzzleTemplate(name: string): ProjectDocument {
 
 export function createProjectFromTemplate(template: Exclude<TemplateOrigin, "brief" | "import">, name: string): ProjectDocument {
   switch (template) {
+    case "space-shooter":
+    case "space-invaders":
+    case "asteroid-field":
+    case "ping-pong":
+    case "brick-breaker":
+    case "flappy-flyer":
+    case "platform-jumper":
+    case "endless-runner":
+    case "arena-survival":
+    case "falling-objects":
+    case "maze-escape":
+    case "snake":
+      return createGameStarterDocument(template, name);
     case "platformer":
       return platformerTemplate(name);
     case "topdown":
@@ -618,6 +632,30 @@ export type TemplateId = Exclude<TemplateOrigin, "brief" | "import">;
 
 export function templateSummary(template: TemplateId): { label: string; blurb: string; accent: string } {
   switch (template) {
+    case "space-shooter":
+      return { label: "Space Shooter", blurb: "Hold the lane, shoot enemies, survive the timer.", accent: "#79e6ff" };
+    case "space-invaders":
+      return { label: "Space Invaders", blurb: "Clear the formation before it reaches your shields.", accent: "#75f0c1" };
+    case "asteroid-field":
+      return { label: "Asteroid Field", blurb: "Pilot through drifting rocks and split the field into shards.", accent: "#78e8ff" };
+    case "ping-pong":
+      return { label: "Ping Pong", blurb: "Outplay the computer and reach five points first.", accent: "#ff9f74" };
+    case "brick-breaker":
+      return { label: "Brick Breaker", blurb: "Clear the brick wall before you run out of ships.", accent: "#ff7d9a" };
+    case "flappy-flyer":
+      return { label: "Flappy Flyer", blurb: "Flap through moving gates and survive as long as you can.", accent: "#ffd47c" };
+    case "platform-jumper":
+      return { label: "Platform Jumper", blurb: "Collect five cores, dodge spikes, and reach the relay.", accent: "#a9b4ff" };
+    case "endless-runner":
+      return { label: "Endless Runner", blurb: "Jump or duck through an accelerating obstacle stream.", accent: "#ff856f" };
+    case "arena-survival":
+      return { label: "Arena Survival", blurb: "Hold the arena against relentless chasers for sixty seconds.", accent: "#8fe3c0" };
+    case "falling-objects":
+      return { label: "Falling Objects", blurb: "Dodge a meteor storm, catch bonus stars, and last one minute.", accent: "#f4c56a" };
+    case "maze-escape":
+      return { label: "Maze Escape", blurb: "Collect fifteen dots, unlock the gate, and evade the warden.", accent: "#a9b4ff" };
+    case "snake":
+      return { label: "Snake", blurb: "Grow to one hundred points without hitting a wall or yourself.", accent: "#8fe3c0" };
     case "platformer":
       return { label: "Platformer", blurb: "Run, jump, collect, reach a goal.", accent: coral };
     case "topdown":

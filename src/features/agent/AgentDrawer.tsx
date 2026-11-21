@@ -1,15 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Bot, Check, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, Send, Settings, Square, X } from "lucide-react";
+import { AlertTriangle, Bot, Check, ChevronDown, Settings, X } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
-import type { AgentMode } from "@shared/protocol";
+import type { AgentMode, ChatAttachment } from "@shared/protocol";
 import type { DisplayMessage, AgentUiError, PendingPreview } from "./useAgentSession";
 import { ModelPicker } from "./ModelPicker";
 import type { ModelInfo, ProviderInfo } from "../../engine/ai/api";
-import { PROMPT_PRESETS, suggestionsFor } from "../../engine/ai/prompts";
+import { suggestionsFor, type PromptPreset } from "../../engine/ai/prompts";
+import type { ProjectDocument } from "../../engine/model/schema";
+import { ChatComposer } from "./chat/ChatComposer";
+import { ChatMessage } from "./chat/ChatMessage";
+import { EmptyState } from "./chat/EmptyState";
+import { checkAttachmentFile, MAX_CHAT_ATTACHMENTS, type PendingAttachment } from "./chat/chat-utils";
+import { importChatAttachments } from "./chat/import-attachments";
 
 interface AgentDrawerProps {
   open: boolean;
   onClose: () => void;
+  projectId: string;
   projectName: string;
   sceneName: string | null;
   revision: number;
@@ -20,9 +27,10 @@ interface AgentDrawerProps {
   status: "ready" | "thinking" | "streaming" | "tool" | "error";
   error: AgentUiError | null;
   isBusy: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: ChatAttachment[]) => void;
   onStop: () => void;
   onRetry: () => void;
+  onRegenerate: () => void;
   onNewChat: () => void;
   selectedModelId: string | null;
   onSelectModel: (id: string | null) => void;
@@ -37,30 +45,58 @@ interface AgentDrawerProps {
   onDiscardPreview: () => void;
   lockedSelection: { id: string; name: string } | null;
   onUnlockSelection: () => void;
+  document: ProjectDocument;
+  draftKey: string;
+  history?: React.ReactNode;
 }
 
 function statusLabel(status: AgentDrawerProps["status"]) {
-  if (status === "thinking") return "thinking";
-  if (status === "streaming") return "streaming";
-  if (status === "tool") return "running tool";
-  if (status === "error") return "error";
-  return "ready";
+  if (status === "thinking") return "Thinking";
+  if (status === "streaming") return "Writing";
+  if (status === "tool") return "Working";
+  if (status === "error") return "Needs attention";
+  return "Ready";
 }
 
 export function AgentDrawer(props: AgentDrawerProps) {
-  const { open, onClose, projectName, sceneName, revision, selectionCount, mode, onModeChange, messages, status, error, isBusy, onSend, onStop, onRetry, onNewChat, selectedModelId, onSelectModel, models, providers, aiSettings, modelLabel, canBuildPlan, onOpenSettings, pendingPreview, onApplyPreview, onDiscardPreview, lockedSelection, onUnlockSelection } = props;
-  const [input, setInput] = useState("");
+  const {
+    open, onClose, projectName, sceneName, revision, selectionCount, mode, onModeChange,
+    messages, status, error, isBusy, onSend, onStop, onRetry, onRegenerate, onNewChat,
+    selectedModelId, onSelectModel, models, providers, aiSettings, modelLabel, canBuildPlan,
+    onOpenSettings, pendingPreview, onApplyPreview, onDiscardPreview, lockedSelection,
+    onUnlockSelection, document, draftKey,
+  } = props;
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [showJump, setShowJump] = useState(false);
-  const [presetOpen, setPresetOpen] = useState(false);
-  const suggestions = suggestionsFor({ selectionPresent: selectionCount > 0, emptyProject: messages.length === 0, lastChangeFailed: status === "error", noKeyConfigured: !aiSettings?.mock && !models.some((m) => { const provider = providers.find((p) => p.id === m.providerId); return Boolean(provider?.key.configured || provider?.local); }) });
   const listRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
+  const dragDepth = useRef(0);
+  const pendingRef = useRef<PendingAttachment[]>([]);
+  pendingRef.current = pending;
+
+  const suggestions = suggestionsFor({
+    selectionPresent: selectionCount > 0,
+    emptyProject: messages.length === 0,
+    lastChangeFailed: status === "error",
+    noKeyConfigured: !aiSettings?.mock && !models.some((model) => {
+      const provider = providers.find((candidate) => candidate.id === model.providerId);
+      return Boolean(provider?.key.configured || provider?.local);
+    }),
+  });
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && !message.streaming);
+  const canRegenerate = Boolean(latestAssistant && messages.at(-1)?.id === latestAssistant?.id && !isBusy);
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isBusy) { e.preventDefault(); onStop(); }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isBusy) {
+        event.preventDefault();
+        onStop();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -70,6 +106,20 @@ export function AgentDrawer(props: AgentDrawerProps) {
     if (stickRef.current) bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages, open, pendingPreview]);
 
+  useEffect(() => () => {
+    for (const attachment of pendingRef.current) {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    }
+  }, []);
+
+  useEffect(() => {
+    for (const attachment of pendingRef.current) {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    }
+    setPending([]);
+    setAttachmentError(null);
+  }, [draftKey]);
+
   function onScroll() {
     const el = listRef.current;
     if (!el) return;
@@ -78,111 +128,180 @@ export function AgentDrawer(props: AgentDrawerProps) {
     setShowJump(!nearBottom);
   }
 
-  function submit(text = input) {
-    const t = text.trim();
-    if (!t || isBusy) return;
-    onSend(t);
-    setInput("");
-    stickRef.current = true;
+  function removeAttachment(id: string) {
+    setPending((current) => current.flatMap((attachment) => {
+      if (attachment.id !== id) return [attachment];
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      return [];
+    }));
+    setAttachmentError(null);
+  }
+
+  function addFiles(files: File[]) {
+    if (!files.length) return;
+    setAttachmentError(null);
+    const slots = MAX_CHAT_ATTACHMENTS - pending.length;
+    if (slots <= 0) {
+      setAttachmentError(`You can attach up to ${MAX_CHAT_ATTACHMENTS} files per message.`);
+      return;
+    }
+    const accepted: PendingAttachment[] = [];
+    for (const file of files.slice(0, slots)) {
+      const check = checkAttachmentFile(file);
+      const previewUrl = check.ok && file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      accepted.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        previewUrl,
+        error: check.ok ? undefined : check.error,
+      });
+    }
+    if (files.length > slots) setAttachmentError(`Only ${MAX_CHAT_ATTACHMENTS} files fit in one message; extra files were skipped.`);
+    setPending((current) => [...current, ...accepted]);
+  }
+
+  async function submit(text: string): Promise<boolean> {
+    if (pending.some((attachment) => attachment.error)) {
+      setAttachmentError("Remove the files marked with an error before sending.");
+      return false;
+    }
+    setAttachmentError(null);
+    const files = pending.map((attachment) => attachment.file);
+    let attachments: ChatAttachment[] | undefined;
+    if (files.length > 0) {
+      setUploading(true);
+      try {
+        attachments = await importChatAttachments(files, document);
+      } catch (importError) {
+        setAttachmentError(importError instanceof Error ? importError.message : "The files could not be added to the project.");
+        setUploading(false);
+        return false;
+      }
+      for (const attachment of pending) {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      }
+      setPending([]);
+      setUploading(false);
+    }
+    onSend(text, attachments);
+    return true;
+  }
+
+  function usePreset(preset: PromptPreset) {
+    onSend(preset.prompt);
+  }
+
+  const renderedMessages: React.ReactNode[] = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]!;
+    if (message.role === "tool") {
+      const group: DisplayMessage[] = [];
+      while (index < messages.length && messages[index]?.role === "tool") group.push(messages[index++]!);
+      renderedMessages.push(
+        <div className="chat-tool-group" key={`tools-${group[0]?.id ?? index}`}>
+          {group.map((toolMessage) => (
+            <ChatMessage key={toolMessage.id} message={toolMessage} canRegenerate={false} onRegenerate={onRegenerate} />
+          ))}
+        </div>,
+      );
+      index -= 1;
+      continue;
+    }
+    renderedMessages.push(
+      <ChatMessage
+        key={message.id}
+        message={message}
+        canRegenerate={message.id === latestAssistant?.id && canRegenerate}
+        onRegenerate={onRegenerate}
+      />,
+    );
   }
 
   if (!open) return null;
 
-  const modeDisabledReason = !canBuildPlan ? "This model does not support tools, so Build and Plan are unavailable. Ask is read-only." : null;
-
   return (
-    <aside className="agent-drawer" aria-label="Agent drawer">
-      <div className="agent-header">
-        <div className="agent-header-left">
-          <span className="agent-title"><Bot size={14} /> Agent <span className="agent-sub">GAME DIRECTOR</span></span>
-          <span className={`agent-status agent-status-${status}`}><span className="dot" /> {statusLabel(status)}</span>
+    <aside
+      className={`agent-drawer chat-shell ${dragging ? "is-dragging" : ""}`}
+      aria-label="Agent chat"
+      onDragEnter={(event) => {
+        if (!event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        dragDepth.current += 1;
+        setDragging(true);
+      }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={(event) => {
+        event.preventDefault();
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        dragDepth.current = 0;
+        setDragging(false);
+        addFiles(Array.from(event.dataTransfer.files));
+      }}
+    >
+      <header className="chat-header">
+        <div className="chat-header-identity">
+          <span className="chat-brand-mark"><Bot size={16} /></span>
+          <div>
+            <strong>Clockwork Agent</strong>
+            <span className="chat-status" aria-live="polite"><i className={`dot ${status}`} /> {statusLabel(status)}</span>
+          </div>
         </div>
-        <div className="agent-header-right">
+        <div className="chat-header-actions">
           <ModelPicker value={selectedModelId} onChange={onSelectModel} onOpenSettings={onOpenSettings} models={models} providers={providers} settings={aiSettings} label={modelLabel} />
-          <Button variant="ghost" size="sm" onClick={onNewChat} aria-label="New chat">+ Chat</Button>
+          {props.history}
+          <IconButton label="New chat" onClick={onNewChat}><span className="chat-new-label">New</span></IconButton>
           <IconButton label="Close agent" onClick={onClose}><X size={14} /></IconButton>
         </div>
-      </div>
+      </header>
 
-      <div className="agent-context-row">
-        <span className="agent-chip">{projectName} · r{revision}</span>
-        {sceneName && <span className="agent-chip">Scene: {sceneName}</span>}
-        <span className="agent-chip">{selectionCount} selected</span>
-        {lockedSelection && (
-          <span className="agent-chip agent-chip-locked">
-            Locked: {lockedSelection.name}
-            <button type="button" aria-label="Unlock selection" className="agent-chip-x" onClick={onUnlockSelection}><X size={10} /></button>
-          </span>
-        )}
-      </div>
+      <details className="chat-context">
+        <summary>
+          <span className="chat-context-dot" /> {sceneName ?? projectName}
+          <span className="chat-context-meta">r{revision} · {selectionCount} selected</span>
+          <ChevronDown size={13} />
+        </summary>
+        <div className="chat-context-popover">
+          <div><span>Project</span><strong>{projectName}</strong></div>
+          <div><span>Scene</span><strong>{sceneName ?? "None"}</strong></div>
+          <div><span>Revision</span><strong>r{revision}</strong></div>
+          <div><span>Selection</span><strong>{selectionCount}</strong></div>
+          {lockedSelection && (
+            <div><span>Locked</span><strong>{lockedSelection.name} <button type="button" onClick={onUnlockSelection}>Unlock</button></strong></div>
+          )}
+        </div>
+      </details>
 
-      <div className="agent-mode-row" role="tablist" aria-label="Agent mode">
-        {(["ask", "build", "plan"] as AgentMode[]).map((m) => {
-          const disabled = (m === "build" || m === "plan") && !canBuildPlan;
-          return (
-            <button key={m} role="tab" aria-selected={mode === m} aria-disabled={disabled} disabled={disabled} className={`agent-mode ${mode === m ? "active" : ""}`} onClick={() => onModeChange(m)} title={disabled ? modeDisabledReason ?? undefined : undefined}>
-              {m.charAt(0).toUpperCase() + m.slice(1)}
-            </button>
-          );
-        })}
-        {!canBuildPlan && <span className="agent-mode-note">Build/Plan require a tool-capable model</span>}
-      </div>
-
-      <div className="agent-messages" ref={listRef} onScroll={onScroll}>
+      <div className="chat-messages" ref={listRef} onScroll={onScroll} role="log" aria-label="Conversation">
         {messages.length === 0 ? (
-          <div className="agent-empty">
-            <h3>What are we building?</h3>
-            <p>Ask about the project, inspect live state, or use Build/Plan with a tool-capable model to propose and apply changes.</p>
-            <div className="agent-suggestions">
-              {suggestions.map((preset) => (
-                <button key={preset.id} className="agent-suggestion" onClick={() => { onModeChange(preset.mode); submit(preset.prompt); }}>
-                  <strong>{preset.label}</strong>
-                  <span>{preset.description}</span>
-                </button>
-              ))}
-            </div>
-            <button className="agent-presets-link" type="button" onClick={() => setPresetOpen((open) => !open)}>All presets</button>
-            {presetOpen && (
-              <div className="agent-preset-menu" role="menu" aria-label="Prompt presets">
-                {PROMPT_PRESETS.map((preset) => (
-                  <button key={preset.id} role="menuitem" type="button" onClick={() => { setPresetOpen(false); setInput(preset.prompt); }}>
-                    <strong>{preset.label}</strong> <span>{preset.description}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {!aiSettings?.mock && !models.some((m) => {
-              const p = providers.find((pr) => pr.id === m.providerId);
-              return p?.key.configured || p?.local;
-            }) && (
-              <div className="agent-error-card" role="status" style={{ marginTop: 12 }}>
-                <div className="agent-error-title"><Settings size={14} /> Set up an AI model</div>
-                <div className="agent-error-body">No provider key is configured. Add a key or choose a local model in Settings to start chatting.</div>
-                <div className="agent-error-actions"><Button variant="secondary" size="sm" onClick={onOpenSettings}>Open settings</Button></div>
-              </div>
-            )}
-          </div>
-        ) : (
-          messages.map((m) => <MessageView key={m.id} message={m} />)
-        )}
+          <EmptyState projectName={projectName} suggestions={suggestions} onUse={usePreset} onModeChange={onModeChange} />
+        ) : renderedMessages}
 
         {pendingPreview && (
-          <div className={`agent-error-card ${pendingPreview.destructive ? "" : ""}`} role="region" aria-label="Pending change preview" style={{ borderColor: pendingPreview.destructive ? "var(--danger, #d35)" : "var(--accent, #7c5cff)" }}>
-            <div className="agent-error-title">
-              {pendingPreview.destructive ? <AlertTriangle size={14} /> : <Check size={14} />} {pendingPreview.destructive ? "Confirm changes" : "Proposed changes"}
+          <div className={`chat-preview-card ${pendingPreview.destructive ? "is-destructive" : ""}`} role="region" aria-label="Pending change preview">
+            <div className="chat-preview-title">
+              {pendingPreview.destructive ? <AlertTriangle size={14} /> : <Check size={14} />}
+              {pendingPreview.destructive ? "Confirm changes" : "Proposed changes"}
             </div>
-            <div className="agent-error-body">
+            <div className="chat-preview-body">
               <div><strong>{pendingPreview.summary}</strong>{pendingPreview.stale ? " (stale — project changed)" : ""}</div>
               {pendingPreview.changeSet?.changes?.length ? (
-                <ul style={{ margin: "6px 0 0 16px", padding: 0 }}>
-                  {pendingPreview.changeSet.changes.slice(0, 8).map((c, i) => (
-                    <li key={i}>{c.op} {c.entityKind} “{c.entityName}”{c.fields.length ? ` (${c.fields.length} field${c.fields.length === 1 ? "" : "s"})` : ""}</li>
+                <ul>
+                  {pendingPreview.changeSet.changes.slice(0, 8).map((change, index) => (
+                    <li key={index}>{change.op} {change.entityKind} “{change.entityName}”{change.fields.length ? ` (${change.fields.length} field${change.fields.length === 1 ? "" : "s"})` : ""}</li>
                   ))}
                 </ul>
               ) : <div className="muted">Review the previewed command batch before applying.</div>}
-              {pendingPreview.destructive && <div style={{ marginTop: 6, color: "var(--danger, #d35)" }}>This includes destructive changes. Applying may remove content.</div>}
+              {pendingPreview.destructive && <div className="chat-preview-warning">This includes destructive changes. Applying may remove content.</div>}
             </div>
-            <div className="agent-error-actions">
+            <div className="chat-preview-actions">
               <Button variant="primary" size="sm" onClick={onApplyPreview} disabled={pendingPreview.stale}>{pendingPreview.destructive ? "Delete / Apply" : "Apply"}</Button>
               <Button variant="secondary" size="sm" onClick={onDiscardPreview}>Discard</Button>
             </div>
@@ -190,15 +309,15 @@ export function AgentDrawer(props: AgentDrawerProps) {
         )}
 
         {error && status === "error" && (
-          <div className="agent-error-card" role="alert">
-            <div className="agent-error-title"><AlertTriangle size={14} /> {errorTitle(error.code)}</div>
-            <div className="agent-error-body">{error.message}</div>
-            <div className="agent-error-actions">
+          <div className="chat-error-card" role="alert">
+            <div className="chat-error-title"><AlertTriangle size={14} /> {errorTitle(error.code)}</div>
+            <div className="chat-error-body">{error.message}</div>
+            <div className="chat-error-actions">
               {(error.action === "open-settings" || error.code === "no-key" || error.code === "invalid-key" || error.code === "provider-timeout") && (
                 <Button variant="secondary" size="sm" onClick={onOpenSettings}><Settings size={12} /> Open settings</Button>
               )}
               {(error.action === "choose-model" || error.code === "no-model" || error.code === "model-unavailable" || error.code === "no-tools" || error.code === "no-vision") && (
-                <Button variant="secondary" size="sm" onClick={() => { (document.querySelector('.agent-model') as HTMLButtonElement | null)?.click(); }}>Choose another model</Button>
+                <Button variant="secondary" size="sm" onClick={() => { (window.document.querySelector(".agent-model") as HTMLButtonElement | null)?.click(); }}>Choose another model</Button>
               )}
               <Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button>
             </div>
@@ -208,41 +327,33 @@ export function AgentDrawer(props: AgentDrawerProps) {
       </div>
 
       {showJump && (
-        <button className="agent-jump" onClick={() => { stickRef.current = true; bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }}>Jump to latest</button>
+        <button className="chat-jump" type="button" onClick={() => { stickRef.current = true; bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }}>
+          Jump to latest
+        </button>
       )}
 
-      <div className="agent-composer">
-        {input.startsWith("/") && (
-          <div className="agent-preset-menu" role="listbox" aria-label="Preset suggestions">
-            {PROMPT_PRESETS.filter((preset) => `${preset.label} ${preset.id}`.toLowerCase().includes(input.slice(1).toLowerCase())).map((preset) => (
-              <button key={preset.id} role="option" type="button" onClick={() => setInput(preset.prompt)}>
-                <strong>{preset.label}</strong> <span>{preset.description}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        <textarea
-          className="agent-input"
-          data-testid="agent-input"
-          rows={1}
-          placeholder="Ask, build, or fix anything…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
-            if (e.key === "Escape" && isBusy) { e.preventDefault(); onStop(); }
-          }}
-          disabled={false}
-        />
-        <div className="agent-composer-actions">
-          {isBusy ? (
-            <Button variant="secondary" size="sm" onClick={onStop} aria-label="Stop" data-testid="agent-stop"><Square size={12} /> Stop</Button>
-          ) : (
-            <Button variant="primary" size="sm" onClick={() => submit()} disabled={!input.trim()} aria-label="Send" data-testid="agent-send"><Send size={12} /> Send</Button>
-          )}
+      {attachmentError && <div className="chat-attachment-error" role="alert">{attachmentError}</div>}
+      {!canBuildPlan && <div className="chat-mode-note">Build and Plan need a tool-capable model. Ask remains available.</div>}
+
+      <ChatComposer
+        draftKey={draftKey}
+        mode={mode}
+        onModeChange={onModeChange}
+        canBuildPlan={canBuildPlan}
+        isBusy={isBusy || uploading}
+        uploading={uploading}
+        pending={pending}
+        onFiles={addFiles}
+        onRemoveAttachment={removeAttachment}
+        onSend={submit}
+        onStop={onStop}
+      />
+
+      {dragging && (
+        <div className="chat-drop-overlay" aria-hidden="true">
+          <div><span>Drop to attach</span><small>Sprites, GIFs or audio up to 20 MB</small></div>
         </div>
-        <div className="agent-composer-hint">⏎ send · ⇧⏎ newline · Esc stop</div>
-      </div>
+      )}
     </aside>
   );
 }
@@ -257,73 +368,4 @@ function errorTitle(code?: string) {
   if (code === "rate-limit") return "Rate limited";
   if (code === "provider-timeout") return "Provider timeout";
   return "Agent error";
-}
-
-function MessageView({ message }: { message: DisplayMessage }) {
-  if (message.role === "user") {
-    return <div className="agent-msg agent-msg-user"><div className="agent-msg-content">{message.content}</div></div>;
-  }
-  if (message.role === "tool" && message.toolCard) {
-    return <ToolCardView name={message.toolCard.name} args={message.toolCard.args} status={message.toolCard.status} result={message.toolCard.result} />;
-  }
-  if (message.role === "assistant") {
-    if (!message.content && message.streaming) return <div className="agent-msg agent-msg-assistant"><span className="agent-cursor" /></div>;
-    if (!message.content) return null;
-    return <div className="agent-msg agent-msg-assistant"><div className="agent-msg-content">{message.content}{message.streaming && <span className="agent-cursor" />}</div></div>;
-  }
-  return null;
-}
-
-function ToolCardView({ name, args, status, result }: { name: string; args: unknown; status: string; result?: any }) {
-  const [open, setOpen] = useState(false);
-  const label: Record<string, string> = {
-    list_scenes: "Listing scenes",
-    get_scene: "Inspecting scene",
-    search_entities: "Searching entities",
-    get_object: "Inspecting object",
-    get_variables: "Reading variables",
-    get_selection: "Reading selection",
-    capture_viewport: "Capturing viewport",
-    apply_commands: "Applying commands",
-    preview_commands: "Previewing commands",
-    select_entities: "Selecting entities",
-    open_panel: "Opening panel",
-    start_playtest: "Starting playtest",
-    undo_last_agent_change: "Undoing agent change",
-    verify_with_kane: "Verifying with Kane",
-    run_ai_play: "Kane is playing",
-  };
-  return (
-    <div className={`agent-tool-card ${status}`}>
-      <button className="agent-tool-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <span className="agent-tool-label">{label[name] ?? name}</span>
-        <span className="agent-tool-status">
-          {status === "running" ? <><Loader2 size={12} className="spin" /> running</> : status === "done" ? "done" : status === "error" ? "error" : status}
-        </span>
-      </button>
-      {(name === "verify_with_kane" || name === "run_ai_play") && result?.ok && result.data && (
-        <div className="kane-run-card" data-testid="kane-run-card">
-          <div className="kane-run-head">
-            <span className={`chip ${result.data.status === "passed" ? "success" : "danger"}`} data-testid="verdict-badge">{String(result.data.status ?? "unknown").toUpperCase()}</span>
-            <strong>{name === "run_ai_play" ? "KANE PLAY" : "ENGINE QA"}</strong>
-            <span>{result.data.steps?.length ?? 0} steps</span>
-            {typeof result.data.durationMs === "number" && result.data.durationMs > 0 && (
-              <span data-testid="kane-run-duration">{(result.data.durationMs / 1000).toFixed(1)}s</span>
-            )}
-          </div>
-          <p>{String(result.data.summary ?? "")}</p>
-          {result.data.finalState && <div className="kane-run-state">{Object.entries(result.data.finalState as Record<string, unknown>).map(([key, value]) => `${key.toUpperCase()}: ${String(value)}`).join(" · ")}</div>}
-          {result.data.evidenceUrl && <a href={String(result.data.evidenceUrl)} target="_blank" rel="noreferrer">Open evidence</a>}
-        </div>
-      )}
-      {open && (
-        <div className="agent-tool-body">
-          <div className="agent-tool-section"><div className="agent-tool-key">Input</div><pre>{JSON.stringify(args, null, 2)}</pre></div>
-          {result && <div className="agent-tool-section"><div className="agent-tool-key">Result</div><pre>{JSON.stringify({ ok: result.ok, error: result.error, revision: result.revision, preview: result.preview, changeSet: result.changeSet, data: result.imageDataUrl ? { ...(result.data ?? {}), image: "[png]" } : result.data }, null, 2)}</pre></div>}
-          {result?.imageDataUrl && <div className="agent-tool-image"><div className="agent-tool-key"><ImageIcon size={12} /> Captured viewport</div><img src={result.imageDataUrl} alt="Viewport capture" /></div>}
-        </div>
-      )}
-    </div>
-  );
 }

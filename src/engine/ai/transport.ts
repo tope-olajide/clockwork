@@ -1,4 +1,5 @@
 import type { AgentChatMessage, ContextPacket, StepEvent, StepRequest } from "@shared/protocol";
+import { attachmentManifest } from "../../../shared/attachments";
 
 export interface StreamStepArgs {
   projectId: string;
@@ -12,6 +13,10 @@ export interface StreamStepArgs {
 function toWireMessages(messages: AgentChatMessage[]): AgentChatMessage[] {
   // Attach capture image to the next step as an image-capable user content if present
   return messages.map((m) => {
+    if (m.role === "user" && m.attachments?.length) {
+      const { attachments, ...rest } = m;
+      return { ...rest, content: `${m.content}${attachmentManifest(attachments)}` };
+    }
     if (m.role === "tool" && m.toolName === "capture_viewport" && m.toolResult && (m.toolResult as any).imageDataUrl) {
       const imageDataUrl = (m.toolResult as any).imageDataUrl as string;
       return {

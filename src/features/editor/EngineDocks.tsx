@@ -813,8 +813,22 @@ function ObjectInspector({
   const [rotation, setRotation] = useState(String(object.transform.rotation));
   const [scaleX, setScaleX] = useState(String(object.transform.scaleX));
   const [bodyType, setBodyType] = useState(object.body?.type ?? "none");
-  const [width, setWidth] = useState(String(object.body?.width ?? (object.visual?.kind === "rect" ? object.visual.width : 0)));
-  const [height, setHeight] = useState(String(object.body?.height ?? (object.visual?.kind === "rect" ? object.visual.height : 0)));
+  const [width, setWidth] = useState(
+    String(object.body?.width ?? (object.visual?.kind === "rect" || object.visual?.kind === "shape" ? object.visual.width : 0)),
+  );
+  const [height, setHeight] = useState(
+    String(object.body?.height ?? (object.visual?.kind === "rect" || object.visual?.kind === "shape" ? object.visual.height : 0)),
+  );
+  const [gravityScale, setGravityScale] = useState(String(object.body?.gravityScale ?? 1));
+  const [collideWorldBounds, setCollideWorldBounds] = useState(object.body?.collideWorldBounds ?? false);
+  const [oneWay, setOneWay] = useState(object.body?.oneWay ?? false);
+  const primaryShape = object.visual?.kind === "shape" ? object.visual.shapes[0] : undefined;
+  const [color, setColor] = useState(
+    object.visual?.kind === "rect" ? object.visual.color : primaryShape?.color ?? "#ff856f",
+  );
+  const [stroke, setStroke] = useState(
+    object.visual?.kind === "rect" ? object.visual.stroke ?? "" : primaryShape?.stroke ?? "",
+  );
   const [behaviorType, setBehaviorType] = useState<BehaviorType>("platformer-controller");
 
   function save() {
@@ -826,18 +840,48 @@ function ObjectInspector({
     if (!name.trim() || !Number.isFinite(parsedX) || !Number.isFinite(parsedY) || !Number.isFinite(parsedRotation) || !Number.isFinite(parsedScaleX)) return;
     const parsedWidth = Number(width);
     const parsedHeight = Number(height);
+    const parsedGravity = Number(gravityScale);
     let body = object.body;
     if (bodyType === "none") body = undefined;
     else {
       const validWidth = Number.isFinite(parsedWidth) && parsedWidth > 0 ? parsedWidth : 64;
       const validHeight = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : 64;
       body = body
-        ? { ...body, type: bodyType, width: validWidth, height: validHeight }
-        : makeBody(validWidth, validHeight, bodyType);
+        ? {
+            ...body,
+            type: bodyType,
+            width: validWidth,
+            height: validHeight,
+            gravityScale: Number.isFinite(parsedGravity) ? parsedGravity : 1,
+            collideWorldBounds,
+            oneWay,
+          }
+        : makeBody(validWidth, validHeight, bodyType, {
+            gravityScale: Number.isFinite(parsedGravity) ? parsedGravity : 1,
+            collideWorldBounds,
+            oneWay,
+          });
     }
     let visual = object.visual;
-    if (visual?.kind === "rect" && Number.isFinite(parsedWidth) && parsedWidth > 0 && Number.isFinite(parsedHeight) && parsedHeight > 0) {
-      visual = { ...visual, width: parsedWidth, height: parsedHeight };
+    if (visual?.kind === "rect") {
+      visual = {
+        ...visual,
+        ...(Number.isFinite(parsedWidth) && parsedWidth > 0 && Number.isFinite(parsedHeight) && parsedHeight > 0
+          ? { width: parsedWidth, height: parsedHeight }
+          : {}),
+        color,
+        stroke: stroke.trim() || undefined,
+      };
+    } else if (visual?.kind === "shape") {
+      visual = {
+        ...visual,
+        ...(Number.isFinite(parsedWidth) && parsedWidth > 0 && Number.isFinite(parsedHeight) && parsedHeight > 0
+          ? { width: parsedWidth, height: parsedHeight }
+          : {}),
+        shapes: visual.shapes.map((shape, index) =>
+          index === 0 ? { ...shape, color, stroke: stroke.trim() || undefined } : shape,
+        ),
+      };
     }
     onSave({
       name: name.trim(),
@@ -875,6 +919,23 @@ function ObjectInspector({
         </div>
       </section>
       <section className="inspector-section">
+        <div className="inspector-section-title">Appearance</div>
+        <div className="field-grid">
+          <label className="field-row">
+            <span>Colour</span>
+            <input className="input" type="color" value={color} onChange={(event) => setColor(event.target.value)} aria-label="Object colour" disabled={readOnly} />
+          </label>
+          <label className="field-row">
+            <span>Stroke</span>
+            <input className="input" type="color" value={stroke || "#000000"} onChange={(event) => setStroke(event.target.value)} aria-label="Object stroke" disabled={readOnly} />
+          </label>
+          <label className="field-row full"><span>Stroke hex</span><Input value={stroke} onChange={(event) => setStroke(event.target.value)} placeholder="none" aria-label="Object stroke hex" disabled={readOnly} /></label>
+        </div>
+        {object.visual?.kind === "shape" && (
+          <p className="panel-helper">Composite shape: colour edits the first primitive. Width and height resize the object bounds.</p>
+        )}
+      </section>
+      <section className="inspector-section">
         <div className="inspector-section-title">Body</div>
         <div className="field-grid">
           <label className="field-row full">
@@ -886,8 +947,9 @@ function ObjectInspector({
               <option value="kinematic">Kinematic</option>
             </select>
           </label>
-          <div className="detail-row"><span>Gravity</span><span className="value">{object.body?.gravityScale ?? 1}</span></div>
-          <div className="detail-row"><span>One-way</span><span className="value">{object.body?.oneWay ? "On" : "Off"}</span></div>
+          <label className="field-row"><span>Gravity</span><NumberInput value={gravityScale} onChange={(event) => setGravityScale(event.target.value)} aria-label="Body gravity scale" disabled={readOnly || bodyType === "none"} /></label>
+          <label className="field-row"><span>Bounds</span><input type="checkbox" checked={collideWorldBounds} onChange={(event) => setCollideWorldBounds(event.target.checked)} aria-label="Collide world bounds" disabled={readOnly || bodyType === "none"} /></label>
+          <label className="field-row"><span>One-way</span><input type="checkbox" checked={oneWay} onChange={(event) => setOneWay(event.target.checked)} aria-label="One-way platform" disabled={readOnly || bodyType === "none"} /></label>
         </div>
       </section>
       <section className="inspector-section">

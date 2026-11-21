@@ -1,6 +1,6 @@
 # Clockwork Features
 
-Only features that are **100% implemented, manually verified, and passing the current slice gate** are listed here. Planned, partial, mocked, or disabled work does not belong in this file. Put limitations and unfinished work in [`docs/known-issues.md`](docs/known-issues.md).
+Only features that are implemented and pass the current local gates are listed here. Where live browser or Kane evidence is still pending, the entry says so explicitly; the remaining acceptance gates are tracked in [`docs/known-issues.md`](docs/known-issues.md) and [`docs/demo-readiness.md`](docs/demo-readiness.md).
 
 ## Status
 
@@ -189,6 +189,28 @@ Completed in Slice 4 residual pass · verified with the runtime harness.
 
 Pause freezes the fixed-step loop, Step advances exactly one 1/60 s step, Reset restores variables and positions, and Stop/Escape leave Play. F1 shows FPS, entities, bodies and camera; the console lists rule, jump, checkpoint, variable and error events with object ids. The same seed and input trace replay identically.
 Completed in Slice 4 · 13/13 runtime checks plus browser pause/step/reset.
+
+## AI Testing and Kane
+
+### Reviewable game-test plans
+
+Ask the built-in agent for a bounded test plan in natural language. It reads the template’s versioned controls, observations, objectives and scenarios, validates the proposal against the current revision and hard budgets, and places it in the AI Testing panel. Every revision needs a reason, the original user goal is immutable, and no Kane run starts until the plan is explicitly approved.
+Implemented · unit-tested; live model-to-plan acceptance pending.
+
+### Kane Test Mode and typed phase results
+
+The approved phase opens an immutable snapshot in deterministic Test Mode. Kane clicks profile-labelled controls, advances a bounded number of frames and stores observations. The server joins the terminal verdict with applied-input receipts, frame count, assertion values and evidence; the report never converts missing input, missing observations, timeouts or missing evidence into a pass.
+Implemented · typecheck, runner, phase and Test Mode tests pass; live Kane phase evidence pending.
+
+### AI Play fail → repair → replay
+
+AI Play runs Kane against a snapshot, reads the strict terminal verdict, applies the narrow embedded-collectible repair when applicable, and replays the same seed once. Both attempts, final states and evidence links remain visible, with Undo AI fixes.
+Implemented · real K1–K5 evidence recorded in [`docs/kane-proof.md`](docs/kane-proof.md); demo gate still open.
+
+### Agent chat attachments and history
+
+The agent drawer renders safe GFM Markdown, keeps multi-chat history with rename/delete, and accepts image/audio project assets from the picker, drag/drop or paste. Attachments become real project assets on send, appear as thumbnails/audio cards, and reach the model as an asset-id manifest rather than binary data.
+Implemented · unit tests cover attachment validation, manifests, titles and legacy-chat migration; browser acceptance pending.
 
 <!--
 When a feature is fully complete, add it under the right area using this shape:

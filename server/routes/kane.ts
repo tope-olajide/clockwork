@@ -3,16 +3,23 @@ import { streamText } from "hono/streaming";
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AiPlayRequest, KaneCliStatus, KaneQaRequest } from "../../shared/protocol/kane";
+import type { AiPlayRequest, AiPlayResult, KaneCliStatus, KaneQaRequest } from "../../shared/protocol/kane";
+
 import { env } from "../env";
 import { getSnapshot } from "../snapshots/repository";
 import { buildAiPlayObjective, buildPlayerQaObjective } from "../kane/objectives";
 import { startKaneRun } from "../kane/runner";
+import { composePhaseObjective, judgePhase, phaseFingerprint, validatePhaseRequest } from "../kane/phase";
+import { redactAiPlayResult } from "../../shared/protocol/redaction";
+import { PhaseSessionStore } from "../kane/phase-session";
+import { listReplayTests, resolveReplayTest } from "../kane/replay-tests";
+import { kaneCreditsExhausted, parseKaneCreditBalance } from "../kane/credits";
 
 export const kaneRoutes = new Hono();
 
 const activeRuns = new Map<string, { cancel: () => void; key: string }>();
 const activeByProject = new Map<string, string>();
+const phaseSessions = new PhaseSessionStore();
 let statusCache: { at: number; value: KaneCliStatus } | null = null;
 
 function kaneCliEntry(): { command: string; args: string[] } {
@@ -46,17 +53,13 @@ function execKane(extra: string[], timeout = 8_000): Promise<string> {
 async function readStatus(force = false): Promise<KaneCliStatus> {
   if (!force && statusCache && Date.now() - statusCache.at < 20_000) return statusCache.value;
   const base: KaneCliStatus = {
-    enabled: env.kaneEnabled,
-    qaEnabled: env.kaneEnabled,
-    aiPlayEnabled: env.kaneAiPlayEnabled,
+    enabled: true,
+    qaEnabled: true,
+    aiPlayEnabled: true,
     installed: false,
     authenticated: false,
     evidenceDir: env.kaneEvidenceDir,
   };
-  if (!env.kaneEnabled && !env.kaneAiPlayEnabled) {
-    statusCache = { at: Date.now(), value: base };
-    return base;
-  }
   try {
     const version = (await execKane(["--version"])).trim().split(/\s+/)[0];
     base.installed = Boolean(version);
@@ -75,8 +78,28 @@ async function readStatus(force = false): Promise<KaneCliStatus> {
   } catch {
     base.reason = "Kane CLI could not verify the signed-in account.";
   }
+  if (base.authenticated) {
+    try {
+      const balance = await execKane(["balance"]);
+      base.credits = parseKaneCreditBalance(balance);
+      if (kaneCreditsExhausted(base.credits)) {
+        base.reason = "Kane credits are exhausted. Add credits to your Kane account, then retry.";
+      }
+    } catch {
+      // Balance is best-effort; a failed lookup must not hide an installed, signed-in CLI.
+    }
+  }
   statusCache = { at: Date.now(), value: base };
   return base;
+}
+
+function creditsExhausted(c: any, status: KaneCliStatus) {
+  if (!kaneCreditsExhausted(status.credits)) return null;
+  return c.json({
+    ok: false,
+    error: "Kane credits are exhausted. Add credits to your Kane account, then retry.",
+    code: "kane-credits",
+  }, 402);
 }
 
 function playerOrigin(c: any): string {
@@ -94,7 +117,10 @@ function startStream(c: any, run: ReturnType<typeof startKaneRun>, key: string) 
   return streamText(c, async (stream) => {
     try {
       for await (const event of run.events) {
-        await stream.write(JSON.stringify(event) + "\n");
+        const safeEvent = event.type === "run_end"
+          ? { ...event, result: redactAiPlayResult(event.result) }
+          : event;
+        await stream.write(JSON.stringify(safeEvent) + "\n");
         if (event.type === "run_end" || event.type === "error") {
           // The runner still closes and writes evidence after run_end; the stream
           // can end here because the result is final.
@@ -114,7 +140,9 @@ kaneRoutes.get("/runs/:runId", (c) => {
   if (!/^[A-Za-z0-9-]{8,64}$/.test(runId)) return c.json({ ok: false, error: "Invalid run id." }, 400);
   const path = join(process.cwd(), env.kaneEvidenceDir, runId, "result.json");
   if (!existsSync(path)) return c.json({ ok: false, error: "Run not found." }, 404);
-  return c.json({ ok: true, result: JSON.parse(readFileSync(path, "utf8")) });
+  // The stored result keeps its raw local evidence path for server logs; the API
+  // response is always the redacted form.
+  return c.json({ ok: true, result: redactAiPlayResult(JSON.parse(readFileSync(path, "utf8"))) });
 });
 
 kaneRoutes.get("/runs/:runId/evidence", (c) => {
@@ -129,9 +157,10 @@ kaneRoutes.get("/runs/:runId/evidence", (c) => {
 
 kaneRoutes.post("/qa", async (c) => {
   const status = await readStatus();
-  if (!env.kaneEnabled) return c.json({ ok: false, error: "Kane engine QA is disabled. Set KANE_ENABLED=1.", code: "kane-disabled" }, 404);
   if (!status.installed) return c.json({ ok: false, error: status.reason ?? "Kane CLI is not installed.", code: "kane-missing" }, 503);
   if (!status.authenticated) return c.json({ ok: false, error: "Kane CLI is not signed in.", code: "kane-auth" }, 401);
+  const noCredits = creditsExhausted(c, status);
+  if (noCredits) return noCredits;
   let body: KaneQaRequest;
   try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "Invalid JSON body." }, 400); }
   const objective = String(body.objective ?? "").trim();
@@ -158,12 +187,11 @@ kaneRoutes.post("/qa", async (c) => {
 });
 
 kaneRoutes.post("/ai-play", async (c) => {
-  if (!env.kaneEnabled || !env.kaneAiPlayEnabled) {
-    return c.json({ ok: false, error: "AI Play is disabled. Set KANE_ENABLED=1 and KANE_AI_PLAY_ENABLED=1.", code: "kane-disabled" }, 404);
-  }
   const status = await readStatus();
   if (!status.installed) return c.json({ ok: false, error: status.reason ?? "Kane CLI is not installed.", code: "kane-missing" }, 503);
   if (!status.authenticated) return c.json({ ok: false, error: "Kane CLI is not signed in.", code: "kane-auth" }, 401);
+  const noCredits = creditsExhausted(c, status);
+  if (noCredits) return noCredits;
   let body: AiPlayRequest;
   try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "Invalid JSON body." }, 400); }
   const snapshotId = String(body.snapshotId ?? "");
@@ -175,7 +203,11 @@ kaneRoutes.post("/ai-play", async (c) => {
   const document = stored.payload.document as any;
   const objective = buildAiPlayObjective({
     document,
-    sceneId: typeof document.startSceneId === "string" ? document.startSceneId : undefined,
+    sceneId: typeof body.sceneId === "string" && body.sceneId.trim()
+      ? body.sceneId
+      : typeof document.startSceneId === "string"
+        ? document.startSceneId
+        : undefined,
     goal: body.goal,
     seed: Number(body.seed) || 1234,
   });
@@ -200,6 +232,152 @@ kaneRoutes.post("/ai-play", async (c) => {
     evidenceRoot: env.kaneEvidenceDir,
   });
   return startStream(c, run, projectId);
+});
+
+function phaseKey(projectId: string, sessionId: string): string {
+  return `${projectId}:${sessionId}`;
+}
+
+kaneRoutes.get("/phase-replays", (c) => c.json({ ok: true, replays: listReplayTests() }));
+
+kaneRoutes.post("/phase", async (c) => {
+  const status = await readStatus();
+  if (!status.installed) return c.json({ ok: false, error: status.reason ?? "Kane CLI is not installed.", code: "kane-missing" }, 503);
+  if (!status.authenticated) return c.json({ ok: false, error: "Kane CLI is not signed in.", code: "kane-auth" }, 401);
+  const noCredits = creditsExhausted(c, status);
+  if (noCredits) return noCredits;
+  let body: unknown;
+  try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "Invalid JSON body." }, 400); }
+  const snapshotId = typeof (body as any)?.snapshotId === "string" ? (body as any).snapshotId : "";
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(snapshotId)) return c.json({ ok: false, error: "A phase requires a snapshot id." }, 400);
+  const stored = getSnapshot(snapshotId);
+  if (!stored) return c.json({ ok: false, error: "Snapshot not found or expired." }, 404);
+
+  const document = stored.payload.document as any;
+  const validation = validatePhaseRequest(body, {
+    id: String(document.id ?? ""),
+    revision: Number(document.revision ?? 0),
+    scenes: Array.isArray(document.scenes) ? document.scenes : [],
+  });
+  if (!validation.ok) return c.json({ ok: false, error: validation.error }, 400);
+  const { request, phase, phaseIndex } = validation;
+
+  // A replay runs the recorded `_test.md` for exactly the phase it was
+  // authored for, with healing disabled: a replay failure stays a failure and
+  // never silently re-authors. Anything else needs a fresh authored run.
+  let savedTest: string | undefined;
+  if (request.replayTestKey) {
+    const resolved = resolveReplayTest(request.replayTestKey);
+    if (!resolved.ok) return c.json({ ok: false, error: resolved.error, code: "kane-replay-missing" }, 400);
+    if (resolved.entry.phaseId !== request.phaseId) {
+      return c.json({ ok: false, error: `Recorded replay "${resolved.entry.key}" belongs to phase "${resolved.entry.phaseId}", not "${request.phaseId}". Run the authored phase first, then save it as a replay.`, code: "kane-replay-mismatch" }, 400);
+    }
+    savedTest = resolved.file;
+  }
+
+  // The budget/idempotency key is derived server-side from the plan content, so
+  // changing the client-supplied sessionId cannot reset the paid phase budget.
+  const key = phaseKey(String(document.id ?? ""), phaseFingerprint(request));
+  const previous = phaseSessions.getResult(key, phase.id);
+  if (previous) {
+    c.header("Content-Type", "application/x-ndjson; charset=utf-8");
+    c.header("Cache-Control", "no-cache");
+    return streamText(c, async (stream) => {
+      await stream.write(JSON.stringify({ type: "phase_result", result: previous, replay: true }) + "\n");
+    });
+  }
+  const start = phaseSessions.start(key, request.plan.budget.maxKanePhases);
+  if (!start.ok) {
+    return start.reason === "running"
+      ? c.json({ ok: false, error: "A phase is already running for this approved plan.", code: "kane-busy" }, 409)
+      : c.json({
+        ok: false,
+        error: `This approved session has used all ${request.plan.budget.maxKanePhases} Kane phase${request.plan.budget.maxKanePhases === 1 ? "" : "s"}. Draft and approve a new plan to continue.`,
+        code: "kane-budget",
+      }, 409);
+  }
+
+  const objective = composePhaseObjective(request, phase);
+  const origin = playerOrigin(c);
+  const params = new URLSearchParams({
+    ai: "1",
+    testMode: "step",
+    seed: String(request.plan.seed),
+    maxAdvance: String(request.plan.budget.maxFramesPerAdvance),
+    maxFrames: String(request.plan.budget.maxFramesPerPhase),
+  });
+  params.set("scene", request.plan.sceneId);
+  if (request.plan.scenarioId) params.set("scenario", request.plan.scenarioId);
+  const url = `${origin}/s/${encodeURIComponent(snapshotId)}?${params.toString()}`;
+  const startedAt = new Date().toISOString();
+  const timeoutSeconds = Math.min(env.kaneTimeoutSeconds, request.plan.budget.maxWallTimeSecondsPerPhase, 300);
+  let run: ReturnType<typeof startKaneRun>;
+  try {
+    run = startKaneRun({
+      objective,
+      ...(savedTest ? { savedTest } : {}),
+      url,
+      projectId: String(document.id ?? ""),
+      snapshotId,
+      headless: env.kaneHeadless,
+      timeoutSeconds,
+      maxSteps: Math.min(env.kaneMaxSteps, request.plan.budget.maxKaneStepsPerPhase, 8),
+      bugDetection: "off",
+      evidenceRoot: env.kaneEvidenceDir,
+    });
+  } catch (error) {
+    phaseSessions.abandon(key);
+    return c.json({ ok: false, error: error instanceof Error ? error.message : "Kane could not start." }, 500);
+  }
+  activeRuns.set(run.runId, { cancel: run.cancel, key });
+  c.header("Content-Type", "application/x-ndjson; charset=utf-8");
+  c.header("Cache-Control", "no-cache");
+  c.header("X-Kane-Run", run.runId);
+
+  return streamText(c, async (stream) => {
+    let finalResult: AiPlayResult | null = null;
+    try {
+      for await (const event of run.events) {
+        if (event.type === "run_end") {
+          finalResult = event.result;
+          // Local evidence directories stay on the server; clients get the safe URL.
+          const safeResult = redactAiPlayResult(event.result);
+          await stream.write(JSON.stringify({ type: "run_end", result: safeResult }) + "\n");
+          continue;
+        }
+        await stream.write(JSON.stringify(event) + "\n");
+      }
+    } finally {
+      activeRuns.delete(run.runId);
+      phaseSessions.abandon(key);
+    }
+    if (!finalResult) {
+      finalResult = {
+        runId: run.runId,
+        snapshotId,
+        attempt: 1,
+        status: "error",
+        summary: "Kane stream ended without a final result.",
+        objective,
+        finalState: {},
+        steps: [],
+        runtimeErrors: [],
+        durationMs: Date.now() - Date.parse(startedAt),
+        createdAt: startedAt,
+      };
+    }
+    const result = judgePhase({
+      result: finalResult,
+      request,
+      phase,
+      phaseIndex,
+      objective,
+      startedAt,
+      ...(status.version ? { kaneCliVersion: status.version } : {}),
+    });
+    phaseSessions.finish(key, result);
+    await stream.write(JSON.stringify({ type: "phase_result", result }) + "\n");
+  });
 });
 
 kaneRoutes.get("/ai-play/objective/:snapshotId", (c) => {

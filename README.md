@@ -23,6 +23,8 @@ pnpm preview
 
 `pnpm build` typechecks and builds the client. The exported-game player is generated on demand by `GET /api/build/player.js` with esbuild.
 
+`pnpm smoke:phase` runs the credit-free Phase 7 smoke: fixture Kane + mock agent, real headless Chrome through the approve-and-replay panel flow with a console-error check.
+
 ## What works
 
 - **Projects:** create from Blank, Template or From brief; search/filter/sort; rename, duplicate, archive, export and import `.clockwork.json`; damaged-project recovery.
@@ -33,7 +35,7 @@ pnpm preview
 - **Agent:** read-only tools, build/plan write tools, context chips, tool cards, viewport capture, preview ghosts, changed-object presence, locked selections, presets, bounded re-plan.
 - **Shipping:** self-contained `.zip` export, expiring snapshot links (`/s/:id`), read-only snapshot player, project cover capture.
 
-Tests for Slice 6.5, 7, 8 and 9 acceptance are intentionally deferred to the Slice 10 Kane pass. See `docs/known-issues.md` for the honest current state.
+AI Testing is the headline Kane feature: ask the built-in agent for a bounded test plan, review and approve it, then run one phase at a time in deterministic Test Mode. Kane clicks the real snapshot controls, reads runtime observations and returns a typed verdict with evidence. The agent receives that result and chooses the next phase from it. See [`docs/ai-play.md`](docs/ai-play.md), [`docs/game-test-profiles.md`](docs/game-test-profiles.md) and [`docs/demo-readiness.md`](docs/demo-readiness.md).
 
 ## Configuration
 
@@ -45,6 +47,10 @@ Copy the variables you need into the environment of the API process:
 | `AI_MOCK=1` | Development-only mock model; never present as a real provider |
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Simple env-configured OpenAI-compatible model |
 | `CLOCKWORK_SECRET` | Extra secret mixed into the local key vault |
+| Kane CLI login | Required; Kane is always enabled, with no feature flag |
+| `KANE_CLI` | Optional path or command for the Kane CLI |
+| `KANE_TIMEOUT_SECONDS`, `KANE_MAX_STEPS` | Bounded Kane run limits |
+| `CLOCKWORK_PUBLIC_URL` | Origin Kane opens (Vite in dev, usually `http://localhost:5173`) |
 
 Provider keys can also be saved to the local vault from **Project → AI Settings**; session-only keys are intentionally lost when the server restarts. See [`docs/model-setup.md`](docs/model-setup.md).
 
@@ -62,9 +68,17 @@ Provider keys can also be saved to the local vault from **Project → AI Setting
 - `server/` — Hono API for the agent, providers, snapshots and player bundling.
 - `shared/` — protocol, tool definitions and snapshot contracts shared by client and server.
 
-## Kane and AI Play
+## Kane and AI Testing
 
-Kane engine QA and in-product AI Play are Slice 10. The shipped product keeps manual Play first-class; AI Play is additive and requires a model plus a logged-in Kane CLI. The setup and HUD contracts land with that slice; the plan is in `docs/clockwork-implementation-plan.md` §Slice 10.
+Manual Play is always first-class and never needs a model or Kane. Kane adds real-browser verification:
+
+- **AI Testing** — the built-in agent drafts a typed, bounded plan from a natural-language goal; you review and approve it; Kane runs one phase in deterministic Test Mode; the typed result and evidence return to the same agent conversation.
+- **AI Play** — a separate one-off snapshot probe with an optional deterministic embedded-coin repair and same-seed retry.
+- **Engine QA** — the agent can call `verify_with_kane` for a general browser check.
+
+The phase flow uses the same profiles, Test Mode controls and evidence parser. A phase is only PASS when Kane returns `run_end`, the approved assertions match, inputs were actually delivered, the frame budget was respected and an evidence bundle exists. Missing input, missing observations, timeouts and runtime errors stay INCONCLUSIVE or FAIL; an exit code alone is never a pass.
+
+Full setup, exact CLI commands and the HUD contract are in [`docs/kane-setup.md`](docs/kane-setup.md). The honest open items are in [`docs/known-issues.md`](docs/known-issues.md) and the sequential demo gate is in [`docs/demo-readiness.md`](docs/demo-readiness.md).
 
 ## Documents
 

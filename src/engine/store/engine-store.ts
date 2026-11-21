@@ -4,6 +4,7 @@ import { runCommand } from "../commands/registry";
 import { CommandError, validateDocument } from "../commands/validation";
 import { duplicateProjectDocument } from "../model/clone";
 import { createProjectFromTemplate } from "../model/templates";
+import { isGameStarterOrigin } from "../model/game-starters/catalog";
 import { applyStarterVisuals, seedStarterAssets } from "../assets/starter-seed";
 import { captureViewportCover } from "../ai/viewport-capture";
 import type { ProjectDocument, ProjectRecord, TemplateOrigin } from "../model/schema";
@@ -155,7 +156,10 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
   },
 
   createFromTemplate: async (template, name) => {
-    const document = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate(template, name)));
+    const generated = createProjectFromTemplate(template, name);
+    const document = isGameStarterOrigin(generated.templateOrigin)
+      ? generated
+      : await seedStarterAssets(applyStarterVisuals(generated));
     await saveProjectDocument(document);
     set({
       document,

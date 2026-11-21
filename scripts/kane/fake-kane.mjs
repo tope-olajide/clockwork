@@ -48,7 +48,7 @@ if (args[0] === "testmd") {
   emit({ type: "test_md_step_end", step_index: 2, status: result, duration_s: 0.4 });
   emit({ type: "test_md_summary", ...summary });
   emit({ type: "coverage", status: "written", pack: join(session, "evidence", "fixture.evidence") });
-  emit({ type: "test_md_done", overall_status: result, duration_s: 1.1, session_id: "fixture-session" });
+  emit({ type: "test_md_done", overall_status: result, duration_s: 1.1, session_id: "fixture-session", ...(process.env.KANE_FIXTURE_SHARE_URL ? { share_url: process.env.KANE_FIXTURE_SHARE_URL } : {}) });
   process.exit(exitCode);
 }
 

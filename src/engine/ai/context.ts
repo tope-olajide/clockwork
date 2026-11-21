@@ -60,6 +60,8 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
     "search_entities (read)",
     "get_object (read)",
     "get_variables (read)",
+    "get_game_test_profile (read)",
+    "propose_test_plan (plan, no Kane run)",
     "get_selection (read)",
     ...(includeViewportCapture ? ["capture_viewport (read)"] : []),
   ];
