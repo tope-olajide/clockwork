@@ -142,13 +142,14 @@ export function isDraftStale(draft: TestPlanDraft, document: ProjectDocument): b
 }
 
 /**
- * Cost estimate shown before approval. The per-phase numbers come from the measured
- * Kane ledger in docs/kane-proof.md (85 s typical pass, 140 s hard AI Play cap), not
- * from the plan's optimistic budget.
+ * Cost estimate shown before approval. The per-phase numbers come from measured
+ * Kane runs: fast phases finish near 85 s, but a full input-plus-read phase with
+ * Kane's per-step latency needs up to the 300 s ceiling, so the worst case uses
+ * that ceiling instead of the old 140 s AI Play cap.
  */
 export const KANE_PHASE_ESTIMATE = {
   typicalSeconds: 85,
-  hardCapSeconds: 140,
+  hardCapSeconds: 300,
 } as const;
 
 export function estimateDraftCost(draft: TestPlanDraft) {

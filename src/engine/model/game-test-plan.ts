@@ -10,7 +10,7 @@ import { getGameTestScenario, validateScenarioSetup } from "./game-test-scenario
 export const TEST_PLAN_LIMITS = {
   maxPhases: 3,
   maxStepsPerPhase: 8,
-  maxWallTimeSecondsPerPhase: 140,
+  maxWallTimeSecondsPerPhase: 300,
   maxFramesPerAdvance: 600,
   maxFramesPerPhase: 3600,
   maxAssertionsPerPhase: 12,

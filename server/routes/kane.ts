@@ -294,7 +294,7 @@ kaneRoutes.post("/phase", async (c) => {
   if (request.plan.scenarioId) params.set("scenario", request.plan.scenarioId);
   const url = `${origin}/s/${encodeURIComponent(snapshotId)}?${params.toString()}`;
   const startedAt = new Date().toISOString();
-  const timeoutSeconds = Math.min(env.kaneTimeoutSeconds, request.plan.budget.maxWallTimeSecondsPerPhase, 140);
+  const timeoutSeconds = Math.min(env.kaneTimeoutSeconds, request.plan.budget.maxWallTimeSecondsPerPhase, 300);
   let run: ReturnType<typeof startKaneRun>;
   try {
     run = startKaneRun({

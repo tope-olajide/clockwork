@@ -59,7 +59,7 @@ const planSchema = z
       .object({
         maxKanePhases: z.number().int().min(1).max(KANE_PHASE_LIMITS.maxPhases),
         maxKaneStepsPerPhase: z.number().int().min(1).max(8),
-        maxWallTimeSecondsPerPhase: z.number().int().min(10).max(140),
+        maxWallTimeSecondsPerPhase: z.number().int().min(10).max(300),
         maxFramesPerAdvance: z.number().int().min(1).max(600),
         maxFramesPerPhase: z.number().int().min(1).max(3600),
       })
@@ -209,7 +209,7 @@ export function composePhaseObjective(request: KanePhaseRequest, phase: PhaseSpe
   recorded.push("ACCEPTED INPUTS as 'accepted_inputs'", "FRAME as 'frames_advanced'");
   lines.push(
     `Test Mode: control clicks only queue input. Set ADVANCE to 1 or more, click STEP, stay within ${request.plan.budget.maxFramesPerAdvance} frames per STEP and ${request.plan.budget.maxFramesPerPhase} frames total. Do not reload.`,
-    `Record exactly: ${recorded.join("; ")}. Then end the run.`,
+    `Record exactly: ${recorded.join("; ")}. Store every value, then end the run immediately with no extra wait steps.`,
   );
   const objective = lines.join("\n");
   return objective.slice(0, KANE_PHASE_LIMITS.maxObjectiveChars);
