@@ -201,3 +201,26 @@ Total live-run spend for Phase 6: 4 paid Kane runs (1 timeout probe + A + B + C)
   exercises the panel path through the same route and judge.
 - **Result:** `SMOKE PASSED` (18/18 checks), `npm run typecheck` and
   `npm run check:repo` clean.
+
+## Phase 8 — submission statement (to judges)
+
+Exactly what was live-tested and what was not.
+
+**Live-tested with real Kane CLI 0.10.6 (paid credits, recorded above):** one
+agent-driven phase pass (Phase 3, run `b967bbdd`, passed, 1 accepted input,
+45 frames, shots/projectiles 3, evidence + Test Manager link); the adaptive
+kill-chain follow-up (Phase 4: timeout and step-budget inconclusives, one
+Kane-passed run with destroyed 1 / score 100 proven in-game but
+key-mismatch inconclusive); the replay path (Phase 6: one-shot authored
+fail, two testmd authoring passes with identical 3/3/1/45 observations);
+engine QA in `docs/kane-proof.md` (K1/K3a/K3b/K4/K5 real passes, K2
+recorded as environment-blocked, negative control fail → fix → pass).
+
+**Not live-tested:** replay-from-cache (no run ever showed
+`replay_decisions > 0`, so no replay speedup is claimed); the panel-to-agent
+handoff against a live model (covered by unit tests and the mock-model
+smoke); a single live session running draft → approve → run → follow-up
+end to end (each link proven live separately); no demo video was recorded —
+the automated smoke was chosen instead. Balances and per-run credit costs
+are recorded per phase; Kane was never a feature flag and no pass was
+claimed from fixtures, mocks or compile-only checks.

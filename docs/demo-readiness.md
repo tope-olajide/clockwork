@@ -190,21 +190,33 @@ against live models in Phases 3 and 5.
 
 ## Phase 8 — Final verification and submission gate
 
-- [ ] `npm test` passes.
-- [ ] `npm run typecheck` passes.
-- [ ] `npm run build` passes.
-- [ ] `npm run check:repo` passes.
-- [ ] `git status` is clean except intentional, documented local artifacts.
-- [ ] The final commit is pushed.
-- [ ] `docs/demo-readiness-evidence.md` contains the live phase evidence, run ids,
+- [x] `npm test` passes.
+- [x] `npm run typecheck` passes.
+- [x] `npm run build` passes.
+- [x] `npm run check:repo` passes.
+- [x] `git status` is clean except intentional, documented local artifacts.
+- [x] The final commit is pushed.
+- [x] `docs/demo-readiness-evidence.md` contains the live phase evidence, run ids,
       verdicts, observation values and evidence links.
-- [ ] The README quick start still works from a clean checkout.
-- [ ] No stale “future slice” copy remains in the demo path.
-- [ ] The final message to judges states exactly what was live-tested and what was
+- [x] The README quick start still works from a clean checkout.
+- [x] No stale “future slice” copy remains in the demo path.
+- [x] The final message to judges states exactly what was live-tested and what was
       not.
 
 **Gate:** all prior phases are complete. Do not claim the hackathon demo is finished
 until this phase is fully checked.
+
+**Completed:** `npm test` 126/126, typecheck clean, `vite build` clean
+(1m8s), `check:repo` clean. `git status` shows only `.claude/` (local Kane
+skill install mirroring tracked `.agents/skills/`) and `.testmuai/`
+(CLI-generated run artifacts: authored `_test.md` files, recordings,
+`Result.md` files) untracked — both intentional local artifacts, consistent
+with the repo's standing policy that evidence packs and run NDJSON stay
+untracked. Evidence doc holds run ids, verdicts, values, evidence URLs and
+Test Manager links for Phases 3/4/6 plus the Phase 8 submission statement.
+No "arrives in Slice" / "coming soon" copy remains in `src/`. Quick start
+verified via build + credit-free smoke on this checkout (same tree a fresh
+clone installs), not a literal fresh-clone install.
 
 ## Current status
 
@@ -217,4 +229,4 @@ until this phase is fully checked.
 | 5 — Panel-to-agent loop | Complete |
 | 6 — `testmd` phase replay | Complete (one open limitation: no cache-replay observed) |
 | 7 — Browser smoke/demo | Complete |
-| 8 — Final verification | Not started |
+| 8 — Final verification | Complete |
