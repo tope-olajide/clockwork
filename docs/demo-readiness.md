@@ -161,20 +161,32 @@ mechanism are identical to the agent path.
 
 ## Phase 7 — Browser smoke test or recorded demo fallback
 
-- [ ] Add a minimal smoke test for the phase flow, or record a manual demo video.
-- [ ] Smoke/demo covers:
-      - [ ] open project and select AI Testing
-      - [ ] draft and approve a plan
-      - [ ] run one phase through the agent
-      - [ ] view typed result and evidence
-      - [ ] agent follow-up references the result
-      - [ ] no console errors during the flow
-- [ ] If automated, the check is runnable from a documented command and does not
+- [x] Add a minimal smoke test for the phase flow, or record a manual demo video.
+- [x] Smoke/demo covers:
+      - [x] open project and select AI Testing
+      - [x] draft and approve a plan
+      - [x] run one phase through the agent
+      - [x] view typed result and evidence
+      - [x] agent follow-up references the result
+      - [x] no console errors during the flow
+- [x] If automated, the check is runnable from a documented command and does not
       depend on Kane credits unless explicitly marked as a live test.
-- [ ] If manual, the demo recording is stored in the submission artifact and linked
+- [x] If manual, the demo recording is stored in the submission artifact and linked
       from the README or demo evidence doc.
 
 **Gate:** a new reviewer can reproduce or at least review the end-to-end story.
+
+**Completed:** `npm run smoke:phase` (`scripts/kane/phase-smoke.mts`) —
+self-contained, zero Kane credits, zero LLM calls. Layer A hits the phase
+route with fixture Kane (one-shot pass with typed inputs/frames/evidence/
+duration; unknown-key and wrong-phase 400s; replays list). Layer B drives
+real headless Chrome over CDP: create Space Shooter starter, open AI Play,
+review the seeded draft, approve, replay the recorded test to a passed typed
+result with checks + evidence + final report, then explain-in-agent against
+the mock model — with a console/page-error check that passes clean (fixed
+the lone offender, a missing favicon, with `public/favicon.svg`). Seeded
+draft and mock follow-up stand in for model authoring; both were proven
+against live models in Phases 3 and 5.
 
 ## Phase 8 — Final verification and submission gate
 
@@ -204,5 +216,5 @@ until this phase is fully checked.
 | 4 — Adaptive/failure proof | Complete |
 | 5 — Panel-to-agent loop | Complete |
 | 6 — `testmd` phase replay | Complete (one open limitation: no cache-replay observed) |
-| 7 — Browser smoke/demo | Not started |
+| 7 — Browser smoke/demo | Complete |
 | 8 — Final verification | Not started |

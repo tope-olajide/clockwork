@@ -23,6 +23,8 @@ pnpm preview
 
 `pnpm build` typechecks and builds the client. The exported-game player is generated on demand by `GET /api/build/player.js` with esbuild.
 
+`pnpm smoke:phase` runs the credit-free Phase 7 smoke: fixture Kane + mock agent, real headless Chrome through the approve-and-replay panel flow with a console-error check.
+
 ## What works
 
 - **Projects:** create from Blank, Template or From brief; search/filter/sort; rename, duplicate, archive, export and import `.clockwork.json`; damaged-project recovery.

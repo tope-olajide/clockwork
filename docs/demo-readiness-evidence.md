@@ -172,3 +172,32 @@ Total live-run spend for Phase 4: 4 paid Kane runs.
   timing or credit saving is claimed. Do not present run C as a replay win.
 
 Total live-run spend for Phase 6: 4 paid Kane runs (1 timeout probe + A + B + C).
+
+## Phase 7 — credit-free browser smoke (`npm run smoke:phase`)
+
+- **Command:** `npm run smoke:phase` → `scripts/kane/phase-smoke.mts`. Self-contained:
+  spawns its own API (fixture Kane, `AI_MOCK=1`, ports 3111) and Vite (port
+  5112, generated proxy config under gitignored `.data/`), drives real
+  headless Chrome over raw CDP, then kills everything. Zero Kane credits,
+  zero LLM calls.
+- **Layer A (route):** replays list contains `space-shooter-fire`; fixture
+  one-shot phase passes with typed inputs/frames/evidence/duration; unknown
+  replay key → 400; wrong-phase key → 400.
+- **Layer B (browser):** create Space Shooter starter (`project-new` →
+  `game-starter-space-shooter` → `project-create`) → editor →
+  `toolbar-ai-play` → seeded unapproved draft renders (`test-plan-draft`)
+  → `test-plan-approve` → `test-plan-replay-fire-creates-projectile` →
+  `test-plan-result-fire-creates-projectile[data-verdict=passed]` with 2/2
+  passed checks, `/api/kane/runs/<id>/evidence` link (download verified),
+  `test-plan-report[data-report-verdict=passed]` →
+  `test-plan-explain-…` opens the agent chat and the mock model replies.
+- **Console:** zero page exceptions and zero error-level console/log entries.
+  The only noise found was `/favicon.ico` 404ing twice — fixed with
+  `public/favicon.svg` + a `rel=icon` link in `index.html`, not filtered.
+- **Stand-ins (documented):** the draft is seeded, not model-authored, and the
+  follow-up reply is the mock model — model authoring and the semantic
+  follow-up were proven against live models in Phases 3 and 5. The agent
+  tool path (`run_kane_test_phase`) was proven live in Phase 3; the smoke
+  exercises the panel path through the same route and judge.
+- **Result:** `SMOKE PASSED` (18/18 checks), `npm run typecheck` and
+  `npm run check:repo` clean.
