@@ -99,6 +99,7 @@ test("a saved-test run uses testmd with healing disabled", async () => {
       if (event.type === "run_end") {
         assert.match(command, /testmd run/);
         assert.match(command, /--no-adaptive-heal/);
+        assert.ok(!/--push/.test(command), "push needs lock-API credentials this environment lacks");
         assert.equal(event.result.status, "passed");
         assert.match(event.result.summary, /2 replayed, 0 authored/);
         return;

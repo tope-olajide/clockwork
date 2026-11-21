@@ -192,6 +192,10 @@ export function startKaneRun(options: KaneRunOptions): {
       // A replay failure must fail fast: adaptive healing re-authors steps and
       // burns the authoring cost this path exists to avoid.
       "--no-adaptive-heal",
+      // NOTE: no --push. It commits recordings via the lock API, but that
+      // endpoint rejects this environment's credentials (exit 2, no run),
+      // so it would break every replay run. Recordings are produced by the
+      // documented `run --name` flow and committed beside the _test.md file.
     ]
     : [
       ...cli.args,

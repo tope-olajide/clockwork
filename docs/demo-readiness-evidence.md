@@ -173,6 +173,17 @@ Total live-run spend for Phase 4: 4 paid Kane runs.
 
 Total live-run spend for Phase 6: 4 paid Kane runs (1 timeout probe + A + B + C).
 
+**Replay-chase follow-up (post-merge, on `main`):** balance 7430.03 → 7378.56.
+`--push` tried live through the phase route (run `431d81eb`,
+`inconclusive`/`infrastructure`, 5.8 s, 0 credits — lock-API auth wall) and
+reverted; two `run --name` tape-generation attempts failed on Kane step
+discipline (RESET keyboard trap; control-overlap click), ~51.5cr, no tapes
+kept. `replay_decisions > 0` remains unobserved; the unblock paths are in
+`docs/kane-proof.md`. Housekeeping: pruned 18 generated
+`.testmuai/tests/output-*/` dirs (failed `.staging` dirs included), kept all
+20 recorded `_test.md` files for a future retry; `.claude/skills/kane-cli`
+kept as the active skill install.
+
 ## Phase 7 — credit-free browser smoke (`npm run smoke:phase`)
 
 - **Command:** `npm run smoke:phase` → `scripts/kane/phase-smoke.mts`. Self-contained:
