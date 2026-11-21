@@ -3882,6 +3882,7 @@ a {
 .ai-hud-readout .ai-hud-error dd { color: #ffb4a6; }
 .ai-hud-readout footer { margin-top: 8px; color: rgba(241, 240, 237, .4); font: 10px/1.4 var(--font-mono); }
 .ai-hud-controls { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 6px; padding: 7px; background: rgba(11, 13, 18, .9); border: 1px solid rgba(255, 255, 255, .14); border-radius: 10px; pointer-events: auto; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
+.ai-hud-advance { bottom: 76px; }
 .ai-hud-button { border: 1px solid rgba(255, 255, 255, .18); background: rgba(255, 255, 255, .06); color: #f1f0ed; border-radius: 7px; padding: 8px 10px; font: 600 10px/1 var(--font-mono); letter-spacing: .06em; cursor: pointer; min-height: 34px; }
 .ai-hud-button span { display: block; margin-top: 3px; color: rgba(241, 240, 237, .5); font-size: 9px; }
 .ai-hud-button.on { border-color: #8f6bff; background: rgba(143, 107, 255, .26); }

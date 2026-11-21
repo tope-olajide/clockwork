@@ -124,7 +124,7 @@ export function TestModeHud({ document, profile, controller, seed, scenarioId, o
         ))}
       </div>
 
-      <div className="ai-hud-controls" role="group" aria-label="Frame advancement">
+      <div className="ai-hud-controls ai-hud-advance" role="group" aria-label="Frame advancement">
         <label className="player-state">
           ADVANCE
           <input
