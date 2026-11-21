@@ -714,6 +714,10 @@ export function EditorPage() {
             + "Do not run Kane, do not edit the project, and if something the user asked for is not expressible, say so instead of approximating it.",
           );
         }}
+        onPhaseResult={(result) => {
+          setAgentOpen(true);
+          void agent.continueWithPhaseResult(result);
+        }}
         onUndoFix={() => { undo(); toast.push("AI fixes undone", "The last editor change was reverted."); }}
       />
       <AgentDrawer

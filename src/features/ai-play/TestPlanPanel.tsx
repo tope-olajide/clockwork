@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ClipboardList, Play, Sparkles, X } from "lucide-react";
 import { Button } from "../../components/ui";
 import type { ProjectDocument } from "../../engine/model/schema";
+import type { KanePhaseResult } from "@shared/protocol/game-testing";
 import { gameTestProfileForDocument } from "../../engine/model/game-test-profile";
 import {
   approveDraft,
@@ -16,9 +17,11 @@ interface TestPlanPanelProps {
   modelLabel: string;
   /** Sends the goal to the planning model; it must not start Kane. */
   onRequestPlan: (goal: string) => void;
+  /** Hands a stored phase result to the agent as a typed tool continuation. */
+  onPhaseResult: (result: KanePhaseResult) => void;
 }
 
-export function TestPlanPanel({ document, modelLabel, onRequestPlan }: TestPlanPanelProps) {
+export function TestPlanPanel({ document, modelLabel, onRequestPlan, onPhaseResult }: TestPlanPanelProps) {
   const profile = gameTestProfileForDocument(document);
   const draft = useTestPlanStore((state) => state.draft);
   const errors = useTestPlanStore((state) => state.errors);
@@ -210,6 +213,17 @@ export function TestPlanPanel({ document, modelLabel, onRequestPlan }: TestPlanP
                       {result.evidenceUrl && (
                         <a href={result.evidenceUrl} data-testid={`test-plan-evidence-${phase.id}`}>Evidence</a>
                       )}
+                      <div className="ai-play-actions">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`test-plan-explain-${phase.id}`}
+                          onClick={() => onPhaseResult(result)}
+                          title="Append this result to the agent conversation so it can explain it and plan a follow-up."
+                        >
+                          Explain in agent
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </li>

@@ -109,21 +109,21 @@ runs outside its observed context are recorded in
 
 ## Phase 5 — Close the panel-to-agent feedback loop
 
-- [ ] A phase run started from `TestPlanPanel` can be handed to the agent without
+- [x] A phase run started from `TestPlanPanel` can be handed to the agent without
       pretending it is a fake user message.
-- [ ] The phase result is appended to the same conversation as a typed tool result
+- [x] The phase result is appended to the same conversation as a typed tool result
       or an equivalent structured continuation.
-- [ ] The agent can explain the result and request a follow-up phase.
-- [ ] `run_kane_test_phase` has a dedicated rich result card:
-      - [ ] phase id and verdict
-      - [ ] failure kind
-      - [ ] assertion values
-      - [ ] applied inputs and frames
-      - [ ] evidence link
-      - [ ] duration
-- [ ] The direct panel path and agent path do not display contradictory verdicts.
-- [ ] Focused tests cover the result-card/continuation shape.
-- [ ] Typecheck passes.
+- [x] The agent can explain the result and request a follow-up phase.
+- [x] `run_kane_test_phase` has a dedicated rich result card:
+      - [x] phase id and verdict
+      - [x] failure kind
+      - [x] assertion values
+      - [x] applied inputs and frames
+      - [x] evidence link
+      - [x] duration
+- [x] The direct panel path and agent path do not display contradictory verdicts.
+- [x] Focused tests cover the result-card/continuation shape.
+- [x] Typecheck passes.
 
 **Gate:** judges do not need to understand the difference between two separate
 phase-running paths to see the closed loop.
@@ -188,7 +188,7 @@ until this phase is fully checked.
 | 2 — Submission surface | Complete |
 | 3 — Live phase through agent | Complete |
 | 4 — Adaptive/failure proof | Complete |
-| 5 — Panel-to-agent loop | Not started |
+| 5 — Panel-to-agent loop | Complete |
 | 6 — `testmd` phase replay | Not started |
 | 7 — Browser smoke/demo | Not started |
 | 8 — Final verification | Not started |

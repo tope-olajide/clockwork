@@ -105,3 +105,28 @@ game-side kill chain is proven by attempt 3's in-game values. A second full
 runs were spent chasing model variance.
 
 Total live-run spend for Phase 4: 4 paid Kane runs.
+
+## Phase 5 — panel-to-agent feedback loop (code-verified, no live run)
+
+- Every stored phase result now has an **Explain in agent** button
+  (`test-plan-explain-<phaseId>`) in `TestPlanPanel`. It calls
+  `agent.continueWithPhaseResult`, which appends the result to the same
+  conversation as a typed `run_kane_test_phase` tool message — never a fake
+  user message — then runs a model turn so the agent explains it and may
+  request a follow-up phase with its own tool call.
+- The agent loop was refactored so `send` (user message) and
+  `continueWithPhaseResult` (panel result) share one `runTurn`: same
+  8-step tool loop, same revision-recovery, same error mapping.
+- `run_kane_test_phase` tool cards render a dedicated rich card
+  (`kane-phase-card`): phase id + verdict, failure kind, per-assertion values,
+  accepted inputs and frames (`unknown`, never `0`, when null), duration and
+  evidence link.
+- Both paths build their payload with one `phaseResultPayload` from the single
+  stored `KanePhaseResult`, so the panel block and the agent card cannot show
+  contradictory verdicts.
+- `tests/kane-phase-continuation.test.ts` (6 tests) covers payload fidelity,
+  the tool-not-user continuation shape, card fields, verdict tones and the
+  null-inputs rule. `npm run typecheck` passes.
+- Honest scope note: verified by typecheck + unit tests only. No live Kane
+  run was spent proving the handoff end to end; that is Phase 7 demo-video
+  material.

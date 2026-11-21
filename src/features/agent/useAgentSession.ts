@@ -16,6 +16,8 @@ import { streamAiPlay, verifyWithKane } from "../../engine/ai/kane-api";
 import { aiPlayArgsFromToolCall } from "./kane-tool-args";
 import { useTestPlanStore } from "../ai-play/test-plan-store";
 import { runApprovedPhase } from "../ai-play/phase-runner";
+import { buildPhaseContinuation, continuationChatMessage, phaseResultPayload } from "./phase-continuation";
+import type { KanePhaseResult } from "@shared/protocol/game-testing";
 import { gameTestProfileForDocument } from "../../engine/model/game-test-profile";
 
 export type AgentStatus = "ready" | "thinking" | "streaming" | "tool" | "error";
@@ -286,25 +288,9 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       try {
         const result = await runApprovedPhase({ draft, document: doc, profile, phaseId });
         useTestPlanStore.getState().recordPhaseResult(draft, result);
-        return ok({
-          phaseId: result.phaseId,
-          phaseIndex: result.phaseIndex,
-          verdict: result.verdict,
-          failureKind: result.failureKind,
-          reason: result.reason,
-          summary: result.summary,
-          kaneStatus: result.kaneStatus,
-          checks: result.checks,
-          acceptedInputs: result.acceptedInputs,
-          framesAdvanced: result.framesAdvanced,
-          finalState: result.finalState,
-          durationMs: result.durationMs,
-          steps: result.steps.slice(-12),
-          runtimeErrors: result.runtimeErrors,
-          evidenceUrl: result.evidenceUrl,
-          testUrl: result.testUrl,
-          snapshotId: result.snapshotId,
-        });
+        // The panel-to-agent handoff builds the same payload, so both paths
+        // render one verdict for one stored result.
+        return ok(phaseResultPayload(result));
       } catch (error) {
         return fail(error instanceof Error ? error.message : "Kane phase failed.");
       }
@@ -472,63 +458,15 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     setPendingPreview(null);
   }, [pendingPreview]);
 
-  const send = useCallback(async (text: string, attachments?: ChatAttachment[], replaceUserId?: string) => {
-    const trimmed = text.trim();
-    if (!trimmed && !attachments?.length) return;
-    const store = useEngineStore.getState();
-    const doc = store.document;
-    if (!doc) return;
-
-    // Block before touching the network. Sending anyway produces a raw provider
-    // failure (Kane's K2 run caught this as "fetch failure" with "No model").
-    if (!mock) {
-      if (!effectiveModel) {
-        setError({
-          message: "No model is selected. Choose a model to use the agent; manual editing and Play keep working without one.",
-          code: "no-model",
-          action: "choose-model",
-        });
-        setStatus("error");
-        return;
-      }
-      if (!providerConfigured) {
-        setError({
-          message: `${effectiveModel.label} has no API key configured. Add a key in Settings → AI Models, or choose a model whose provider is connected.`,
-          code: "no-key",
-          action: "open-settings",
-        });
-        setStatus("error");
-        return;
-      }
-      if ((mode === "build" || mode === "plan") && !canUseTools) {
-        setError({
-          message: "Build and Plan need a tool-capable model. Choose one, or switch to Ask.",
-          code: "no-tools",
-          action: "choose-model",
-        });
-        setStatus("error");
-        return;
-      }
-    }
-
-    setError(null);
-    useAgentPresenceStore.getState().clearPresence();
-    const replaceIndex = replaceUserId ? messages.findIndex((message) => message.id === replaceUserId) : -1;
-    const baseMessages = replaceIndex >= 0 ? messages.slice(0, replaceIndex) : messages;
-    const userMsg: DisplayMessage = {
-      id: nanoid(),
-      role: "user",
-      content: trimmed || "Use the attached files in this game.",
-      createdAt: new Date().toISOString(),
-      ...(attachments?.length ? { attachments } : {}),
-    };
-    setMessages([...baseMessages.filter((message) => !message.streaming), userMsg]);
-
-    const abort = new AbortController();
-    abortRef.current = abort;
-
-    const run = async () => {
-      let conversation: AgentChatMessage[] = [...baseMessages.filter((m) => !m.streaming), userMsg].map(({ streaming, toolCard, ...m }) => m);
+  /**
+   * Runs one model turn against an explicit conversation. `send` builds a
+   * conversation from a new user message; `continueWithPhaseResult` builds one
+   * from a panel-started phase result appended as a typed tool message. Both
+   * share the loop so the agent explains either source the same way.
+   */
+  const runTurn = useCallback(async (initialConversation: AgentChatMessage[], abort: AbortController) => {
+    try {
+      let conversation: AgentChatMessage[] = initialConversation;
       const turnTransactionId = nanoid();
       let replanCount = 0;
       for (let step = 0; step < 8; step++) {
@@ -632,10 +570,6 @@ export function useAgentSession(args: UseAgentSessionArgs) {
         }
       }
       setStatus("ready");
-    };
-
-    try {
-      await run();
     } catch (e) {
       if ((e as Error).name === "AbortError") {
         setStatus("ready");
@@ -654,7 +588,124 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
     }
-  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModel, effectiveModelId, executeAgentTool, messages, mock, mode, providerConfigured, canUseTools]);
+  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, executeAgentTool, mode]);
+
+  const send = useCallback(async (text: string, attachments?: ChatAttachment[], replaceUserId?: string) => {
+    const trimmed = text.trim();
+    if (!trimmed && !attachments?.length) return;
+    const store = useEngineStore.getState();
+    const doc = store.document;
+    if (!doc) return;
+
+    // Block before touching the network. Sending anyway produces a raw provider
+    // failure (Kane's K2 run caught this as "fetch failure" with "No model").
+    if (!mock) {
+      if (!effectiveModel) {
+        setError({
+          message: "No model is selected. Choose a model to use the agent; manual editing and Play keep working without one.",
+          code: "no-model",
+          action: "choose-model",
+        });
+        setStatus("error");
+        return;
+      }
+      if (!providerConfigured) {
+        setError({
+          message: `${effectiveModel.label} has no API key configured. Add a key in Settings → AI Models, or choose a model whose provider is connected.`,
+          code: "no-key",
+          action: "open-settings",
+        });
+        setStatus("error");
+        return;
+      }
+      if ((mode === "build" || mode === "plan") && !canUseTools) {
+        setError({
+          message: "Build and Plan need a tool-capable model. Choose one, or switch to Ask.",
+          code: "no-tools",
+          action: "choose-model",
+        });
+        setStatus("error");
+        return;
+      }
+    }
+
+    setError(null);
+    useAgentPresenceStore.getState().clearPresence();
+    const replaceIndex = replaceUserId ? messages.findIndex((message) => message.id === replaceUserId) : -1;
+    const baseMessages = replaceIndex >= 0 ? messages.slice(0, replaceIndex) : messages;
+    const userMsg: DisplayMessage = {
+      id: nanoid(),
+      role: "user",
+      content: trimmed || "Use the attached files in this game.",
+      createdAt: new Date().toISOString(),
+      ...(attachments?.length ? { attachments } : {}),
+    };
+    setMessages([...baseMessages.filter((message) => !message.streaming), userMsg]);
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    const initialConversation: AgentChatMessage[] = [...baseMessages.filter((m) => !m.streaming), userMsg].map(({ streaming, toolCard, ...m }) => m);
+
+    await runTurn(initialConversation, abort);
+  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModel, effectiveModelId, executeAgentTool, messages, mock, mode, providerConfigured, canUseTools, runTurn]);
+
+  /**
+   * Hands a panel-started phase to the agent. The stored result is appended
+   * to the same conversation as a typed `run_kane_test_phase` tool result —
+   * not as a fake user message — and then runs a model turn so the agent
+   * explains it and may request a follow-up phase with its own tool call.
+   */
+  const continueWithPhaseResult = useCallback(async (result: KanePhaseResult) => {
+    const store = useEngineStore.getState();
+    const doc = store.document;
+    if (!doc) {
+      setError({ message: "No project open.", action: "retry" });
+      setStatus("error");
+      return;
+    }
+    if (!mock) {
+      if (!effectiveModel) {
+        setError({
+          message: "No model is selected. Choose a model to use the agent; manual editing and Play keep working without one.",
+          code: "no-model",
+          action: "choose-model",
+        });
+        setStatus("error");
+        return;
+      }
+      if (!providerConfigured) {
+        setError({
+          message: `${effectiveModel.label} has no API key configured. Add a key in Settings → AI Models, or choose a model whose provider is connected.`,
+          code: "no-key",
+          action: "open-settings",
+        });
+        setStatus("error");
+        return;
+      }
+    }
+    setError(null);
+    const continuation = buildPhaseContinuation(result, doc.revision, nanoid());
+    const display: DisplayMessage = {
+      id: nanoid(),
+      role: "tool",
+      content: "",
+      createdAt: new Date().toISOString(),
+      toolCallId: continuation.toolCallId,
+      toolName: continuation.toolName,
+      toolArgs: continuation.toolArgs,
+      toolCard: { id: continuation.toolCallId, name: continuation.toolName, args: continuation.toolArgs, status: "done", result: continuation.toolResult },
+    };
+    const base = messages.filter((message) => !message.streaming);
+    const conversation: AgentChatMessage[] = [
+      ...base.map(({ streaming, toolCard, ...m }) => m),
+      continuationChatMessage(continuation, nanoid()),
+    ];
+    setMessages([...base, display]);
+    const abort = new AbortController();
+    abortRef.current = abort;
+    await runTurn(conversation, abort);
+  }, [messages, mock, effectiveModel, providerConfigured, runTurn]);
 
   const isBusy = status === "thinking" || status === "streaming" || status === "tool";
 
@@ -703,6 +754,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     modelLabel,
     isBusy,
     send,
+    continueWithPhaseResult,
     stop,
     retry,
     regenerate,
@@ -716,7 +768,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     pendingPreview,
     applyPendingPreview,
     discardPendingPreview,
-  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, stop, retry, regenerate, newChat, sessionId, sessions, openChat, deleteChatSession, renameChatSession, refreshAiMeta, pendingPreview, applyPendingPreview, discardPendingPreview]);
+  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, continueWithPhaseResult, stop, retry, regenerate, newChat, sessionId, sessions, openChat, deleteChatSession, renameChatSession, refreshAiMeta, pendingPreview, applyPendingPreview, discardPendingPreview]);
 }
 
 function toSummary(record: ChatRecord): ChatSessionSummary {

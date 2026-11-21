@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Image as ImageIcon, Loader2, Wrench } from "lucide-react";
 import type { AgentToolCard } from "../useAgentSession";
+import { phaseCardView } from "../phase-continuation";
 
 const LABELS: Record<string, string> = {
   list_scenes: "Listing scenes",
@@ -45,6 +46,32 @@ export function ToolActivity({ card }: { card: AgentToolCard }) {
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </span>
       </button>
+      {data && card.name === "run_kane_test_phase" && (() => {
+        const view = phaseCardView(data);
+        if (!view) return null;
+        return (
+          <div className="kane-run-card" data-testid="kane-phase-card">
+            <div className="kane-run-head">
+              <span className={`chip ${view.verdictTone === "success" ? "success" : view.verdictTone === "danger" ? "danger" : "violet"}`} data-testid="kane-phase-verdict">{view.verdictLabel}</span>
+              <strong>KANE PHASE · {view.phaseId}</strong>
+              <span data-testid="kane-phase-failure">{view.failureLabel}</span>
+            </div>
+            <p>{view.reason}</p>
+            <ul data-testid="kane-phase-checks">
+              {view.checks.map((check) => (
+                <li key={check.id} data-check-status={check.status}>{check.text} · {check.status}</li>
+              ))}
+            </ul>
+            <div className="kane-run-state" data-testid="kane-phase-totals">
+              Accepted inputs: {view.inputsLabel} · Frames: {view.framesLabel}
+            </div>
+            {typeof data.durationMs === "number" && (data.durationMs as number) > 0 && (
+              <span data-testid="kane-phase-duration">{view.durationLabel}</span>
+            )}
+            {view.evidenceUrl && <a href={view.evidenceUrl} target="_blank" rel="noreferrer">Open evidence</a>}
+          </div>
+        );
+      })()}
       {data && (card.name === "verify_with_kane" || card.name === "run_ai_play") && (
         <div className="kane-run-card" data-testid="kane-run-card">
           <div className="kane-run-head">
