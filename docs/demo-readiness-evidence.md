@@ -49,3 +49,59 @@ record.
 | `b967bbdd-…` | **PASSED** | 5-step compact sequence, 240 s budget, 79.7 s actual. |
 
 Total live-run spend for Phase 3, including diagnosis: 8 paid Kane runs.
+
+## Phase 4 — the adaptive kill-chain follow-up
+
+Decision rule (recorded before acting): Phase 3 proved input creates
+projectiles. The profile's own objective ladder says the next causal link is
+shoot-destroys-enemy, so Phase 4 tests exactly that: a fired projectile kills
+the `shooting-range` Raider, a death is recorded, score increases. Every
+revision below was driven by artifact analysis of the previous attempt, and
+every attempt ran through the agent path (draft → approval →
+`run_kane_test_phase` → agent follow-up).
+
+- **Attempt 1 — `f1780d7f` (inconclusive, timeout, 248 s).** Kane held SHOOT
+  and clicked STEP once at the default 10-frame advance (≈ 130 px of bullet
+  travel against a Raider ≈ 480 px up the lane), then stalled with no further
+  instruction: the agent-drafted phase never told it to type 150 or click STEP.
+  All checks `missing`. Lesson: the plan must spell out the time advance, not
+  just the read.
+- **Attempt 2 — `466e66d8` (failed, step budget, 103.9 s).** Gameplay done
+  right (SHOOT, typed 150, STEP, released), but Kane saved only FRAME at step
+  8 then burned the rest on waits. No observation of an effect — correctly
+  recorded as failure, never as a pass.
+- **Attempt 3 — `e367aea0` (Kane `passed`, verdict inconclusive/observation,
+  96 s, ≈ 28.9 credits).** The kill chain works in-game: 12 shots fired,
+  1 target destroyed, score 100, hull untouched at 3, 150 frames, evidence +
+  Test Manager links. But Kane saved `shots_fired` (underscore) instead of
+  the exact id `shots-fired` (hyphen), so one required check went `missing`
+  and the pipeline refused the pass. This is the verdict pipeline proving a
+  near-miss with the same rigor as a pass.
+- **Attempt 4 — `ef3a47a9` (Kane `failed`, verdict inconclusive/observation,
+  95.8 s, ≈ 28.4 credits).** Kane used a `wait` step despite the plan
+  forbidding it, burned the 8-step budget, recorded nothing. Correctly
+  classified, evidence attached.
+
+**Agent behavior worth the blog:**
+
+- After each attempt the agent diagnosed from artifacts (not vibes): the
+  10-frame-vs-480px analysis, "no observation of an effect is different from
+  an effect that failed to occur", refusal to infer the kill.
+- It caught a real product-rule subtlety I initially got wrong: cutting the
+  read list to three values would make a pass structurally impossible,
+  because the judge requires `accepted_inputs` and `frames_advanced`.
+- Most importantly: when asked for the final summary, the agent disclosed
+  that two run ids (the Phase 3 pass and attempt 1) were outside its current
+  tool-output context after a page reload, reported them as user-reported
+  only, and refused to certify a pass it did not observe. The honesty
+  pipeline holds at the conversation layer too — a model that will not claim
+  what it cannot source.
+
+**Phase 4 status:** the adaptive loop is demonstrated (artifact-driven
+revisions, typed results, agent follow-ups, agent-proposed fixes), and the
+game-side kill chain is proven by attempt 3's in-game values. A second full
+`passed` verdict remains open: the blocker is Kane-model step discipline
+(wait habit, exact key naming), not the game or the harness. No further paid
+runs were spent chasing model variance.
+
+Total live-run spend for Phase 4: 4 paid Kane runs.

@@ -81,24 +81,31 @@ input, 45 frames, shots-fired 3, projectiles 3, evidence + Test Manager links in
 
 ## Phase 4 — Prove the adaptive decision or a deliberate failure
 
-- [ ] Choose the next phase from the Phase 3 observations, not from a prewritten
+- [x] Choose the next phase from the Phase 3 observations, not from a prewritten
       unconditional second run.
-- [ ] Record the decision rule explicitly:
-      - [ ] no applied input → diagnose the input bridge
-      - [ ] input applied but effect missing → diagnose the effect
-      - [ ] effect present but target/score unchanged → diagnose collision/rule
-      - [ ] all criteria passed → stop or test a distinct objective
-- [ ] Run the second phase through the agent path, or run a deliberate assertion
+- [x] Record the decision rule explicitly:
+      - [x] no applied input → diagnose the input bridge
+      - [x] input applied but effect missing → diagnose the effect
+      - [x] effect present but target/score unchanged → diagnose collision/rule
+      - [x] all criteria passed → stop or test a distinct objective
+- [x] Run the second phase through the agent path, or run a deliberate assertion
       failure if that is more informative.
-- [ ] Record the second typed result with the same evidence fields as Phase 3.
-- [ ] The final agent response summarizes both phases with PASS/FAIL/INCONCLUSIVE
+- [x] Record the second typed result with the same evidence fields as Phase 3.
+- [x] The final agent response summarizes both phases with PASS/FAIL/INCONCLUSIVE
       per criterion and evidence links.
-- [ ] A timeout or missing-observation case is recorded as `INCONCLUSIVE` at least
+- [x] A timeout or missing-observation case is recorded as `INCONCLUSIVE` at least
       once, if obtainable without spending an unreasonable number of credits.
-- [ ] Evidence/transcript is added to the tracked demo evidence artifact.
+- [x] Evidence/transcript is added to the tracked demo evidence artifact.
 
 **Gate:** the second action is demonstrably driven by the first result, or a failure
 is honestly classified. One phase alone is not enough.
+
+**Completed:** four `shoot-destroys-raider` attempts through the agent path —
+timeout, step-budget failure, Kane-passed-but-key-mismatch inconclusive
+(destroyed 1, score 100 proven in-game), wait-wasted inconclusive. The adaptive
+loop, the verdict rigor on non-passes, and the agent's refusal to certify
+runs outside its observed context are recorded in
+`docs/demo-readiness-evidence.md`.
 
 ## Phase 5 — Close the panel-to-agent feedback loop
 
@@ -180,7 +187,7 @@ until this phase is fully checked.
 | 1 — Commit/push phase fixes | Complete |
 | 2 — Submission surface | Complete |
 | 3 — Live phase through agent | Complete |
-| 4 — Adaptive/failure proof | Not started |
+| 4 — Adaptive/failure proof | Complete |
 | 5 — Panel-to-agent loop | Not started |
 | 6 — `testmd` phase replay | Not started |
 | 7 — Browser smoke/demo | Not started |
