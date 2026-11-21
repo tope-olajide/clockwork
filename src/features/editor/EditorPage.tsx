@@ -604,7 +604,7 @@ export function EditorPage() {
               <MenuItem onSelect={addObject} disabled={readOnly}>Add object</MenuItem>
               <MenuItem onSelect={addScene} disabled={readOnly}>Add scene</MenuItem>
               <MenuItem onSelect={addLayer} disabled={readOnly}>Add layer</MenuItem>
-              <MenuItem onSelect={() => toast.push("Import asset", "Asset import arrives in Slice 3.")}>Import asset</MenuItem>
+              <MenuItem onSelect={() => toast.push("Import asset", "Open the Assets workspace to import or drag in an asset.")}>Import asset</MenuItem>
             </Menu>
             <Menu trigger={<Button variant="ghost" size="sm">Snap <ChevronDown size={11} /></Button>}>
               <MenuLabel>Snap</MenuLabel>

@@ -28,11 +28,11 @@ import { TEMPLATE_LABELS, formatEdited } from "../projects/project-view";
 const placeholderSections = {
   assets: {
     title: "Assets",
-    body: "The project-wide asset library lands in Slice 3. Scene-level content stays in the Content workspace.",
+    body: "Open the project's Assets workspace to browse, import and edit project-wide assets. Scene-level content stays in the Content workspace.",
   },
   playtest: {
     title: "Playtest",
-    body: "Manual Play and runtime telemetry arrive in Slice 4. AI Play with Kane arrives in Slice 10.",
+    body: "Open a scene to play it manually, or use AI Testing to review and run a Kane browser test.",
   },
 } as const;
 

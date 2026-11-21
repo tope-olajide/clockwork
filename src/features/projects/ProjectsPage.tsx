@@ -293,8 +293,8 @@ export function ProjectsPage() {
     onHierarchy: () => toast.push("Hierarchy", "Open a project to use the editor docks."),
     onInspector: () => toast.push("Inspector", "Open a project to use the inspector."),
     onPlay: () => toast.push("Play", "Open a scene to play it."),
-    onAiPlay: () => toast.push("AI Play", "AI Play arrives with Kane in Slice 10."),
-    onSettings: () => toast.push("Settings", "AI settings arrive in Slice 6.5."),
+    onAiPlay: () => toast.push("AI Testing", "Open a project to test it with Kane."),
+    onSettings: () => toast.push("Settings", "Open a project to change its AI model settings."),
     onToast: toast.push,
   });
 

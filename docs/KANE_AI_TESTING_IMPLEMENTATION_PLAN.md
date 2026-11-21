@@ -1,7 +1,7 @@
 # Kane + Clockwork AI game-testing implementation plan
 
-- **Status:** Architecture and implementation plan only. No features in this plan have been implemented.
-- **Date:** 2026-11-18
+- **Status:** Implemented through the typed Kane phase coordinator and Test Mode. Local tests pass; the live approved-plan Kane run and adaptive follow-up still need recorded evidence. See [`demo-readiness.md`](./demo-readiness.md).
+- **Date:** 2026-11-18 (implementation status updated 2026-11-21)
 - **Repository branch at audit:** `feat/game-starter-templates`
 - **Primary vertical slice:** Space Shooter, using the existing project model, fixed-step runtime, AI agent, AI Play snapshot flow, and Kane CLI integration.
 - **Goal:** Let a user describe a gameplay test in natural language, have Clockwork's configured AI understand and plan it, have Kane CLI genuinely operate and verify the actual browser game, and feed Kane's evidence back to Clockwork's AI for a bounded next decision.

@@ -34,7 +34,7 @@ The planner and browser operator are different systems. The report names the Clo
 
 The report is built from typed phase results, never from a Kane exit code alone. It includes the user goal, plan revision, project revision, scene, scenario, seed, budget, planner model, Kane CLI version, every approved assertion with its status and observed value, evidence links, follow-up actions and limitations. It also separates what the engine agent **inferred** from what Kane **directly observed**.
 
-A phase passes only when Kane reports a passing terminal verdict, every approved observation is present and matches, required inputs were accepted, an evidence bundle exists and no runtime error was reported. Missing observations, missing evidence, timeouts, cancellations, runtime errors and unrun phases stay visible and can never become PASS.
+A phase passes only when Kane reports a passing terminal verdict, every approved observation is present and matches, required inputs were actually delivered to a runtime frame, the reported frame count is within the approved budget, an evidence bundle exists and no runtime error was reported. Missing or undelivered input is INCONCLUSIVE, not a product failure. Missing observations, missing evidence, over-budget frames, timeouts, cancellations, runtime errors and unrun phases stay visible and can never become PASS.
 
 **Stop phase** asks the server to terminate the active Kane process. The result is recorded as `cancelled` and is not retried automatically. A reload restores saved results only for the exact plan fingerprint (project, revision, scene, seed and phase content); if the project revision changed, the panel says the saved results are stale, disables approval/run and asks for a new plan. **Replay saved result** reuses the server's idempotent phase result instead of paying for another Kane run.
 
@@ -45,8 +45,10 @@ Local filesystem paths are stripped from user-visible summaries, steps, observat
 `/s/:snapshotId?ai=1&testMode=step&seed=1234` opens the snapshot player in lockstep Test
 Mode: the runtime starts paused at frame 0 with no real-time loop, controls are labelled
 from the template's game-test profile (`MOVE LEFT`, `SHOOT`, ...), and frames advance only
-through a bounded **ADVANCE** request. Every control produces an input receipt with the
-frames that actually carried the action, and a rejected or clamped request says so.
+through a bounded **ADVANCE** request. Kane is told to click the visible control, enter
+an approved frame count and press **STEP**; pressing a control alone does not advance the
+game. Every control produces an input receipt with the frames that actually carried the
+action, and a rejected or clamped request says so.
 
 Test Mode requires a registered profile. A template without one reports
 `TEST MODE UNAVAILABLE` and stays at frame zero rather than approximating controls. Normal

@@ -30,23 +30,25 @@ push is confirmed.
 
 ## Phase 2 — Make the submission surface match the product
 
-- [ ] README describes the shipped AI Testing / Kane phase flow, setup and demo path.
-- [ ] `features.md` lists the completed AI Testing, Kane Test Mode, chat redesign,
+- [x] README describes the shipped AI Testing / Kane phase flow, setup and demo path.
+- [x] `features.md` lists the completed AI Testing, Kane Test Mode, chat redesign,
       attachments and chat history features.
-- [ ] `docs/known-issues.md` reflects the current phase status and open items.
-- [ ] `docs/ai-play.md` is updated for applied-input and frame-budget semantics.
-- [ ] `docs/KANE_AI_TESTING_IMPLEMENTATION_PLAN.md` no longer says no features were implemented.
-- [ ] Stale “arrives in Slice …” UI copy is removed:
-      - [ ] Projects command palette AI Play toast
-      - [ ] Project overview Playtest placeholder
-      - [ ] Editor import-asset menu item
-      - [ ] TopBar help/feedback toasts
-      - [ ] Command palette assets toast
-- [ ] `npm run check:repo` passes.
-- [ ] Docs/UI changes are committed and pushed.
+- [x] `docs/known-issues.md` reflects the current phase status and open items.
+- [x] `docs/ai-play.md` is updated for applied-input and frame-budget semantics.
+- [x] `docs/KANE_AI_TESTING_IMPLEMENTATION_PLAN.md` no longer says no features were implemented.
+- [x] Stale “arrives in Slice …” UI copy is removed:
+      - [x] Projects command palette AI Play toast
+      - [x] Project overview Playtest placeholder
+      - [x] Editor import-asset menu item
+      - [x] TopBar help/feedback toasts
+      - [x] Command palette assets toast
+- [x] `npm run check:repo` passes.
+- [x] Docs/UI changes are committed and pushed.
 
 **Gate:** a judge can read the repo and use the app without seeing the main feature
 described as future work.
+
+**Completed:** Phase 2 commit on this branch (README/docs/UI alignment).
 
 ## Phase 3 — One live Space Shooter phase through the agent
 
@@ -172,7 +174,7 @@ until this phase is fully checked.
 | Phase | Status |
 |---|---|
 | 1 — Commit/push phase fixes | Complete |
-| 2 — Submission surface | Not started |
+| 2 — Submission surface | Complete |
 | 3 — Live phase through agent | Not started |
 | 4 — Adaptive/failure proof | Not started |
 | 5 — Panel-to-agent loop | Not started |

@@ -73,7 +73,7 @@ export function TopBar({
           <MenuItem shortcut="1–4">Switch workspace</MenuItem>
           <MenuItem shortcut="⌘S">Save project</MenuItem>
           <MenuSeparator />
-          <MenuItem onSelect={() => toast.push("Help is offline", "The full shortcut sheet arrives in Slice 1.")}>
+          <MenuItem onSelect={() => toast.push("Keyboard shortcuts", "The shortcuts above work in the editor. A full searchable sheet is not included yet.")}>
             Open shortcut sheet
           </MenuItem>
         </Menu>
@@ -81,7 +81,7 @@ export function TopBar({
           className="icon-button feedback-button"
           aria-label="Send feedback"
           title="Send feedback"
-          onClick={() => toast.push("Feedback", "Feedback capture is a Slice 10 feature.")}
+          onClick={() => toast.push("Feedback", "Feedback capture is not included in this build.")}
         >
           <MessageSquare size={15} />
         </button>

@@ -194,17 +194,20 @@ scenario that fails validation against the run's start scene is not applied, and
 HUD reports the scenario it actually applied.
 
 A phase verdict is strict: `passed` requires a Kane pass, every assertion matched,
-at least one accepted input for a phase that uses controls, and an evidence bundle.
-Otherwise the result is `failed` (`product` or `input`), `inconclusive` (`observation`,
-`evidence`, `timeout`, `infrastructure`) or `cancelled`, with a reason and per-assertion
-actual values. The result is returned as a tool message in the same agent conversation
-and shown in the review panel.
+at least one input actually delivered to a runtime frame for a phase that uses controls,
+a reported frame count within budget, and an evidence bundle. Otherwise the result is
+`failed` (`product`), `inconclusive` (`input`, `observation`, `evidence`, `budget`,
+`timeout`, `infrastructure`) or `cancelled`, with a reason, per-assertion actual values
+and the delivered-input/frame counts. The result is returned as a tool message in the
+same agent conversation and shown in the review panel.
 
-Session state and idempotency are in-memory on the server for this phase: repeating the
-same session id + phase id replays the stored result instead of paying for a second run;
-restarting the server clears it. The client persists the returned phase results in
-`localStorage` under `clockwork:test-plan-runs:<projectId>:<sessionId>:<planFingerprint>`, so
-revising the plan does not show a previous plan's results.
+Session state and idempotency are in-memory on the server for this phase: repeating an
+identical approved plan fingerprint replays the stored result instead of paying for a
+second run; restarting the server clears it. The key is derived server-side, so changing
+the client session id cannot reset the phase budget. The client persists returned phase
+results in `localStorage` under
+`clockwork:test-plan-runs:<projectId>:<sessionId>:<planFingerprint>`, so revising the plan
+does not show a previous plan's results.
 
 Once a phase has run, `buildTestReport` (`src/engine/model/game-test-report.ts`)
 produces a per-criterion report from the approved assertions and the stored results. A

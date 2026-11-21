@@ -221,7 +221,7 @@ export function buildStubCommands({
       group: "Navigate",
       label: "Open project assets",
       icon: <Boxes size={14} />,
-      run: () => onToast("Assets", "The project-wide asset library arrives in Slice 3."),
+      run: () => onToast("Assets", "Open a project and use the Assets workspace to browse project assets."),
     },
     {
       id: "settings",
@@ -236,7 +236,7 @@ export function buildStubCommands({
       group: "Preferences",
       label: "Keyboard shortcuts",
       icon: <Command size={14} />,
-      run: () => onToast("Keyboard shortcuts", "The full shortcut sheet lands in Slice 1."),
+      run: () => onToast("Keyboard shortcuts", "Open the editor to use the current keyboard shortcuts."),
     },
   ];
 }

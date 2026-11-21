@@ -2,10 +2,18 @@
 
 This file records anything that could reduce confidence or score: incomplete features, failing checks, deferred verification, deliberate scope cuts, and environment requirements. Keep it honest and current. Do not hide a failure here to make the product look finished.
 
-**Last updated:** 2026-11-18 (Slice 10 verification; Kane engine QA and AI Play evidence landed)
-**Branch:** `main` (evidence collected on `verify/kane-e2e`, merged in PR #2)
+**Last updated:** 2026-11-21 (phase contract hardened; live phase acceptance still open)
+**Branch:** `feat/game-starter-templates`
 
 ## Current status
+
+- **The approved-plan Kane phase flow is implemented and locally tested, but not live-tested.** The phase objective now names visible controls and STEP advancement, frame budgets reach Test Mode, only delivered inputs count, no-input and over-budget results are INCONCLUSIVE, and baselines include the plan scene/scenario. What remains is one real approved phase through the agent, a second evidence-driven phase or deliberate failure, and tracked evidence. This is the top demo gate; see [`docs/demo-readiness.md`](demo-readiness.md).
+- **Phase result persistence is incomplete.** Server idempotency/budget state is in memory and is lost on restart. The client stores results in `localStorage`, but the server cannot replay a typed phase result after a restart.
+- **The direct test-plan panel does not feed the agent loop.** Running a phase from the panel records the result but does not append it to the agent conversation. Only the `run_kane_test_phase` agent tool closes the loop.
+- **Saved-test replay is not used by the phase runner.** `KANE_AI_PLAY_TEST` remains a legacy AI Play path and has no measured real replay. Every approved phase currently authors a fresh Kane run.
+- **The submission surface was stale.** README, `features.md`, this file, `docs/ai-play.md` and visible “arrives in Slice …” copy were updated on 2026-11-21; any remaining stale copy should be treated as a demo blocker.
+
+## Historical status
 
 - **Slice 1 implemented and committed (`10b839e`, with fixes in `748786a`) and most dashboard flows are now browser-verified.** Engine model, Zod schemas/migration, command bus + validation + patch history, IndexedDB persistence/autosave, `.clockwork.json` transfer, templates, and real dashboard/editor/overview/settings surfaces are wired up. Verified: creation through the dialog from all three templates, search, all three filter groups, archived read-only (overview + editor, `+ Add` blocked), restore, duplicate, delete with confirmation, and **download → delete → re-import with an identical document** (ids, revision, scenes, layers, objects, variables; `updatedAt` excluded).
 - **Slice 1 gate items now verified (26/26 run):** project and object rename, start-scene change plus fallback after deleting the start scene, add/delete scene/layer/object each with exactly one revision and one undo entry (and undo restoring counts), scene delete revision/undo, the `Unsaved → Saving… → Saved` transition, and malformed-import rejection with no partial project.
