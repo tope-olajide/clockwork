@@ -210,12 +210,13 @@ export function AiSettingsPanel() {
           <div className="detail-row"><span>Signed in</span><span className="value">{kane?.authenticated ? (kane.user ?? "yes") : "no"}</span></div>
           <div className="detail-row"><span>Engine QA</span><span className="value">{kane?.qaEnabled ? "enabled" : "disabled"}</span></div>
           <div className="detail-row"><span>AI Play</span><span className="value">{kane?.aiPlayEnabled ? "enabled" : "disabled"}</span></div>
+          <div className="detail-row"><span>Credit balance</span><span className="value">{kane?.credits === undefined ? "unknown" : kane.credits.toFixed(2)}</span></div>
           <div className="detail-row"><span>Evidence folder</span><span className="value input-mono">{kane?.evidenceDir ?? ".data/ai-play"}</span></div>
         </div>
         {kane?.reason && <p className="muted" style={{ color: "var(--amber)" }}>{kane.reason}</p>}
         <div className="layer-editor-actions" style={{ marginTop: 10 }}>
           <Button variant="secondary" size="sm" disabled={kaneBusy} onClick={() => void testKane()} data-testid="kane-test">{kaneBusy ? "Checking…" : "Test Kane"}</Button>
-          <span className="muted" style={{ fontSize: 11 }}>Set KANE_ENABLED=1 and KANE_AI_PLAY_ENABLED=1 on the server to enable runs.</span>
+          <span className="muted" style={{ fontSize: 11 }}>Kane is built in and enabled by default. Install and sign in with the Kane CLI; runs stop with an explicit message if the account has no credits.</span>
         </div>
       </section>
 

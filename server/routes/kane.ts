@@ -12,6 +12,7 @@ import { startKaneRun } from "../kane/runner";
 import { composePhaseObjective, judgePhase, phaseFingerprint, validatePhaseRequest } from "../kane/phase";
 import { redactAiPlayResult } from "../../shared/protocol/redaction";
 import { PhaseSessionStore } from "../kane/phase-session";
+import { kaneCreditsExhausted, parseKaneCreditBalance } from "../kane/credits";
 
 export const kaneRoutes = new Hono();
 
@@ -51,17 +52,13 @@ function execKane(extra: string[], timeout = 8_000): Promise<string> {
 async function readStatus(force = false): Promise<KaneCliStatus> {
   if (!force && statusCache && Date.now() - statusCache.at < 20_000) return statusCache.value;
   const base: KaneCliStatus = {
-    enabled: env.kaneEnabled,
-    qaEnabled: env.kaneEnabled,
-    aiPlayEnabled: env.kaneAiPlayEnabled,
+    enabled: true,
+    qaEnabled: true,
+    aiPlayEnabled: true,
     installed: false,
     authenticated: false,
     evidenceDir: env.kaneEvidenceDir,
   };
-  if (!env.kaneEnabled && !env.kaneAiPlayEnabled) {
-    statusCache = { at: Date.now(), value: base };
-    return base;
-  }
   try {
     const version = (await execKane(["--version"])).trim().split(/\s+/)[0];
     base.installed = Boolean(version);
@@ -80,8 +77,28 @@ async function readStatus(force = false): Promise<KaneCliStatus> {
   } catch {
     base.reason = "Kane CLI could not verify the signed-in account.";
   }
+  if (base.authenticated) {
+    try {
+      const balance = await execKane(["balance"]);
+      base.credits = parseKaneCreditBalance(balance);
+      if (kaneCreditsExhausted(base.credits)) {
+        base.reason = "Kane credits are exhausted. Add credits to your Kane account, then retry.";
+      }
+    } catch {
+      // Balance is best-effort; a failed lookup must not hide an installed, signed-in CLI.
+    }
+  }
   statusCache = { at: Date.now(), value: base };
   return base;
+}
+
+function creditsExhausted(c: any, status: KaneCliStatus) {
+  if (!kaneCreditsExhausted(status.credits)) return null;
+  return c.json({
+    ok: false,
+    error: "Kane credits are exhausted. Add credits to your Kane account, then retry.",
+    code: "kane-credits",
+  }, 402);
 }
 
 function playerOrigin(c: any): string {
@@ -139,9 +156,10 @@ kaneRoutes.get("/runs/:runId/evidence", (c) => {
 
 kaneRoutes.post("/qa", async (c) => {
   const status = await readStatus();
-  if (!env.kaneEnabled) return c.json({ ok: false, error: "Kane engine QA is disabled. Set KANE_ENABLED=1.", code: "kane-disabled" }, 404);
   if (!status.installed) return c.json({ ok: false, error: status.reason ?? "Kane CLI is not installed.", code: "kane-missing" }, 503);
   if (!status.authenticated) return c.json({ ok: false, error: "Kane CLI is not signed in.", code: "kane-auth" }, 401);
+  const noCredits = creditsExhausted(c, status);
+  if (noCredits) return noCredits;
   let body: KaneQaRequest;
   try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "Invalid JSON body." }, 400); }
   const objective = String(body.objective ?? "").trim();
@@ -168,12 +186,11 @@ kaneRoutes.post("/qa", async (c) => {
 });
 
 kaneRoutes.post("/ai-play", async (c) => {
-  if (!env.kaneEnabled || !env.kaneAiPlayEnabled) {
-    return c.json({ ok: false, error: "AI Play is disabled. Set KANE_ENABLED=1 and KANE_AI_PLAY_ENABLED=1.", code: "kane-disabled" }, 404);
-  }
   const status = await readStatus();
   if (!status.installed) return c.json({ ok: false, error: status.reason ?? "Kane CLI is not installed.", code: "kane-missing" }, 503);
   if (!status.authenticated) return c.json({ ok: false, error: "Kane CLI is not signed in.", code: "kane-auth" }, 401);
+  const noCredits = creditsExhausted(c, status);
+  if (noCredits) return noCredits;
   let body: AiPlayRequest;
   try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "Invalid JSON body." }, 400); }
   const snapshotId = String(body.snapshotId ?? "");
@@ -221,12 +238,11 @@ function phaseKey(projectId: string, sessionId: string): string {
 }
 
 kaneRoutes.post("/phase", async (c) => {
-  if (!env.kaneEnabled || !env.kaneAiPlayEnabled) {
-    return c.json({ ok: false, error: "Kane phases are disabled. Set KANE_ENABLED=1 and KANE_AI_PLAY_ENABLED=1.", code: "kane-disabled" }, 404);
-  }
   const status = await readStatus();
   if (!status.installed) return c.json({ ok: false, error: status.reason ?? "Kane CLI is not installed.", code: "kane-missing" }, 503);
   if (!status.authenticated) return c.json({ ok: false, error: "Kane CLI is not signed in.", code: "kane-auth" }, 401);
+  const noCredits = creditsExhausted(c, status);
+  if (noCredits) return noCredits;
   let body: unknown;
   try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "Invalid JSON body." }, 400); }
   const snapshotId = typeof (body as any)?.snapshotId === "string" ? (body as any).snapshotId : "";

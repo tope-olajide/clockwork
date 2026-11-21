@@ -137,7 +137,7 @@ Completed runs are written to `.data/ai-play/<runId>/result.json`, with `raw.ndj
 
 ## Agent tools
 
-When `KANE_ENABLED=1`, the agent catalog includes:
+The agent catalog always includes the Kane tools when the selected model supports tool use:
 
 - `verify_with_kane({ objective })` — creates a snapshot and returns the Kane verdict, steps, final state, and evidence.
 - `run_ai_play({ goal?, sceneId? })` — runs the in-product loop once and returns the structured result so the model can diagnose and apply a fix before calling it again. Retries are the model's decision across turns; the tool itself never repeats a run.
@@ -162,6 +162,6 @@ The repair moves the core above Ledge B with one `object.update`. The replay ass
 - Snapshot-only URLs; the client cannot submit a URL.
 - 1,000-character objective cap and 64 KB request body.
 - 180-second timeout, 40-step cap.
-- `KANE_AI_PLAY_ENABLED` and `KANE_ENABLED` are independent gates.
+- Kane has no feature flags. Installation, sign-in and a positive credit balance are the runtime gates.
 - Evidence, raw logs, and `.data` are gitignored.
 - AI Play is local/self-hosted in v1 because it launches Chrome.

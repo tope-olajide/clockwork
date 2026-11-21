@@ -45,8 +45,7 @@ Copy the variables you need into the environment of the API process:
 | `AI_MOCK=1` | Development-only mock model; never present as a real provider |
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Simple env-configured OpenAI-compatible model |
 | `CLOCKWORK_SECRET` | Extra secret mixed into the local key vault |
-| `KANE_ENABLED=1` | Enables Kane tools and the engine-QA route |
-| `KANE_AI_PLAY_ENABLED=1` | Enables AI Play and approved test phases |
+| Kane CLI login | Required; Kane is always enabled, with no feature flag |
 | `KANE_CLI` | Optional path or command for the Kane CLI |
 | `KANE_TIMEOUT_SECONDS`, `KANE_MAX_STEPS` | Bounded Kane run limits |
 | `CLOCKWORK_PUBLIC_URL` | Origin Kane opens (Vite in dev, usually `http://localhost:5173`) |

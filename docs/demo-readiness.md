@@ -52,8 +52,8 @@ described as future work.
 
 ## Phase 3 — One live Space Shooter phase through the agent
 
-- [ ] Server is running with `KANE_ENABLED=1`, `KANE_AI_PLAY_ENABLED=1` and a
-      tool-capable model configured.
+- [ ] Server is running with a signed-in Kane CLI, a positive credit balance and
+      a tool-capable model configured. Kane has no feature flag.
 - [ ] `kane-cli whoami` is authenticated and `/api/kane/status` reports ready.
 - [ ] Space Shooter project is open at a known revision.
 - [ ] Agent drafts a plan from a real user goal.

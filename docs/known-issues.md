@@ -89,7 +89,7 @@ Real Kane runs exist and are linked from [`docs/kane-proof.md`](kane-proof.md); 
 Proven with real runs:
 
 - Manual Play is independent of Kane and a model: K5's manual replay after the fix reached `WON` with three coins (the manual **no-model, `AI_ENABLED=0`** browser pass is still open, below).
-- `KANE_ENABLED=0` returns 404 for QA and AI Play and the tools are gated out of the catalog.
+- Kane is always enabled. Missing CLI, sign-out and zero credits now produce explicit errors; there is no environment flag to hide the feature.
 - Fixture streams render passed, failed and exit-2-with-no-`run_end` states, and the failed-step count is correct.
 - The AI Play objective speaks only in visible HUD labels and ends with `store ... as` plus assertions; a real run returned `status: "WON"`, `coins: "3"`, `last_error: "none"` in `run_end.final_state`.
 - Real closed loop, twice: the seeded embedded coin (K5, 81.5 s fail → 81.1 s pass) and an independent unsatisfiable win rule (negative control, 94.1 s fail → 81.6 s pass).

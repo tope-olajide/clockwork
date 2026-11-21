@@ -44,7 +44,7 @@ The one-coin reduced fixture exercised the real Kane CLI and the real product pa
 - Fix: `repairAiPlayFailure` returned `Move Core A out of Ground`, one `object.update` to `(260, 787)`.
 - Second attempt: **passed** in 109.2 s (18 steps), `COINS: "1"`, `STATUS: "WON"`, `LAST_ERROR: "none"`.
   - Evidence: `.data/ai-play/159ac555-2d2a-4584-b940-6301d488b6df/evidence.evidence`
-- Reproduce: `node --import tsx scripts/kane/ai-play-smoke.ts` (requires `KANE_ENABLED=1`, `KANE_AI_PLAY_ENABLED=1`, and a running server).
+- Reproduce: `node --import tsx scripts/kane/ai-play-smoke.ts` (requires a signed-in Kane CLI and a running server; no feature flag).
 
 ### Why runs were slow and expensive
 
@@ -338,7 +338,7 @@ node --import tsx scripts/kane/negative-control.ts
 
 # Full demo two-attempt loop (real, 151.6 s)
 # http://localhost:5173/?demoReset=1 → Neon Runner → AI Play
-# needs KANE_ENABLED=1 KANE_AI_PLAY_ENABLED=1 KANE_TIMEOUT_SECONDS=140 KANE_MAX_STEPS=8
+# needs a signed-in Kane CLI; no feature flag. KANE_TIMEOUT_SECONDS=140 KANE_MAX_STEPS=8
 ```
 
 ## Limitations
