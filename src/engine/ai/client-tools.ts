@@ -2,6 +2,9 @@ import type { ToolResult } from "@shared/protocol";
 import type { ProjectDocument } from "../model/schema";
 import { commandReference } from "./command-help";
 import { captureViewportImage } from "./viewport-capture";
+import { gameTestProfileForDocument, profileScenarios } from "../model/game-test-profile";
+import { createDraft, estimateDraftCost } from "../model/game-test-draft";
+import type { TestPlanBudget, TestPlanPhase } from "../model/game-test-plan";
 
 interface ToolExecInput {
   document: ProjectDocument;
@@ -95,6 +98,46 @@ export function executeClientTool(input: ToolExecInput): ExecutedTool {
     }
     if (name === "get_variables") {
       return ok(document.variables);
+    }
+    if (name === "propose_test_plan") {
+      const profile = gameTestProfileForDocument(document);
+      if (!profile) {
+        return fail("No game-test profile is registered for this template, so a plan cannot be validated. Report the mechanics as not testable instead of inventing controls.");
+      }
+      const result = createDraft(
+        {
+          userGoal: typeof args.userGoal === "string" ? args.userGoal : "",
+          sceneId: typeof args.sceneId === "string" && args.sceneId ? args.sceneId : document.startSceneId,
+          seed: Number.isFinite(Number(args.seed)) ? Number(args.seed) : 1234,
+          scenarioId: typeof args.scenarioId === "string" ? args.scenarioId : undefined,
+          phases: (Array.isArray(args.phases) ? args.phases : []) as TestPlanPhase[],
+          budget: args.budget as TestPlanBudget,
+        },
+        { document, profile },
+      );
+      if (!result.ok) return ok({ accepted: false, errors: result.errors, profile: document.templateOrigin });
+      return ok({
+        accepted: true,
+        draft: result.draft,
+        estimate: estimateDraftCost(result.draft),
+        note: "Draft only. Nothing runs until the user approves it.",
+      });
+    }
+    if (name === "get_game_test_profile") {
+      const profile = gameTestProfileForDocument(document);
+      if (!profile) {
+        return ok({
+          available: false,
+          templateOrigin: document.templateOrigin,
+          reason: "No game-test profile is registered for this template; mechanics outside a profile are not testable.",
+        });
+      }
+      return ok({
+        available: true,
+        templateOrigin: document.templateOrigin,
+        profile,
+        scenarios: profileScenarios(profile),
+      });
     }
     if (name === "get_selection") {
       const scene = document.scenes.find((s) => s.id === activeSceneId) ?? null;

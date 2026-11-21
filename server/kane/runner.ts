@@ -84,7 +84,7 @@ function evidencePack(sessionDir: string | undefined): string | undefined {
   }
 }
 
-function toResult(input: {
+export function toResult(input: {
   runId: string;
   objective: string;
   projectId?: string;
@@ -93,6 +93,8 @@ function toResult(input: {
   event: Record<string, unknown>;
   steps: KaneStep[];
   exitCode: number | null;
+  /** True only when a `run_end` (or a synthesized saved-test verdict) arrived. */
+  hasRunEnd: boolean;
   timedOut: boolean;
   cancelled: boolean;
   elapsedMs?: number;
@@ -104,13 +106,17 @@ function toResult(input: {
   const finalStatus = input.event.final_state && typeof input.event.final_state === "object"
     ? String((input.event.final_state as Record<string, unknown>).status ?? "")
     : "";
+  // Without a `run_end` there is no verdict to read. An exit code alone is not
+  // evidence of success: a CLI that dies after its last step, crashes in its
+  // reporter, or is killed by a non-timeout signal can still exit 0. Only a
+  // terminal event may yield "passed"; otherwise the verdict is unknown.
   const status = input.cancelled || input.timedOut
     ? "cancelled"
     : rawStatus === "passed" || rawStatus === "failed"
       ? rawStatus
-      : reason === "Objective completed" || finalStatus === "WON"
+      : input.hasRunEnd && (reason === "Objective completed" || finalStatus === "WON")
         ? "passed"
-        : input.exitCode === 0
+        : input.hasRunEnd && input.exitCode === 0
           ? "passed"
           : input.exitCode === 1
             ? "failed"
@@ -135,7 +141,9 @@ function toResult(input: {
     reasonCode: typeof input.event.reason === "string" ? input.event.reason : undefined,
     summary: input.timedOut
       ? `Kane run timed out after ${Math.round((input.elapsedMs ?? 0) / 1000)}s without a run_end; the verdict is unknown.`
-      : typeof input.event.summary === "string" && input.event.summary.trim()
+      : !input.hasRunEnd && status !== "failed" && status !== "cancelled"
+        ? `Kane exited (code ${input.exitCode ?? "unknown"}) without a run_end; the verdict is unknown.`
+        : typeof input.event.summary === "string" && input.event.summary.trim()
         ? input.event.summary
         : status === "failed"
           ? "Kane could not reach the goal."
@@ -239,7 +247,6 @@ export function startKaneRun(options: KaneRunOptions): {
   push({ type: "stream_start", runId, command: [cli.command, ...args].join(" ") });
 
   const pending = new Promise<void>((resolve) => {
-    const started = Date.now();
     let buffer = "";
     let stderr = "";
 
@@ -404,6 +411,7 @@ export function startKaneRun(options: KaneRunOptions): {
         event: terminalEvent ?? {},
         steps,
         exitCode: code,
+        hasRunEnd: terminalEvent !== null,
         timedOut,
         cancelled,
         elapsedMs: Date.now() - runStartedAt,

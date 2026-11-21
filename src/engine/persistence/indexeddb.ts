@@ -138,28 +138,109 @@ export async function writeSetting<T>(key: string, value: T): Promise<void> {
 
 export interface ChatRecord {
   id: string;
+  projectId: string;
+  sessionId: string;
+  title: string;
   messages: unknown[];
+  createdAt: string;
   updatedAt: string;
 }
 
-export async function readChat(projectId: string): Promise<ChatRecord | undefined> {
+const MAX_CHATS_PER_PROJECT = 30;
+
+export function chatRecordId(projectId: string, sessionId: string): string {
+  return `${projectId}::${sessionId}`;
+}
+
+/** Converts the pre-history single chat into a normal session record. */
+export function normalizeChatRecord(raw: any, projectId: string): ChatRecord | null {
+  if (!raw || !Array.isArray(raw.messages)) return null;
+  if (raw.id === projectId && !raw.projectId) {
+    const at = typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString();
+    return {
+      id: chatRecordId(projectId, "legacy"),
+      projectId,
+      sessionId: "legacy",
+      title: "Previous chat",
+      messages: raw.messages,
+      createdAt: at,
+      updatedAt: at,
+    };
+  }
+  if (raw.projectId !== projectId || typeof raw.sessionId !== "string") return null;
+  return {
+    id: typeof raw.id === "string" ? raw.id : chatRecordId(projectId, raw.sessionId),
+    projectId,
+    sessionId: raw.sessionId,
+    title: typeof raw.title === "string" && raw.title ? raw.title : "New chat",
+    messages: raw.messages,
+    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : raw.updatedAt,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+  };
+}
+
+export async function readChat(projectId: string, sessionId: string): Promise<ChatRecord | undefined> {
   const db = await openDatabase();
   const transaction = db.transaction("chats", "readonly");
-  const record = await requestToPromise(transaction.objectStore("chats").get(projectId));
+  const record = await requestToPromise(transaction.objectStore("chats").get(chatRecordId(projectId, sessionId)));
   await transactionDone(transaction);
-  return record as ChatRecord | undefined;
+  return normalizeChatRecord(record, projectId) ?? undefined;
 }
 
-export async function saveChat(projectId: string, messages: unknown[]): Promise<void> {
+/** Lists newest-first and migrates the old single-chat record on first read. */
+export async function listChats(projectId: string): Promise<ChatRecord[]> {
   const db = await openDatabase();
-  const transaction = db.transaction("chats", "readwrite");
-  transaction.objectStore("chats").put({ id: projectId, messages, updatedAt: new Date().toISOString() });
+  const transaction = db.transaction("chats", "readonly");
+  const all = await requestToPromise(transaction.objectStore("chats").getAll()) as any[];
   await transactionDone(transaction);
+  const normalized: ChatRecord[] = [];
+  for (const raw of all) {
+    const record = normalizeChatRecord(raw, projectId);
+    if (!record) continue;
+    if (raw.id === projectId) {
+      const write = db.transaction("chats", "readwrite");
+      write.objectStore("chats").put(record);
+      write.objectStore("chats").delete(projectId);
+      await transactionDone(write);
+    }
+    normalized.push(record);
+  }
+  return normalized.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export async function deleteChat(projectId: string): Promise<void> {
+export async function saveChat(projectId: string, sessionId: string, messages: unknown[], title: string): Promise<void> {
+  const db = await openDatabase();
+  const now = new Date().toISOString();
+  const existing = await readChat(projectId, sessionId);
+  const transaction = db.transaction("chats", "readwrite");
+  transaction.objectStore("chats").put({
+    id: chatRecordId(projectId, sessionId),
+    projectId,
+    sessionId,
+    title,
+    messages,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  });
+  await transactionDone(transaction);
+  const all = await listChats(projectId);
+  for (const stale of all.slice(MAX_CHATS_PER_PROJECT)) {
+    const remove = db.transaction("chats", "readwrite");
+    remove.objectStore("chats").delete(stale.id);
+    await transactionDone(remove);
+  }
+}
+
+export async function renameChat(projectId: string, sessionId: string, title: string): Promise<void> {
+  const existing = await readChat(projectId, sessionId);
+  if (!existing) return;
+  await saveChat(projectId, sessionId, existing.messages, title);
+}
+
+export async function deleteChat(projectId: string, sessionId: string): Promise<void> {
   const db = await openDatabase();
   const transaction = db.transaction("chats", "readwrite");
+  transaction.objectStore("chats").delete(chatRecordId(projectId, sessionId));
   transaction.objectStore("chats").delete(projectId);
   await transactionDone(transaction);
 }

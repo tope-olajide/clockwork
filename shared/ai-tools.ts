@@ -75,6 +75,78 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "get_game_test_profile",
+      description: "Get the versioned game-test profile for this project's template: which labelled controls a browser agent may press, which read-only observations and objectives it may assert, and which registered scenarios it may use. Returns available: false when the template has no profile. Never invent actions or observations outside this profile.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "propose_test_plan",
+      description: "Propose a bounded, reviewable game-test plan for the open project. Copy the user's goal verbatim into userGoal, call get_game_test_profile first, and use only that profile's control and observation ids. The plan is validated against the profile, project revision and hard budgets; a rejection lists the exact unsupported parts. This never runs Kane, starts a session or edits the project — it only produces a draft the user must review and approve.",
+      parameters: {
+        type: "object",
+        properties: {
+          userGoal: { type: "string", description: "The user's instruction, copied verbatim" },
+          sceneId: { type: "string", description: "Scene to test; defaults to the start scene" },
+          seed: { type: "number", description: "Deterministic seed, default 1234" },
+          scenarioId: { type: "string", description: "Optional registered scenario id from the profile" },
+          phases: {
+            type: "array",
+            description: "1-3 bounded phases; each does one thing and states its assertions",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "Lowercase dash id" },
+                objectiveId: { type: "string", description: "Optional profile objective id" },
+                purpose: { type: "string", description: "Why this phase exists" },
+                kaneObjective: { type: "string", description: "Short browser-executable instruction using visible profile labels" },
+                allowedControlIds: { type: "array", items: { type: "string" } },
+                assertions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      observationId: { type: "string", description: "Profile observation id" },
+                      operator: { type: "string", enum: ["eq", "neq", "gt", "gte", "lt", "lte", "increased"] },
+                      expected: { type: ["string", "number", "boolean"] },
+                    },
+                    required: ["id", "observationId", "operator", "expected"],
+                    additionalProperties: false,
+                  },
+                },
+                stopWhen: {
+                  type: "array",
+                  items: { type: "string", enum: ["passed", "failed", "lost", "won", "budget-exhausted"] },
+                },
+              },
+              required: ["id", "purpose", "kaneObjective", "allowedControlIds", "assertions", "stopWhen"],
+              additionalProperties: false,
+            },
+          },
+          budget: {
+            type: "object",
+            properties: {
+              maxKanePhases: { type: "number", description: "1-3" },
+              maxKaneStepsPerPhase: { type: "number", description: "1-8" },
+              maxWallTimeSecondsPerPhase: { type: "number", description: "30-140" },
+              maxFramesPerAdvance: { type: "number", description: "1-600" },
+              maxFramesPerPhase: { type: "number", description: "1-3600" },
+            },
+            required: ["maxKanePhases", "maxKaneStepsPerPhase", "maxWallTimeSecondsPerPhase", "maxFramesPerAdvance", "maxFramesPerPhase"],
+            additionalProperties: false,
+          },
+        },
+        required: ["userGoal", "phases", "budget"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_selection",
       description: "Get the currently selected editor entities and their details.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -195,7 +267,7 @@ export const WRITE_TOOL_DEFINITIONS: ToolDefinition[] = [
     type: "function",
     function: {
       name: "start_playtest",
-      description: "Start a bounded playtest and return telemetry. Editor is read-only while running.",
+      description: "Run a bounded headless preflight (no canvas, no browser) to catch runtime errors before a Kane phase. Headless telemetry is never Kane evidence and cannot satisfy a test-plan criterion.",
       parameters: {
         type: "object",
         properties: {
@@ -293,14 +365,28 @@ export const KANE_TOOL_DEFINITIONS: ToolDefinition[] = [
     type: "function",
     function: {
       name: "run_ai_play",
-      description: "Run the in-product AI Play loop: Kane plays a read-only snapshot through the visible AI HUD and returns status, final_state, steps and evidence. On failure, diagnose and apply one non-destructive fix, then retry with the same seed at most once.",
+      description: "Run the in-product AI Play loop: Kane plays a read-only snapshot through the visible AI HUD and returns status, final_state, steps and evidence. Each call performs exactly one run and never repeats or auto-fixes by itself. On failure, diagnose; if you apply a non-destructive fix, call this tool again with the same seed at most once.",
       parameters: {
         type: "object",
         properties: {
           goal: { type: "string", description: "Optional gameplay goal for this run" },
-          sceneId: { type: "string", description: "Optional start scene" },
-          maxAttempts: { type: "number", description: "1 or 2, default 1" },
+          sceneId: { type: "string", description: "Optional scene id to start from; defaults to the project's start scene" },
         },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_kane_test_phase",
+      description: "Run exactly one phase of the human-approved test plan through Kane in Clockwork Test Mode and return a typed verdict (passed, failed, inconclusive or cancelled) with per-assertion actual values, accepted input count and evidence. Requires an approved plan for the current revision; pass only a phaseId from that plan. Never claim a pass unless verdict is passed. After the result, cite the phase, verdict and assertion values against the original goal, and only run a different phase when that result calls for it; at most two follow-up phases within the plan budget. Explain where the causal chain stopped instead of only saying \"failed\": no accepted input means the input never reached the game; an accepted input whose expected effect observation did not change means the effect was not created; an effect that exists while the target or score observation did not change means the effect missed or the result rule did not run. Use the returned observations, not assumptions.",
+      parameters: {
+        type: "object",
+        properties: {
+          phaseId: { type: "string", description: "Id of a phase in the approved plan" },
+        },
+        required: ["phaseId"],
         additionalProperties: false,
       },
     },

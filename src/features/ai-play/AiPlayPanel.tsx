@@ -2,7 +2,9 @@ import { useState } from "react";
 import { CheckCircle2, Clipboard, ExternalLink, Loader2, Play, RotateCcw, Square, Sparkles, X, XCircle } from "lucide-react";
 import type { AiPlayResult } from "@shared/protocol/kane";
 import { Button } from "../../components/ui";
+import type { ProjectDocument } from "../../engine/model/schema";
 import type { useAiPlay } from "./useAiPlay";
+import { TestPlanPanel } from "./TestPlanPanel";
 
 type AiPlay = ReturnType<typeof useAiPlay>;
 
@@ -11,6 +13,8 @@ interface AiPlayPanelProps {
   onClose: () => void;
   aiPlay: AiPlay;
   modelLabel: string;
+  document: ProjectDocument;
+  onRequestPlan: (goal: string) => void;
   onUndoFix: () => void;
 }
 
@@ -27,7 +31,7 @@ function finalStateEntries(result: AiPlayResult | null): Array<[string, string]>
   return Object.entries(result.finalState);
 }
 
-export function AiPlayPanel({ open, onClose, aiPlay, modelLabel, onUndoFix }: AiPlayPanelProps) {
+export function AiPlayPanel({ open, onClose, aiPlay, modelLabel, document, onRequestPlan, onUndoFix }: AiPlayPanelProps) {
   const [copied, setCopied] = useState(false);
   const latest = aiPlay.result;
   const busy = aiPlay.phase === "preparing" || aiPlay.phase === "running" || aiPlay.phase === "fixing";
@@ -62,9 +66,11 @@ export function AiPlayPanel({ open, onClose, aiPlay, modelLabel, onUndoFix }: Ai
           {aiPlay.status?.user && <span className="chip">KANE · {aiPlay.status.user}</span>}
         </div>
 
+        <TestPlanPanel document={document} modelLabel={modelLabel} onRequestPlan={onRequestPlan} />
+
         <label className="ai-play-autofix">
           <input type="checkbox" checked={aiPlay.autoFix} onChange={(event) => aiPlay.setAutoFix(event.target.checked)} disabled={busy} />
-          Auto-fix after a failed attempt (max 2 attempts)
+          Auto-fix an embedded collectible after a failed attempt (max 2 attempts)
         </label>
 
         <div className="ai-play-actions">

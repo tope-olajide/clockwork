@@ -1,4 +1,5 @@
 import type { AiPlayResult, KaneCliStatus, KaneEvent } from "@shared/protocol/kane";
+import type { KanePhaseEvent, KanePhaseRequest, KanePhaseResult } from "@shared/protocol/game-testing";
 
 export interface AiPlayStreamHandlers {
   onEvent?: (event: KaneEvent) => void;
@@ -61,8 +62,68 @@ async function streamKane(
   return final;
 }
 
+export interface KanePhaseStreamHandlers {
+  onEvent?: (event: KanePhaseEvent) => void;
+  onResult?: (result: KanePhaseResult) => void;
+  onRunId?: (runId: string) => void;
+  signal?: AbortSignal;
+}
+
+export async function streamKanePhase(
+  input: KanePhaseRequest,
+  handlers: KanePhaseStreamHandlers = {},
+): Promise<KanePhaseResult> {
+  const response = await fetch("/api/kane/phase", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal: handlers.signal,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+    throw Object.assign(new Error(body?.error || `Kane phase failed (HTTP ${response.status}).`), {
+      code: body?.code,
+      status: response.status,
+    });
+  }
+  if (!response.body) throw new Error("Kane phase returned no event stream.");
+  const headerRunId = response.headers.get("X-Kane-Run");
+  if (headerRunId) handlers.onRunId?.(headerRunId);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let final: KanePhaseResult | null = null;
+
+  const consume = (line: string) => {
+    if (!line.trim()) return;
+    let event: KanePhaseEvent;
+    try { event = JSON.parse(line) as KanePhaseEvent; } catch { return; }
+    if (event.type === "stream_start") handlers.onRunId?.(event.runId);
+    handlers.onEvent?.(event);
+    if (event.type === "phase_result") {
+      final = event.result;
+      handlers.onResult?.(event.result);
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf("\n");
+    while (newline >= 0) {
+      consume(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+      newline = buffer.indexOf("\n");
+    }
+  }
+  if (buffer.trim()) consume(buffer);
+  if (!final) throw new Error("Kane phase ended without a typed result.");
+  return final;
+}
+
 export function streamAiPlay(
-  input: { snapshotId: string; projectId?: string; attempt?: number; goal?: string; seed?: number },
+  input: { snapshotId: string; projectId?: string; attempt?: number; goal?: string; sceneId?: string; seed?: number },
   handlers: AiPlayStreamHandlers = {},
 ): Promise<AiPlayResult> {
   return streamKane("/api/kane/ai-play", input, handlers);

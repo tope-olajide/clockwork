@@ -37,6 +37,7 @@ import { EngineInspector, EngineLeftDock, EngineWorkspace,
   type WorkspaceTab,
 } from "./EngineDocks";
 import { AgentDrawer } from "../agent/AgentDrawer";
+import { ChatHistoryMenu } from "../agent/chat/ChatHistoryMenu";
 import { useAgentSession } from "../agent/useAgentSession";
 import { AiPlayPanel } from "../ai-play/AiPlayPanel";
 import { useAiPlay } from "../ai-play/useAiPlay";
@@ -703,11 +704,22 @@ export function EditorPage() {
         onClose={() => setAiPlayOpen(false)}
         aiPlay={aiPlay}
         modelLabel={agent.modelLabel}
+        document={current}
+        onRequestPlan={(goal) => {
+          setAgentOpen(true);
+          agent.setMode(agent.canBuildPlan ? "plan" : "ask");
+          void agent.send(
+            `Draft a game-test plan for this project.\n\nUser goal (copy verbatim into userGoal): ${goal}\n\n`
+            + "Call get_game_test_profile first, then propose_test_plan using only its control and observation ids. "
+            + "Do not run Kane, do not edit the project, and if something the user asked for is not expressible, say so instead of approximating it.",
+          );
+        }}
         onUndoFix={() => { undo(); toast.push("AI fixes undone", "The last editor change was reverted."); }}
       />
       <AgentDrawer
         open={agentOpen}
         onClose={() => setAgentOpen(false)}
+        projectId={current.id}
         projectName={current.name}
         sceneName={scene.name}
         revision={current.revision}
@@ -721,6 +733,7 @@ export function EditorPage() {
         onSend={agent.send}
         onStop={agent.stop}
         onRetry={agent.retry}
+        onRegenerate={agent.regenerate}
         onNewChat={agent.newChat}
         selectedModelId={agent.selectedModelId}
         onSelectModel={agent.setSelectedModelId}
@@ -735,6 +748,16 @@ export function EditorPage() {
         onDiscardPreview={agent.discardPendingPreview}
         lockedSelection={lockedSelection ? { id: lockedSelection.id, name: lockedSelection.name } : null}
         onUnlockSelection={() => setLockedSelectionId(null)}
+        document={current}
+        draftKey={`clockwork:agent-draft:${current.id}:${agent.sessionId}`}
+        history={<ChatHistoryMenu
+          sessions={agent.sessions}
+          activeSessionId={agent.sessionId}
+          onOpen={agent.openChat}
+          onNew={agent.newChat}
+          onDelete={agent.deleteChatSession}
+          onRename={agent.renameChatSession}
+        />}
       />
       <CoachTour />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={commands} />

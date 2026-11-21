@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nanoid } from "nanoid";
-import type { AgentChatMessage, AgentMode, ToolResult } from "@shared/protocol";
+import type { AgentChatMessage, AgentMode, ChatAttachment, ToolResult } from "@shared/protocol";
 import { buildContextPacket } from "../../engine/ai/context";
 import { executeClientTool } from "../../engine/ai/client-tools";
 import { applyCommandsInStore, batchHasDestructive, previewCommands, type ApplyCommandsArgs, type ChangeSetSummary } from "../../engine/ai/executor";
 import { streamAgentStep } from "../../engine/ai/transport";
 import { fetchAiSettings, fetchModels, fetchProviders, type ModelInfo, type ProviderInfo } from "../../engine/ai/api";
 import { useEngineStore } from "../../engine/store/engine-store";
-import { deleteChat, readChat, saveChat } from "../../engine/persistence/indexeddb";
+import { deleteChat, listChats, readChat, renameChat, saveChat, type ChatRecord } from "../../engine/persistence/indexeddb";
+import { titleForMessages } from "./chat/chat-utils";
 import { runHeadlessPlaytest, type PlaytestInput } from "../../engine/runtime/playtest";
 import { useAgentPresenceStore } from "../../engine/store/agent-presence";
 import { collectProjectAssets, createSnapshot } from "../../engine/io/snapshot";
 import { streamAiPlay, verifyWithKane } from "../../engine/ai/kane-api";
+import { aiPlayArgsFromToolCall } from "./kane-tool-args";
+import { useTestPlanStore } from "../ai-play/test-plan-store";
+import { runApprovedPhase } from "../ai-play/phase-runner";
+import { gameTestProfileForDocument } from "../../engine/model/game-test-profile";
 
 export type AgentStatus = "ready" | "thinking" | "streaming" | "tool" | "error";
 
@@ -58,6 +63,14 @@ interface UseAgentSessionArgs {
 }
 
 const storageKey = (projectId: string) => `clockwork:agent-model:${projectId}`;
+const sessionKey = (projectId: string) => `clockwork:agent-session:${projectId}`;
+
+export interface ChatSessionSummary {
+  sessionId: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
+}
 
 function actionForCode(code?: string): AgentUiError["action"] {
   if (!code) return "retry";
@@ -68,6 +81,8 @@ function actionForCode(code?: string): AgentUiError["action"] {
 
 export function useAgentSession(args: UseAgentSessionArgs) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [sessionId, setSessionId] = useState<string>(() => nanoid());
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [status, setStatus] = useState<AgentStatus>("ready");
   const [mode, setModeState] = useState<AgentMode>("ask");
   const [error, setError] = useState<AgentUiError | null>(null);
@@ -84,10 +99,23 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   useEffect(() => {
     let cancelled = false;
     setMessages([]);
+    setSessions([]);
     if (!args.projectId) return;
-    void readChat(args.projectId).then((record) => {
-      if (cancelled || !record || !Array.isArray(record.messages)) return;
-      setMessages((record.messages as DisplayMessage[]).slice(-50));
+    void listChats(args.projectId).then((records) => {
+      if (cancelled) return;
+      setSessions(records.map(toSummary));
+      let stored: string | null = null;
+      try { stored = window.localStorage.getItem(sessionKey(args.projectId)); } catch { /* ignore */ }
+      const selected = records.find((record) => record.sessionId === stored) ?? records[0];
+      if (selected) {
+        setSessionId(selected.sessionId);
+        setMessages((selected.messages as DisplayMessage[]).slice(-50));
+        try { window.localStorage.setItem(sessionKey(args.projectId), selected.sessionId); } catch { /* ignore */ }
+      } else {
+        const fresh = nanoid();
+        setSessionId(fresh);
+        try { window.localStorage.setItem(sessionKey(args.projectId), fresh); } catch { /* ignore */ }
+      }
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [args.projectId]);
@@ -164,13 +192,46 @@ export function useAgentSession(args: UseAgentSessionArgs) {
 
   const newChat = useCallback(() => {
     stop();
+    const fresh = nanoid();
     setMessages([]);
-    void deleteChat(args.projectId).catch(() => undefined);
+    setSessionId(fresh);
+    try { window.localStorage.setItem(sessionKey(args.projectId), fresh); } catch { /* ignore */ }
     setError(null);
     setPendingPreview(null);
     useAgentPresenceStore.getState().clear();
     setStatus("ready");
-  }, [stop]);
+  }, [args.projectId, stop]);
+
+  const openChat = useCallback((nextSessionId: string) => {
+    if (nextSessionId === sessionId) return;
+    stop();
+    void readChat(args.projectId, nextSessionId).then((record) => {
+      if (!record) return;
+      setSessionId(record.sessionId);
+      setMessages((record.messages as DisplayMessage[]).slice(-50));
+      try { window.localStorage.setItem(sessionKey(args.projectId), record.sessionId); } catch { /* ignore */ }
+      setError(null);
+      setPendingPreview(null);
+      setStatus("ready");
+    }).catch(() => undefined);
+  }, [args.projectId, sessionId, stop]);
+
+  const deleteChatSession = useCallback((nextSessionId: string) => {
+    void deleteChat(args.projectId, nextSessionId).then(async () => {
+      const records = await listChats(args.projectId);
+      setSessions(records.map(toSummary));
+      if (nextSessionId === sessionId) newChat();
+    }).catch(() => undefined);
+  }, [args.projectId, sessionId, newChat]);
+
+  const renameChatSession = useCallback((nextSessionId: string, title: string) => {
+    const clean = title.trim().slice(0, 80);
+    if (!clean) return;
+    void renameChat(args.projectId, nextSessionId, clean).then(async () => {
+      const records = await listChats(args.projectId);
+      setSessions(records.map(toSummary));
+    }).catch(() => undefined);
+  }, [args.projectId]);
 
   const executeAgentTool = useCallback(async (name: string, callArgs: Record<string, unknown>, transactionId: string) => {
     const store = useEngineStore.getState();
@@ -190,12 +251,11 @@ export function useAgentSession(args: UseAgentSessionArgs) {
             objective: String(callArgs.objective ?? "Verify the current project in the snapshot player."),
             seed: 1234,
           })
-          : await streamAiPlay({
+          : await streamAiPlay(aiPlayArgsFromToolCall(callArgs, {
             snapshotId: snapshot.id,
             projectId: args.projectId,
             seed: 1234,
-            goal: typeof callArgs.goal === "string" ? callArgs.goal : undefined,
-          });
+          }));
         return ok({
           status: result.status,
           summary: result.summary,
@@ -211,6 +271,41 @@ export function useAgentSession(args: UseAgentSessionArgs) {
         });
       } catch (error) {
         return fail(error instanceof Error ? error.message : "Kane run failed.");
+      }
+    }
+
+    if (name === "run_kane_test_phase") {
+      if (!doc) return fail("No project open.");
+      const draft = useTestPlanStore.getState().draft;
+      if (!draft) return fail("No test plan exists. Draft and approve a plan before running a phase.");
+      if (!draft.approval) return fail("The plan is not approved. Ask the user to approve it before any Kane phase runs.");
+      const profile = gameTestProfileForDocument(doc);
+      if (!profile) return fail("No game-test profile is registered for this project.");
+      const phaseId = typeof callArgs.phaseId === "string" ? callArgs.phaseId : "";
+      if (!phaseId) return fail("A phaseId from the approved plan is required.");
+      try {
+        const result = await runApprovedPhase({ draft, document: doc, profile, phaseId });
+        useTestPlanStore.getState().recordPhaseResult(draft, result);
+        return ok({
+          phaseId: result.phaseId,
+          phaseIndex: result.phaseIndex,
+          verdict: result.verdict,
+          failureKind: result.failureKind,
+          reason: result.reason,
+          summary: result.summary,
+          kaneStatus: result.kaneStatus,
+          checks: result.checks,
+          acceptedInputs: result.acceptedInputs,
+          finalState: result.finalState,
+          durationMs: result.durationMs,
+          steps: result.steps.slice(-12),
+          runtimeErrors: result.runtimeErrors,
+          evidenceUrl: result.evidenceUrl,
+          testUrl: result.testUrl,
+          snapshotId: result.snapshotId,
+        });
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "Kane phase failed.");
       }
     }
 
@@ -331,6 +426,12 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     // read tools
     if (doc) {
       const executed = executeClientTool({ document: doc, activeSceneId: store.activeSceneId, selection: store.selection, name, args: callArgs, allowViewportCapture: capabilities.vision });
+      if (name === "propose_test_plan" && executed.ok) {
+        const data = executed.data as { accepted?: boolean; draft?: import("../../engine/model/game-test-draft").TestPlanDraft; errors?: string[] } | null;
+        // Surface the proposal in the review panel. Acceptance here is validation,
+        // not approval: nothing runs until the user approves it.
+        useTestPlanStore.getState().setProposal(data?.accepted ? data.draft ?? null : null, data?.errors ?? []);
+      }
       return executed as any;
     }
     return fail("No project open.");
@@ -370,9 +471,9 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     setPendingPreview(null);
   }, [pendingPreview]);
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, attachments?: ChatAttachment[], replaceUserId?: string) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && !attachments?.length) return;
     const store = useEngineStore.getState();
     const doc = store.document;
     if (!doc) return;
@@ -411,14 +512,22 @@ export function useAgentSession(args: UseAgentSessionArgs) {
 
     setError(null);
     useAgentPresenceStore.getState().clearPresence();
-    const userMsg: DisplayMessage = { id: nanoid(), role: "user", content: trimmed, createdAt: new Date().toISOString() };
-    setMessages((prev) => [...prev, userMsg]);
+    const replaceIndex = replaceUserId ? messages.findIndex((message) => message.id === replaceUserId) : -1;
+    const baseMessages = replaceIndex >= 0 ? messages.slice(0, replaceIndex) : messages;
+    const userMsg: DisplayMessage = {
+      id: nanoid(),
+      role: "user",
+      content: trimmed || "Use the attached files in this game.",
+      createdAt: new Date().toISOString(),
+      ...(attachments?.length ? { attachments } : {}),
+    };
+    setMessages([...baseMessages.filter((message) => !message.streaming), userMsg]);
 
     const abort = new AbortController();
     abortRef.current = abort;
 
     const run = async () => {
-      let conversation: AgentChatMessage[] = [...messages.filter((m) => !m.streaming), userMsg].map(({ streaming, toolCard, ...m }) => m);
+      let conversation: AgentChatMessage[] = [...baseMessages.filter((m) => !m.streaming), userMsg].map(({ streaming, toolCard, ...m }) => m);
       const turnTransactionId = nanoid();
       let replanCount = 0;
       for (let step = 0; step < 8; step++) {
@@ -546,22 +655,32 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     }
   }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModel, effectiveModelId, executeAgentTool, messages, mock, mode, providerConfigured, canUseTools]);
 
-  const retry = useCallback(() => {
-    const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    if (lastUser) void send(lastUser.content);
-  }, [messages, send]);
-
   const isBusy = status === "thinking" || status === "streaming" || status === "tool";
 
+  const retry = useCallback(() => {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser) void send(lastUser.content, lastUser.attachments, lastUser.id);
+  }, [messages, send]);
+
+  const regenerate = useCallback(() => {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser && !isBusy) void send(lastUser.content, lastUser.attachments, lastUser.id);
+  }, [isBusy, messages, send]);
+
   useEffect(() => {
-    if (!args.projectId || isBusy) return;
+    if (!args.projectId || !sessionId || isBusy) return;
     const persisted = messages
       .filter((message) => !message.streaming && message.toolCard?.status !== "running")
       .map(({ streaming, ...message }) => message);
     if (persisted.length === 0) return;
-    const timer = window.setTimeout(() => { void saveChat(args.projectId, persisted).catch(() => undefined); }, 300);
+    const timer = window.setTimeout(() => {
+      void saveChat(args.projectId, sessionId, persisted, titleForMessages(persisted as AgentChatMessage[]))
+        .then(() => listChats(args.projectId))
+        .then((records) => setSessions(records.map(toSummary)))
+        .catch(() => undefined);
+    }, 300);
     return () => window.clearTimeout(timer);
-  }, [args.projectId, isBusy, messages]);
+  }, [args.projectId, isBusy, messages, sessionId]);
 
   return useMemo(() => ({
     messages,
@@ -585,10 +704,25 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     send,
     stop,
     retry,
+    regenerate,
     newChat,
+    sessionId,
+    sessions,
+    openChat,
+    deleteChatSession,
+    renameChatSession,
     refreshAiMeta,
     pendingPreview,
     applyPendingPreview,
     discardPendingPreview,
-  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, stop, retry, newChat, refreshAiMeta, pendingPreview, applyPendingPreview, discardPendingPreview]);
+  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, stop, retry, regenerate, newChat, sessionId, sessions, openChat, deleteChatSession, renameChatSession, refreshAiMeta, pendingPreview, applyPendingPreview, discardPendingPreview]);
+}
+
+function toSummary(record: ChatRecord): ChatSessionSummary {
+  return {
+    sessionId: record.sessionId,
+    title: record.title,
+    updatedAt: record.updatedAt,
+    messageCount: record.messages.length,
+  };
 }

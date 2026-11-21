@@ -1,0 +1,729 @@
+import type { TemplateOrigin } from "./schema";
+import type { GameTestProfile } from "./game-test-profile";
+
+/**
+ * Built-in, versioned test vocabulary for each starter template.
+ *
+ * These profiles are code, not document data: they name only labelled controls,
+ * read-only observations and objectives that the starter runtime actually
+ * produces. A profile never adds gameplay, and every variable, tag and event it
+ * observes is validated against a freshly generated starter document in
+ * `tests/game-test-profile.test.ts`.
+ *
+ * `scenarioIds` stays empty unless a criterion is unreachable in the authored
+ * setup; those templates use their normal starting scene.
+ */
+export const BUILT_IN_PROFILES: Partial<Record<TemplateOrigin, GameTestProfile>> = {
+  "space-shooter": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Holds the ship moving left while the control is held down.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Holds the ship moving right while the control is held down.",
+      },
+      {
+        id: "shoot",
+        label: "SHOOT",
+        action: "jump",
+        mode: "hold",
+        description: "Holds fire. The authored shooter has a 190 ms cooldown, so it fires only after the jump action stays down.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "hull", label: "HULL", source: "variable", key: "health" },
+      { id: "time-left", label: "TIME", source: "variable", key: "timeLeft" },
+      { id: "player-x", label: "PLAYER X", source: "player", key: "x" },
+      { id: "enemies", label: "ENEMIES", source: "tag-count", key: "enemy" },
+      { id: "asteroids", label: "ASTEROIDS", source: "tag-count", key: "asteroid" },
+      { id: "projectiles", label: "PROJECTILES", source: "tag-count", key: "player-bullet" },
+      { id: "shots-fired", label: "SHOTS FIRED", source: "event-count", key: "shoot" },
+      { id: "destroyed", label: "DESTROYED", source: "event-count", key: "death" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+    ],
+    objectives: [
+      {
+        id: "input-creates-projectile",
+        title: "Shooting inputs create a projectile",
+        description: "An accepted SHOOT hold is visible in the accepted-input counter, increments shots fired and creates a projectile, without claiming a hit.",
+        assertionIds: ["shots-fired-increased", "projectiles-increased"],
+      },
+      {
+        id: "shoot-destroys-enemy",
+        title: "A shot destroys an enemy",
+        description: "An accepted SHOOT pulse creates a projectile, that projectile destroys a Raider, and score increases.",
+        assertionIds: ["projectiles-increased", "enemy-count-decreased", "score-increased"],
+      },
+      {
+        id: "survive-encounter",
+        title: "Player survives a short encounter",
+        description: "After a bounded advance with incoming enemies, hull is still above zero and the run is still running.",
+        assertionIds: ["hull-positive", "status-running"],
+      },
+    ],
+    scenarioIds: ["shooting-range"],
+  },
+
+  "space-invaders": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Moves the Defender left along the bottom of the screen.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Moves the Defender right along the bottom of the screen.",
+      },
+      {
+        id: "fire",
+        label: "FIRE",
+        action: "jump",
+        mode: "hold",
+        description: "Holds fire. The authored shooter has a 260 ms cooldown, so it fires only after the jump action stays down.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "ships", label: "SHIPS", source: "variable", key: "lives" },
+      { id: "invaders-left", label: "INVADERS", source: "variable", key: "enemies" },
+      { id: "defender-x", label: "DEFENDER X", source: "player", key: "x" },
+      { id: "shots-fired", label: "SHOTS FIRED", source: "event-count", key: "shoot" },
+      { id: "invaders-destroyed", label: "DESTROYED", source: "event-count", key: "death" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "bolts", label: "BOLTS", source: "tag-count", key: "player-bullet" },
+      { id: "invader-bolts", label: "INVADER BOLTS", source: "tag-count", key: "enemy-bullet" },
+    ],
+    objectives: [
+      {
+        id: "fire-creates-bolt",
+        title: "Firing creates a Defender bolt",
+        description: "An accepted FIRE pulse increments the shoot event count and puts a player bullet in the scene.",
+        assertionIds: ["shots-fired-increased", "bolts-increased"],
+      },
+      {
+        id: "destroy-invader-scores",
+        title: "A bolt destroys an invader",
+        description: "A Defender bolt destroys an invader and the score increases as a result.",
+        assertionIds: ["invaders-destroyed-increased", "score-increased"],
+      },
+      {
+        id: "hold-the-line",
+        title: "The line holds for a bounded wave",
+        description: "After a bounded advance, at least one ship remains and the run has not ended.",
+        assertionIds: ["ships-at-least-one", "still-running"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "asteroid-field": {
+    version: 1,
+    controls: [
+      {
+        id: "turn-left",
+        label: "TURN LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Rotates the Pilot counter-clockwise while held.",
+      },
+      {
+        id: "turn-right",
+        label: "TURN RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Rotates the Pilot clockwise while held.",
+      },
+      {
+        id: "thrust",
+        label: "THRUST",
+        action: "jump",
+        mode: "hold",
+        description: "Applies forward thrust in the facing direction; the authored controller reads the jump action.",
+      },
+      {
+        id: "fire",
+        label: "FIRE",
+        action: "action",
+        mode: "hold",
+        description: "Holds fire. The authored shooter has a 240 ms cooldown, so it fires only after the action input stays down.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "ships", label: "SHIPS", source: "variable", key: "lives" },
+      { id: "rocks-left", label: "ROCKS", source: "variable", key: "asteroids" },
+      { id: "pilot-rotation", label: "ROTATION", source: "player", key: "rotation" },
+      { id: "shots-fired", label: "SHOTS FIRED", source: "event-count", key: "shoot" },
+      { id: "rocks-destroyed", label: "DESTROYED", source: "event-count", key: "death" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "shots", label: "SHOTS", source: "tag-count", key: "player-bullet" },
+      { id: "asteroids", label: "ASTEROIDS", source: "tag-count", key: "asteroid" },
+    ],
+    objectives: [
+      {
+        id: "fire-creates-shot",
+        title: "Firing creates a shot",
+        description: "An accepted FIRE pulse increments the shoot event count and creates a player bullet.",
+        assertionIds: ["shots-fired-increased", "shots-increased"],
+      },
+      {
+        id: "destroy-asteroid-scores",
+        title: "A shot destroys an asteroid",
+        description: "A shot destroys an asteroid and the score increases.",
+        assertionIds: ["rocks-destroyed-increased", "score-increased"],
+      },
+      {
+        id: "evade-intact",
+        title: "The Pilot survives a bounded flight",
+        description: "After a bounded advance, a ship remains and the run is still running.",
+        assertionIds: ["ships-at-least-one", "still-running"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "ping-pong": {
+    version: 1,
+    controls: [
+      {
+        id: "move-up",
+        label: "MOVE UP",
+        action: "up",
+        mode: "hold",
+        description: "Moves the player paddle up while held.",
+      },
+      {
+        id: "move-down",
+        label: "MOVE DOWN",
+        action: "down",
+        mode: "hold",
+        description: "Moves the player paddle down while held.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "player-score", label: "YOU", source: "variable", key: "leftScore" },
+      { id: "cpu-score", label: "CPU", source: "variable", key: "rightScore" },
+      { id: "paddle-y", label: "PADDLE Y", source: "player", key: "y" },
+      { id: "ball-count", label: "BALLS", source: "tag-count", key: "ball" },
+      { id: "serves", label: "SERVES", source: "event-count", key: "serve" },
+      { id: "misses", label: "MISSES", source: "event-count", key: "miss" },
+    ],
+    objectives: [
+      {
+        id: "player-scores-point",
+        title: "The player scores a point",
+        description: "The player's score increases during the bounded rally.",
+        assertionIds: ["player-score-increased"],
+      },
+      {
+        id: "paddle-responds",
+        title: "The paddle follows vertical input",
+        description: "Holding the down control increases the player paddle's y position.",
+        assertionIds: ["paddle-y-increased"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "brick-breaker": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Moves the paddle left while held.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Moves the paddle right while held.",
+      },
+      {
+        id: "serve",
+        label: "SERVE",
+        action: "jump",
+        mode: "hold",
+        description: "Holds serve. The authored ball has a 400 ms serve delay, so it launches only after the jump action stays down.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "balls", label: "BALLS", source: "variable", key: "lives" },
+      { id: "bricks-left", label: "BRICKS", source: "variable", key: "bricks" },
+      { id: "paddle-x", label: "PADDLE X", source: "player", key: "x" },
+      { id: "brick-count", label: "BRICK OBJECTS", source: "tag-count", key: "brick" },
+      { id: "ball-count", label: "BALL OBJECTS", source: "tag-count", key: "ball" },
+      { id: "serves", label: "SERVES", source: "event-count", key: "serve" },
+      { id: "bricks-destroyed", label: "BRICKS DESTROYED", source: "event-count", key: "death" },
+      { id: "misses", label: "MISSES", source: "event-count", key: "miss" },
+    ],
+    objectives: [
+      {
+        id: "serve-launches-ball",
+        title: "Serving launches the ball",
+        description: "An accepted SERVE pulse emits a serve event and the board keeps playing.",
+        assertionIds: ["serves-increased", "opening-running"],
+      },
+      {
+        id: "break-brick-scores",
+        title: "Breaking a brick scores",
+        description: "A brick is destroyed and the score increases.",
+        assertionIds: ["bricks-destroyed-increased", "score-increased"],
+      },
+      {
+        id: "clear-board",
+        title: "The board loses bricks",
+        description: "The remaining brick count falls below its starting value.",
+        assertionIds: ["bricks-below-initial", "play-running"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "flappy-flyer": {
+    version: 1,
+    controls: [
+      {
+        id: "flap",
+        label: "FLAP",
+        action: "jump",
+        mode: "pulse",
+        description: "Flaps once, applying an upward impulse. The authored flap trigger is the jump action.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "GATES", source: "variable", key: "score" },
+      { id: "flyer-y", label: "FLYER Y", source: "player", key: "y" },
+      { id: "flyer-vy", label: "FLYER VY", source: "player", key: "vy" },
+      { id: "flaps", label: "FLAPS", source: "event-count", key: "flap" },
+      { id: "gates", label: "GATES", source: "tag-count", key: "gate-marker" },
+      { id: "hazards", label: "HAZARDS", source: "tag-count", key: "hazard" },
+      { id: "lost", label: "LOST", source: "variable", key: "lost" },
+    ],
+    objectives: [
+      {
+        id: "flap-registers",
+        title: "Flapping registers and keeps the flyer up",
+        description: "An accepted FLAP pulse emits a flap event and the run is still running.",
+        assertionIds: ["flaps-increased", "flight-running"],
+      },
+      {
+        id: "pass-gate-scores",
+        title: "Passing a gate scores",
+        description: "The score increases after the flyer passes a gate marker.",
+        assertionIds: ["score-increased"],
+      },
+      {
+        id: "survive-flight",
+        title: "The flyer survives a bounded flight",
+        description: "The lost flag stays false for the bounded advance.",
+        assertionIds: ["lost-false", "flight-not-lost"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "platform-jumper": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Moves the Jumper left while held.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Moves the Jumper right while held.",
+      },
+      {
+        id: "jump",
+        label: "JUMP",
+        action: "jump",
+        mode: "pulse",
+        description: "Jumps when grounded. The authored platformer controller reads the jump action.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "cores", label: "CORES", source: "variable", key: "coins" },
+      { id: "lives", label: "LIVES", source: "variable", key: "lives" },
+      { id: "health", label: "HEALTH", source: "variable", key: "health" },
+      { id: "jumper-x", label: "JUMPER X", source: "player", key: "x" },
+      { id: "jumper-y", label: "JUMPER Y", source: "player", key: "y" },
+      { id: "grounded", label: "GROUNDED", source: "player", key: "grounded" },
+      { id: "jumps", label: "JUMPS", source: "event-count", key: "jump" },
+      { id: "collected", label: "COLLECTED", source: "event-count", key: "collect" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "coin-count", label: "CORE OBJECTS", source: "tag-count", key: "coin" },
+      { id: "goal-count", label: "RELAY", source: "tag-count", key: "goal" },
+    ],
+    objectives: [
+      {
+        id: "jump-registers",
+        title: "Jumping registers",
+        description: "An accepted JUMP pulse emits a jump event while the run stays live.",
+        assertionIds: ["jumps-increased", "jump-running"],
+      },
+      {
+        id: "collect-core",
+        title: "Collecting a core scores",
+        description: "A core is collected and the core counter increases.",
+        assertionIds: ["collected-increased", "cores-increased"],
+      },
+      {
+        id: "avoid-spikes",
+        title: "The Jumper keeps health",
+        description: "Health stays at least one during a bounded traversal.",
+        assertionIds: ["health-at-least-one", "hazard-running"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "endless-runner": {
+    version: 1,
+    controls: [
+      {
+        id: "jump",
+        label: "JUMP",
+        action: "jump",
+        mode: "pulse",
+        description: "Jumps over obstacles. The authored platformer controller reads the jump action.",
+      },
+      {
+        id: "duck",
+        label: "DUCK",
+        action: "down",
+        mode: "hold",
+        description: "Ducks under high hazards while held.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "lives", label: "LIVES", source: "variable", key: "lives" },
+      { id: "health", label: "HEALTH", source: "variable", key: "health" },
+      { id: "runner-y", label: "RUNNER Y", source: "player", key: "y" },
+      { id: "runner-vy", label: "RUNNER VY", source: "player", key: "vy" },
+      { id: "jumps", label: "JUMPS", source: "event-count", key: "jump" },
+      { id: "collected", label: "COLLECTED", source: "event-count", key: "collect" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "obstacles", label: "OBSTACLES", source: "tag-count", key: "obstacle" },
+      { id: "cores", label: "CORE OBJECTS", source: "tag-count", key: "coin" },
+    ],
+    objectives: [
+      {
+        id: "jump-registers",
+        title: "Jumping registers",
+        description: "An accepted JUMP pulse emits a jump event and the run stays live.",
+        assertionIds: ["jumps-increased", "running-after-jump"],
+      },
+      {
+        id: "collect-core",
+        title: "Collecting a bonus core scores",
+        description: "A bonus core is collected and the score increases.",
+        assertionIds: ["collected-increased", "score-increased"],
+      },
+      {
+        id: "survive-run",
+        title: "The Runner survives a bounded run",
+        description: "Health stays at least one and the run is not lost.",
+        assertionIds: ["health-at-least-one", "run-not-lost"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "arena-survival": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Moves the Sentinel left while held.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Moves the Sentinel right while held.",
+      },
+      {
+        id: "move-up",
+        label: "MOVE UP",
+        action: "up",
+        mode: "hold",
+        description: "Moves the Sentinel up while held.",
+      },
+      {
+        id: "move-down",
+        label: "MOVE DOWN",
+        action: "down",
+        mode: "hold",
+        description: "Moves the Sentinel down while held.",
+      },
+      {
+        id: "attack",
+        label: "ATTACK",
+        action: "action",
+        mode: "pulse",
+        description: "Swings a melee attack. The authored melee trigger is the action input.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "health", label: "HULL", source: "variable", key: "health" },
+      { id: "lives", label: "LIVES", source: "variable", key: "lives" },
+      { id: "time-left", label: "TIME", source: "variable", key: "timeLeft" },
+      { id: "sentinel-x", label: "SENTINEL X", source: "player", key: "x" },
+      { id: "sentinel-y", label: "SENTINEL Y", source: "player", key: "y" },
+      { id: "melee-hits", label: "MELEE HITS", source: "event-count", key: "melee" },
+      { id: "deaths", label: "DEATHS", source: "event-count", key: "death" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "enemies", label: "ENEMIES", source: "tag-count", key: "enemy" },
+    ],
+    objectives: [
+      {
+        id: "attack-connects",
+        title: "An attack connects with a chaser",
+        description: "An accepted ATTACK pulse emits a melee event when a chaser is in range.",
+        assertionIds: ["melee-hits-increased"],
+      },
+      {
+        id: "sentinel-moves-right",
+        title: "Movement input changes position",
+        description: "Holding MOVE RIGHT increases the Sentinel's x position.",
+        assertionIds: ["sentinel-x-increased"],
+      },
+      {
+        id: "survive-wave",
+        title: "The Sentinel survives a bounded wave",
+        description: "Hull stays at least one during the bounded advance.",
+        assertionIds: ["health-at-least-one", "wave-running"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "falling-objects": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Moves the Catcher left along the lane while held.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Moves the Catcher right along the lane while held.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "lives", label: "LIVES", source: "variable", key: "lives" },
+      { id: "health", label: "HEALTH", source: "variable", key: "health" },
+      { id: "time-left", label: "TIME", source: "variable", key: "timeLeft" },
+      { id: "catcher-x", label: "CATCHER X", source: "player", key: "x" },
+      { id: "collected", label: "COLLECTED", source: "event-count", key: "collect" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "meteors", label: "METEORS", source: "tag-count", key: "falling-hazard" },
+      { id: "bonuses", label: "BONUSES", source: "tag-count", key: "bonus" },
+    ],
+    objectives: [
+      {
+        id: "catch-bonus",
+        title: "Catching a bonus scores",
+        description: "A bonus star is collected and the score increases.",
+        assertionIds: ["collected-increased", "score-increased"],
+      },
+      {
+        id: "dodge-meteor",
+        title: "The Catcher survives the lane",
+        description: "Health stays at least one during the bounded advance.",
+        assertionIds: ["health-at-least-one", "dodge-running"],
+      },
+      {
+        id: "move-catcher",
+        title: "Movement input changes position",
+        description: "Holding MOVE RIGHT increases the Catcher's x position.",
+        assertionIds: ["catcher-x-increased"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  "maze-escape": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Moves the Maze runner left while held.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Moves the Maze runner right while held.",
+      },
+      {
+        id: "move-up",
+        label: "MOVE UP",
+        action: "up",
+        mode: "hold",
+        description: "Moves the Maze runner up while held.",
+      },
+      {
+        id: "move-down",
+        label: "MOVE DOWN",
+        action: "down",
+        mode: "hold",
+        description: "Moves the Maze runner down while held.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "dots", label: "DOTS", source: "variable", key: "dots" },
+      { id: "health", label: "HEALTH", source: "variable", key: "health" },
+      { id: "lives", label: "LIVES", source: "variable", key: "lives" },
+      { id: "exit-open", label: "EXIT OPEN", source: "variable", key: "exitOpen" },
+      { id: "runner-x", label: "RUNNER X", source: "player", key: "x" },
+      { id: "runner-y", label: "RUNNER Y", source: "player", key: "y" },
+      { id: "collected", label: "COLLECTED", source: "event-count", key: "collect" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "dots-left", label: "DOT OBJECTS", source: "tag-count", key: "dot" },
+      { id: "wardens", label: "WARDENS", source: "tag-count", key: "maze-enemy" },
+    ],
+    objectives: [
+      {
+        id: "collect-dot",
+        title: "Collecting a dot increases the count",
+        description: "A maze dot is collected and the dots counter increases.",
+        assertionIds: ["collected-increased", "dots-increased"],
+      },
+      {
+        id: "open-exit",
+        title: "Enough dots open the exit",
+        description: "After collecting at least fifteen dots, the exit gate reports open.",
+        assertionIds: ["exit-open-true", "dots-at-least-fifteen"],
+      },
+      {
+        id: "runner-moves-right",
+        title: "Movement input changes position",
+        description: "Holding MOVE RIGHT increases the runner's x position.",
+        assertionIds: ["runner-x-increased"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
+  snake: {
+    version: 1,
+    controls: [
+      {
+        id: "turn-left",
+        label: "TURN LEFT",
+        action: "left",
+        mode: "pulse",
+        description: "Queues a left turn for the next snake step.",
+      },
+      {
+        id: "turn-right",
+        label: "TURN RIGHT",
+        action: "right",
+        mode: "pulse",
+        description: "Queues a right turn for the next snake step.",
+      },
+      {
+        id: "turn-up",
+        label: "TURN UP",
+        action: "up",
+        mode: "pulse",
+        description: "Queues an upward turn for the next snake step.",
+      },
+      {
+        id: "turn-down",
+        label: "TURN DOWN",
+        action: "down",
+        mode: "pulse",
+        description: "Queues a downward turn for the next snake step.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "length", label: "LENGTH", source: "variable", key: "length" },
+      { id: "head-x", label: "HEAD X", source: "player", key: "x" },
+      { id: "head-y", label: "HEAD Y", source: "player", key: "y" },
+      { id: "food", label: "FOOD", source: "tag-count", key: "snake-food" },
+      { id: "body-segments", label: "BODY SEGMENTS", source: "tag-count", key: "snake-body" },
+      { id: "lost", label: "LOST", source: "variable", key: "lost" },
+    ],
+    objectives: [
+      {
+        id: "turn-head-right",
+        title: "A turn moves the head right",
+        description: "A queued right turn advances the head's x position after the next step.",
+        assertionIds: ["head-x-increased"],
+      },
+      {
+        id: "eat-star",
+        title: "Eating food scores and grows the snake",
+        description: "The score and the length counter both increase after eating.",
+        assertionIds: ["score-increased", "length-increased"],
+      },
+      {
+        id: "stay-alive",
+        title: "The snake does not hit a wall or itself",
+        description: "The lost flag stays false during a bounded run.",
+        assertionIds: ["lost-false", "snake-running"],
+      },
+    ],
+    scenarioIds: [],
+  },
+};
