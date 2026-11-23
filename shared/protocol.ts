@@ -89,8 +89,8 @@ export interface ContextPacket {
       y: number;
       w?: number;
       h?: number;
-      behaviors: string[];
-      tags: string[];
+      behaviors?: string[];
+      tags?: string[];
       prefabId?: string;
     }>;
     rules: Array<{ id: string; name: string; enabled: boolean; summary: string }>;

@@ -24,18 +24,24 @@ function sceneSummary(scene: Scene) {
     name: scene.name,
     size: scene.size,
     layers: scene.layers.map((l) => ({ id: l.id, name: l.name, order: l.order, objectCount: counts.get(l.id) ?? 0 })),
-    objects: scene.objects.slice(0, 400).map((o) => ({
-      id: o.id,
-      name: o.name,
-      layerId: o.layerId,
-      x: Math.round(o.transform.x),
-      y: Math.round(o.transform.y),
-      w: o.visual && "width" in o.visual ? Number((o.visual as any).width) : undefined,
-      h: o.visual && "height" in o.visual ? Number((o.visual as any).height) : undefined,
-      behaviors: o.behaviors.map((b) => b.type),
-      tags: (o as any).tags ?? [],
-      prefabId: (o as any).prefabId,
-    })),
+    // One compact entry per object, with empty/default fields omitted: this
+    // index is re-sent on every model step, so per-object overhead compounds.
+    objects: scene.objects.slice(0, 400).map((o) => {
+      const entry: NonNullable<ContextPacket["activeScene"]>["objects"][number] = {
+        id: o.id,
+        name: o.name,
+        layerId: o.layerId,
+        x: Math.round(o.transform.x),
+        y: Math.round(o.transform.y),
+      };
+      if (o.visual && "width" in o.visual) entry.w = Math.round(Number((o.visual as any).width));
+      if (o.visual && "height" in o.visual) entry.h = Math.round(Number((o.visual as any).height));
+      if (o.behaviors.length) entry.behaviors = o.behaviors.map((b) => b.type);
+      const tags = (o as any).tags;
+      if (Array.isArray(tags) && tags.length) entry.tags = tags;
+      if ((o as any).prefabId) entry.prefabId = (o as any).prefabId;
+      return entry;
+    }),
     rules: scene.rules.map((r) => ({
       id: r.id,
       name: r.name,
@@ -112,7 +118,7 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
       prefabId: (o as any).prefabId,
       prefabOverrides: (o as any).prefabOverrides,
     })),
-    assets: document.assets.slice(0, 200).map((a) => ({ id: a.id, name: a.name, kind: (a as any).kind, type: (a as any).kind })),
+    assets: document.assets.slice(0, 200).map((a) => ({ id: a.id, name: a.name, kind: (a as any).kind })),
     prefabs: document.prefabs.map((p) => ({ id: p.id, name: p.name, objectCount: 1 + ((p as any).objects?.length ?? 0) })),
     variables: document.variables.map((v) => ({ name: v.name, type: v.type, initial: v.initial })),
     recentActions: history.slice(-8).map((h) => ({

@@ -1,5 +1,5 @@
 import type { ToolResult } from "@shared/protocol";
-import type { ProjectDocument } from "../model/schema";
+import type { GameObject, ProjectDocument, Scene, Visual } from "../model/schema";
 import { commandReference } from "./command-help";
 import { captureViewportImage } from "./viewport-capture";
 import { gameTestProfileForDocument, profileScenarios } from "../model/game-test-profile";
@@ -19,6 +19,151 @@ export interface ExecutedTool extends ToolResult {
   name: string;
   args: unknown;
   imageDataUrl?: string;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const MAX_INDEXED_OBJECTS = 400;
+/** Keep the default scene result small enough to survive the request budget intact. */
+const MAX_INDEX_CHARS = 6000;
+
+/**
+ * Scene payloads are sent back to the model on every step of a turn, so the
+ * default get_scene result keeps everything needed to author patches (ids,
+ * hierarchy, transforms, bodies, behavior params, rules) and only summarizes
+ * bulky visual data. get_object or detail:"full" still reach the raw values.
+ */
+function compactTransform(t: GameObject["transform"]) {
+  const out: Record<string, number> = { x: round2(t.x), y: round2(t.y) };
+  if (t.rotation) out.rotation = round2(t.rotation);
+  if (t.scaleX !== 1) out.scaleX = round2(t.scaleX);
+  if (t.scaleY !== 1) out.scaleY = round2(t.scaleY);
+  if (t.originX !== 0.5) out.originX = round2(t.originX);
+  if (t.originY !== 0.5) out.originY = round2(t.originY);
+  return out;
+}
+
+function compactBody(body: NonNullable<GameObject["body"]>) {
+  const out: Record<string, unknown> = { type: body.type, width: round2(body.width), height: round2(body.height) };
+  if (body.offsetX) out.offsetX = round2(body.offsetX);
+  if (body.offsetY) out.offsetY = round2(body.offsetY);
+  if (body.gravityScale !== 1) out.gravityScale = round2(body.gravityScale);
+  if (body.collideWorldBounds) out.collideWorldBounds = true;
+  if (body.oneWay) out.oneWay = true;
+  return out;
+}
+
+function compactVisual(visual: Visual) {
+  if (visual.kind === "tilemap") {
+    return {
+      kind: visual.kind,
+      tilesetId: visual.tilesetId,
+      tileSize: visual.tileSize,
+      cols: visual.cols,
+      rows: visual.rows,
+      nonEmptyTiles: visual.data.filter((tile) => tile > 0).length,
+    };
+  }
+  if (visual.kind === "shape") {
+    const shapes = visual.shapes.slice(0, 8).map((shape) => {
+      const out: Record<string, unknown> = {
+        kind: shape.kind,
+        width: round2(shape.width),
+        height: round2(shape.height),
+        color: shape.color,
+      };
+      if (shape.x) out.x = round2(shape.x);
+      if (shape.y) out.y = round2(shape.y);
+      if (shape.rotation) out.rotation = round2(shape.rotation);
+      if (shape.stroke) out.stroke = shape.stroke;
+      if (shape.strokeWidth) out.strokeWidth = shape.strokeWidth;
+      return out;
+    });
+    return { kind: visual.kind, width: round2(visual.width), height: round2(visual.height), shapeCount: visual.shapes.length, shapes };
+  }
+  // rect, sprite and text payloads are already small enough to pass through.
+  return visual;
+}
+
+function compactObject(object: GameObject) {
+  const out: Record<string, unknown> = {
+    id: object.id,
+    name: object.name,
+    layerId: object.layerId,
+    transform: compactTransform(object.transform),
+  };
+  if (object.parentId) out.parentId = object.parentId;
+  if (object.prefabId) out.prefabId = object.prefabId;
+  if (object.prefabInstanceId) out.prefabInstanceId = object.prefabInstanceId;
+  if (object.prefabSlot) out.prefabSlot = object.prefabSlot;
+  if (object.prefabOverrides) out.prefabOverrides = object.prefabOverrides;
+  if (object.visual) out.visual = compactVisual(object.visual);
+  if (object.body) out.body = compactBody(object.body);
+  if (object.behaviors.length) {
+    out.behaviors = object.behaviors.map((behavior) => {
+      const entry: Record<string, unknown> = { id: behavior.id, type: behavior.type, params: behavior.params };
+      if (!behavior.enabled) entry.enabled = false;
+      return entry;
+    });
+  }
+  if (object.animations) out.animations = object.animations;
+  if (Object.keys(object.properties).length) out.properties = object.properties;
+  if (object.tags.length) out.tags = object.tags;
+  return out;
+}
+
+function compactScene(scene: Scene) {
+  // When the budget cannot cover every object, spend it on the ones that carry
+  // logic (behaviors, rule references, prefabs) and list the rest by id+name so
+  // nothing becomes invisible; get_object still returns any full definition.
+  const referenced = new Set<string>();
+  const walk = (value: unknown) => {
+    if (typeof value === "string") referenced.add(value);
+    else if (Array.isArray(value)) value.forEach(walk);
+    else if (value && typeof value === "object") Object.values(value).forEach(walk);
+  };
+  walk(scene.rules);
+
+  const candidates = scene.objects.slice(0, MAX_INDEXED_OBJECTS).map((object, index) => {
+    const rank = (object.behaviors.length ? 3 : 0) + (referenced.has(object.id) ? 2 : 0) + (object.prefabId ? 1 : 0);
+    return { index, rank, entry: compactObject(object), size: 0 };
+  });
+  for (const candidate of candidates) candidate.size = JSON.stringify(candidate.entry).length + 1;
+  candidates.sort((a, b) => b.rank - a.rank || a.index - b.index);
+
+  const selected: typeof candidates = [];
+  const otherObjects: Array<{ id: string; name: string }> = [];
+  let used = 0;
+  for (const candidate of candidates) {
+    if (used + candidate.size <= MAX_INDEX_CHARS) {
+      selected.push(candidate);
+      used += candidate.size;
+    }
+  }
+  const selectedIndexes = new Set(selected.map((candidate) => candidate.index));
+  for (const candidate of candidates) {
+    if (!selectedIndexes.has(candidate.index)) otherObjects.push({ id: String(candidate.entry.id), name: String(candidate.entry.name) });
+  }
+  selected.sort((a, b) => a.index - b.index);
+  otherObjects.sort((a, b) => a.id.localeCompare(b.id));
+  const objects = selected.map((candidate) => candidate.entry);
+  const out: Record<string, unknown> = {
+    id: scene.id,
+    name: scene.name,
+    kind: scene.kind,
+    size: scene.size,
+    background: scene.background,
+    camera: scene.camera,
+    layers: scene.layers,
+    objectCount: scene.objects.length,
+    objects,
+    rules: scene.rules,
+  };
+  if (scene.audio) out.audio = scene.audio;
+  if (objects.length < scene.objects.length) {
+    out.otherObjects = otherObjects;
+    out.note = `Full detail for ${objects.length} of ${scene.objects.length} objects; the rest are listed in otherObjects. Use get_object for one object's full definition or pass detail:"full" for the raw scene.`;
+  }
+  return out;
 }
 
 export function executeClientTool(input: ToolExecInput): ExecutedTool {
@@ -51,7 +196,7 @@ export function executeClientTool(input: ToolExecInput): ExecutedTool {
       const sceneId = String(args.sceneId ?? activeSceneId ?? "");
       const scene = document.scenes.find((s) => s.id === sceneId);
       if (!scene) return fail(`Scene not found: ${sceneId}`);
-      return ok(scene);
+      return ok(args.detail === "full" ? scene : compactScene(scene));
     }
     if (name === "search_entities") {
       const text = String(args.text ?? "").toLowerCase();

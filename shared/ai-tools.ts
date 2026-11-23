@@ -25,10 +25,18 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
     type: "function",
     function: {
       name: "get_scene",
-      description: "Get full scene details by scene id, including layers, objects, and rules.",
+      description:
+        "Get a scene by id: layers, a compact object index (ids, transforms, bodies, behavior types, visual summary), and rules. Large visual payloads (shape primitives, tilemap data) are summarized; use get_object for one object's full definition, or pass detail:'full'.",
       parameters: {
         type: "object",
-        properties: { sceneId: { type: "string", description: "Scene id to inspect" } },
+        properties: {
+          sceneId: { type: "string", description: "Scene id to inspect" },
+          detail: {
+            type: "string",
+            enum: ["summary", "full"],
+            description: "summary (default) omits bulky visual data; full returns the raw scene",
+          },
+        },
         required: ["sceneId"],
         additionalProperties: false,
       },
