@@ -138,8 +138,8 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
             type: "object",
             properties: {
               maxKanePhases: { type: "number", description: "1-3" },
-              maxKaneStepsPerPhase: { type: "number", description: "1-8" },
-              maxWallTimeSecondsPerPhase: { type: "number", description: "30-300" },
+              maxKaneStepsPerPhase: { type: "number", description: "1-12" },
+              maxWallTimeSecondsPerPhase: { type: "number", description: "30-600" },
               maxFramesPerAdvance: { type: "number", description: "1-600" },
               maxFramesPerPhase: { type: "number", description: "1-3600" },
             },

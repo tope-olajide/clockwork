@@ -30,7 +30,8 @@ import { TopBar } from "../../shell/TopBar";
 import { useShellBreakpoints } from "../../lib/useMediaQuery";
 import { makeLayer, makeObject, makeScene } from "../../engine/model/factory";
 import { downloadProject } from "../../engine/persistence/transfer";
-import { useEngineStore } from "../../engine/store/engine-store";import { CoachTour } from "../onboarding/CoachTour";
+import { useEngineStore } from "../../engine/store/engine-store";
+import { useAgentPresenceStore } from "../../engine/store/agent-presence";import { CoachTour } from "../onboarding/CoachTour";
 import { EngineInspector, EngineLeftDock, EngineWorkspace,
   type InspectorTab,
   type PresentationTab,
@@ -381,11 +382,13 @@ export function EditorPage() {
     const api = {
       getState: () => {
         const state = useEngineStore.getState();
+        const active = state.document?.scenes.find((scene) => scene.id === state.activeSceneId) ?? state.document?.scenes[0];
         return {
           projectId: state.document?.id ?? null,
           revision: state.document?.revision ?? 0,
           sceneId: state.activeSceneId,
           selection: state.selection,
+          objects: active?.objects.map((object) => ({ id: object.id, name: object.name, x: object.transform.x, y: object.transform.y })) ?? [],
           historyLength: state.history.length,
           futureLength: state.future.length,
           saveState: state.saveState,
@@ -393,6 +396,8 @@ export function EditorPage() {
           agentOpen,
           agentMode: agent.mode,
           pendingPreview: Boolean(agent.pendingPreview),
+          agentPresence: useAgentPresenceStore.getState().presence,
+          agentGhost: useAgentPresenceStore.getState().ghost,
         };
       },
       select: (ids: string[]) => setSelection(ids),
@@ -693,8 +698,11 @@ export function EditorPage() {
       {debug && <DebugPanel onClose={() => setDebug(false)} />}
       {agentOpen && <button className="agent-scrim" aria-label="Close agent" onClick={() => setAgentOpen(false)} />}
       {agent.pendingPreview && (
-        <div className="plan-preview-pill" role="status">
-          <span>PLAN PREVIEW · {agent.pendingPreview.changeSet?.changes.length ?? agent.pendingPreview.commands.length} changes</span>
+        <div className="plan-preview-pill" role="status" data-testid="plan-preview-pill">
+          <span>
+            {agent.pendingPreview.destructive ? "CONFIRM CHANGES" : agent.mode === "plan" ? "PLAN PREVIEW" : "PREVIEW"} ·{" "}
+            {agent.pendingPreview.changeSet?.changes.length ?? agent.pendingPreview.commands.length} changes
+          </span>
           <button type="button" onClick={agent.applyPendingPreview} disabled={agent.pendingPreview.stale}>Apply</button>
           <button type="button" onClick={agent.discardPendingPreview}>Discard</button>
         </div>

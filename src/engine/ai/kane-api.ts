@@ -87,10 +87,14 @@ export async function fetchPhaseReplays(): Promise<PhaseReplayRef[]> {
   }
 }
 
-export async function streamKanePhase(
+const PHASE_RESUME_ATTEMPTS = 18;
+const PHASE_RESUME_DELAY_MS = 5_000;
+
+/** One request/stream attempt. Returns null when the run is still in flight. */
+async function streamKanePhaseOnce(
   input: KanePhaseRequest,
-  handlers: KanePhaseStreamHandlers = {},
-): Promise<KanePhaseResult> {
+  handlers: KanePhaseStreamHandlers,
+): Promise<KanePhaseResult | null> {
   const response = await fetch("/api/kane/phase", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -99,6 +103,10 @@ export async function streamKanePhase(
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+    // 409 means the approved run is still active (or its budget is used). The
+    // server's idempotent store returns the typed result as soon as it exists,
+    // so the caller can safely retry the same approved request.
+    if (response.status === 409) return null;
     throw Object.assign(new Error(body?.error || `Kane phase failed (HTTP ${response.status}).`), {
       code: body?.code,
       status: response.status,
@@ -136,8 +144,34 @@ export async function streamKanePhase(
     }
   }
   if (buffer.trim()) consume(buffer);
-  if (!final) throw new Error("Kane phase ended without a typed result.");
   return final;
+}
+
+/**
+ * Run one approved phase, surviving a dropped development proxy connection.
+ * A long Kane run can outlive an HTTP connection while the server keeps going.
+ * Re-posting the same request is safe: the server keys the session by plan
+ * fingerprint and replays the finished typed result instead of running again.
+ */
+export async function streamKanePhase(
+  input: KanePhaseRequest,
+  handlers: KanePhaseStreamHandlers = {},
+): Promise<KanePhaseResult> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < PHASE_RESUME_ATTEMPTS; attempt += 1) {
+    if (handlers.signal?.aborted) throw new Error("Kane phase was cancelled.");
+    try {
+      const result = await streamKanePhaseOnce(input, handlers);
+      if (result) return result;
+    } catch (error) {
+      if (handlers.signal?.aborted) throw error;
+      const status = (error as { status?: number }).status;
+      if (status && status !== 409) throw error;
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    await new Promise((resolve) => setTimeout(resolve, PHASE_RESUME_DELAY_MS));
+  }
+  throw lastError ?? new Error("Kane phase ended without a typed result.");
 }
 
 export function streamAiPlay(

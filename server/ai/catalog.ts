@@ -34,37 +34,25 @@ export const BUILT_IN_PROVIDERS: BuiltInProvider[] = [
 ];
 
 export const CURATED_MODELS: ModelMeta[] = [
+  // OpenAI - Latest models
   { id: "openai:gpt-4o", providerId: "openai", label: "GPT-4o", contextWindow: 128000, tools: true, vision: true, recommended: true },
   { id: "openai:gpt-4o-mini", providerId: "openai", label: "GPT-4o mini", contextWindow: 128000, tools: true, vision: true },
-  { id: "openai:o4-mini", providerId: "openai", label: "o4-mini", contextWindow: 200000, tools: true, vision: true },
-  { id: "anthropic:claude-sonnet-4", providerId: "anthropic", label: "Claude Sonnet 4", contextWindow: 200000, tools: true, vision: true, recommended: true },
-  { id: "anthropic:claude-3-7-sonnet", providerId: "anthropic", label: "Claude 3.7 Sonnet", contextWindow: 200000, tools: true, vision: true },
-  { id: "anthropic:claude-3-5-haiku", providerId: "anthropic", label: "Claude 3.5 Haiku", contextWindow: 200000, tools: true, vision: false },
-  { id: "google:gemini-2.0-flash", providerId: "google", label: "Gemini 2.0 Flash", contextWindow: 1000000, tools: true, vision: true, recommended: true },
-  { id: "google:gemini-1.5-pro", providerId: "google", label: "Gemini 1.5 Pro", contextWindow: 2000000, tools: true, vision: true },
-  { id: "google:gemini-1.5-flash", providerId: "google", label: "Gemini 1.5 Flash", contextWindow: 1000000, tools: true, vision: true },
-  { id: "openrouter:openai/gpt-4o-mini", providerId: "openrouter", label: "GPT-4o mini (OpenRouter)", contextWindow: 128000, tools: true, vision: true, recommended: true },
-  { id: "openrouter:anthropic/claude-3.5-sonnet", providerId: "openrouter", label: "Claude 3.5 Sonnet (OpenRouter)", contextWindow: 200000, tools: true, vision: true },
-  { id: "openrouter:google/gemini-flash-1.5", providerId: "openrouter", label: "Gemini Flash 1.5 (OpenRouter)", contextWindow: 1000000, tools: true, vision: true },
-  { id: "groq:llama-3.3-70b-versatile", providerId: "groq", label: "Llama 3.3 70B", contextWindow: 128000, tools: true, vision: false, recommended: true },
-  { id: "groq:llama-3.1-8b-instant", providerId: "groq", label: "Llama 3.1 8B Instant", contextWindow: 128000, tools: true, vision: false },
-  { id: "groq:mixtral-8x7b-32768", providerId: "groq", label: "Mixtral 8x7B", contextWindow: 32768, tools: true, vision: false },
-  { id: "mistral:mistral-large-latest", providerId: "mistral", label: "Mistral Large", contextWindow: 128000, tools: true, vision: false, recommended: true },
-  { id: "mistral:mistral-small-latest", providerId: "mistral", label: "Mistral Small", contextWindow: 32000, tools: true, vision: false },
-  { id: "mistral:pixtral-large-latest", providerId: "mistral", label: "Pixtral Large", contextWindow: 128000, tools: true, vision: true },
-  { id: "deepseek:deepseek-chat", providerId: "deepseek", label: "DeepSeek Chat", contextWindow: 64000, tools: true, vision: false, recommended: true },
-  { id: "deepseek:deepseek-reasoner", providerId: "deepseek", label: "DeepSeek Reasoner", contextWindow: 64000, tools: false, vision: false },
-  { id: "deepseek:deepseek-coder", providerId: "deepseek", label: "DeepSeek Coder", contextWindow: 64000, tools: true, vision: false },
-  { id: "xai:grok-2", providerId: "xai", label: "Grok 2", contextWindow: 131072, tools: true, vision: false, recommended: true },
-  { id: "xai:grok-2-vision", providerId: "xai", label: "Grok 2 Vision", contextWindow: 32768, tools: true, vision: true },
-  { id: "xai:grok-beta", providerId: "xai", label: "Grok Beta", contextWindow: 131072, tools: true, vision: false },
-  { id: "together:meta-llama/Llama-3.3-70B-Instruct-Turbo", providerId: "together", label: "Llama 3.3 70B Turbo", contextWindow: 128000, tools: true, vision: false, recommended: true },
-  { id: "together:Qwen/Qwen2.5-72B-Instruct-Turbo", providerId: "together", label: "Qwen 2.5 72B", contextWindow: 32768, tools: true, vision: false },
-  { id: "together:meta-llama/Llama-Vision-Free", providerId: "together", label: "Llama Vision", contextWindow: 131072, tools: true, vision: true },
-  { id: "fireworks:accounts/fireworks/models/llama-v3p3-70b-instruct", providerId: "fireworks", label: "Llama 3.3 70B", contextWindow: 128000, tools: true, vision: false, recommended: true },
-  { id: "fireworks:accounts/fireworks/models/qwen2p5-72b-instruct", providerId: "fireworks", label: "Qwen 2.5 72B", contextWindow: 32768, tools: true, vision: false },
-  { id: "fireworks:accounts/fireworks/models/llama-v3p2-11b-vision-instruct", providerId: "fireworks", label: "Llama 3.2 11B Vision", contextWindow: 128000, tools: true, vision: true },
-  { id: "ollama:llama3.2", providerId: "ollama", label: "Llama 3.2", contextWindow: 128000, tools: true, vision: false, recommended: true },
-  { id: "ollama:qwen2.5", providerId: "ollama", label: "Qwen 2.5", contextWindow: 32768, tools: true, vision: false },
-  { id: "ollama:llava", providerId: "ollama", label: "LLaVA", contextWindow: 8192, tools: false, vision: true },
+  
+  // Anthropic - Latest Claude models
+  { id: "anthropic:claude-sonnet-4-20250514", providerId: "anthropic", label: "Claude Sonnet 4", contextWindow: 200000, tools: true, vision: true, recommended: true },
+  { id: "anthropic:claude-3-7-sonnet-20250219", providerId: "anthropic", label: "Claude 3.7 Sonnet", contextWindow: 200000, tools: true, vision: true },
+  { id: "anthropic:claude-3-5-haiku-20241022", providerId: "anthropic", label: "Claude 3.5 Haiku", contextWindow: 200000, tools: true, vision: false },
+  
+  // Google - Latest Gemini models
+  { id: "google:gemini-2.0-flash-exp", providerId: "google", label: "Gemini 2.0 Flash", contextWindow: 1000000, tools: true, vision: true, recommended: true },
+  { id: "google:gemini-1.5-pro-latest", providerId: "google", label: "Gemini 1.5 Pro", contextWindow: 2000000, tools: true, vision: true },
+  
+  // DeepSeek - Latest models
+  { id: "deepseek:deepseek-chat", providerId: "deepseek", label: "DeepSeek V3", contextWindow: 64000, tools: true, vision: false, recommended: true },
+  
+  // Groq - Fast inference
+  { id: "groq:llama-3.3-70b-versatile", providerId: "groq", label: "Llama 3.3 70B (Groq)", contextWindow: 128000, tools: true, vision: false, recommended: true },
+  
+  // Ollama - Local models
+  { id: "ollama:llama3.2", providerId: "ollama", label: "Llama 3.2 (Local)", contextWindow: 128000, tools: true, vision: false, recommended: true },
 ];

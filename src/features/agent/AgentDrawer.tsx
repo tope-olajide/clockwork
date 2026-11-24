@@ -262,6 +262,14 @@ export function AgentDrawer(props: AgentDrawerProps) {
         </div>
       </header>
 
+      {lockedSelection && (
+        <div className="chat-locked" data-testid="locked-selection" role="status">
+          <span className="chat-locked-label">Locked selection</span>
+          <strong>{lockedSelection.name}</strong>
+          <button type="button" className="chat-locked-unlock" onClick={onUnlockSelection}>Unlock</button>
+        </div>
+      )}
+
       <details className="chat-context">
         <summary>
           <span className="chat-context-dot" /> {sceneName ?? projectName}
@@ -273,9 +281,6 @@ export function AgentDrawer(props: AgentDrawerProps) {
           <div><span>Scene</span><strong>{sceneName ?? "None"}</strong></div>
           <div><span>Revision</span><strong>r{revision}</strong></div>
           <div><span>Selection</span><strong>{selectionCount}</strong></div>
-          {lockedSelection && (
-            <div><span>Locked</span><strong>{lockedSelection.name} <button type="button" onClick={onUnlockSelection}>Unlock</button></strong></div>
-          )}
         </div>
       </details>
 

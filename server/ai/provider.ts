@@ -27,15 +27,18 @@ function resolveEnvModel(): ResolvedModelOk | null {
   const model = process.env.LLM_MODEL?.trim() || process.env.AI_MODEL?.trim();
   const baseUrl = process.env.LLM_BASE_URL?.trim() || process.env.AI_BASE_URL?.trim();
   const apiKey = process.env.LLM_API_KEY?.trim() || process.env.AI_API_KEY?.trim();
-  if (!model || !baseUrl || !apiKey) return null;
+  if (!model || !baseUrl) return null;
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  // Check if this is a local endpoint that doesn't require an API key
+  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(normalizedBaseUrl);
   return {
     kind: "ok",
     providerId: "env",
     model,
     fullModelId: `env:${model}`,
     apiStyle: "openai-compatible",
-    baseUrl,
-    apiKey,
+    baseUrl: normalizedBaseUrl,
+    apiKey: apiKey ?? (isLocal ? "dummy-key-for-local" : ""),
     tools: true,
     vision: false,
     contextWindow: 128_000,
@@ -69,8 +72,10 @@ export function resolveModel(requestedModelId?: string): ResolvedModel {
   }
 
   const apiKey = resolveApiKey(model.providerId);
-  // Allow local providers without key if explicitly ollama/local and no env requirement? keep strict except ollama may be empty in some setups; but better require configured
-  if (!apiKey && !(provider.id === "ollama" && (provider as any).local)) {
+  // Allow local providers without key (ollama, local endpoints, etc.)
+  const isLocalProvider = (provider as any).local || (provider.id === "ollama") || 
+    (provider.id === "env" && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(provider.baseUrl));
+  if (!apiKey && !isLocalProvider) {
     return { kind: "missing", code: "no-key", message: `No API key configured for ${provider.name}.` };
   }
 

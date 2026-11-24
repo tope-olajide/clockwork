@@ -7,6 +7,13 @@ import type { AiPlayResult, KaneEvent, KaneRunStatus, KaneStep } from "./kane";
  */
 export const KANE_PHASE_LIMITS = {
   maxPhases: 3,
+  /** A phase often needs setup, one advance, a settle wait and four value captures. */
+  maxStepsPerPhase: 12,
+  /**
+   * Wall time includes Kane's planning phase, which has taken 3-4 minutes before
+   * the first step on a cold session; 300 s killed runs that were nearly done.
+   */
+  maxWallTimeSecondsPerPhase: 600,
   maxAssertionsPerPhase: 12,
   maxControlsPerPhase: 6,
   maxObjectiveChars: 4000,

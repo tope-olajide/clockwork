@@ -89,6 +89,22 @@ test("a plan over the hard budget is rejected", () => {
   framesOverAdvance.budget.maxFramesPerAdvance = 600;
   framesOverAdvance.budget.maxFramesPerPhase = 120;
   assert.equal(validateTestPlan(framesOverAdvance, { document, profile }).ok, false);
+
+  const stepsAtCap = validPlan(document);
+  stepsAtCap.budget.maxKaneStepsPerPhase = 12;
+  assert.equal(validateTestPlan(stepsAtCap, { document, profile }).ok, true);
+
+  const stepsOverCap = validPlan(document);
+  stepsOverCap.budget.maxKaneStepsPerPhase = 13;
+  assert.equal(validateTestPlan(stepsOverCap, { document, profile }).ok, false);
+
+  const wallAtCap = validPlan(document);
+  wallAtCap.budget.maxWallTimeSecondsPerPhase = 600;
+  assert.equal(validateTestPlan(wallAtCap, { document, profile }).ok, true);
+
+  const wallOverCap = validPlan(document);
+  wallOverCap.budget.maxWallTimeSecondsPerPhase = 601;
+  assert.equal(validateTestPlan(wallOverCap, { document, profile }).ok, false);
 });
 
 test("stale plans, missing scenes and foreign projects are rejected", () => {

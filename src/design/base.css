@@ -3551,6 +3551,28 @@ a {
 }
 
 /* Slice 7 — agent presence, plan preview and presets */
+.chat-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(143, 107, 255, 0.35);
+  background: rgba(143, 107, 255, 0.12);
+  color: #dcd4ff;
+  font-size: 11px;
+}
+.chat-locked-label { letter-spacing: 0.06em; text-transform: uppercase; color: #a99cff; }
+.chat-locked strong { color: #fff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-locked-unlock {
+  margin-left: auto;
+  border: 1px solid rgba(143, 107, 255, 0.5);
+  background: transparent;
+  color: #dcd4ff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
 .agent-presence-pill {
   position: absolute;
   z-index: 8;

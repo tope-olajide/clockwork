@@ -92,7 +92,14 @@ app.post("/providers/:id/test", async (c) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const url = provider.apiStyle === "openai-compatible" ? `${provider.baseUrl.replace(/\/$/, "")}/models` : provider.baseUrl;
+    const normalizedBaseUrl = provider.baseUrl.replace(/\/+$/, "");
+    const url = provider.apiStyle === "openai-compatible"
+      ? normalizedBaseUrl.endsWith("/v1")
+        ? `${normalizedBaseUrl}/models`
+        : normalizedBaseUrl.endsWith("/models")
+          ? normalizedBaseUrl
+          : `${normalizedBaseUrl}/v1/models`
+      : provider.baseUrl;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (apiKey) {
       if (provider.apiStyle === "anthropic") headers["x-api-key"] = apiKey;

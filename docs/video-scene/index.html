@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Clockwork — I am the LLM (scene)</title>
+<style>
+body{background:#121214;color:#fff;font-family:Inter,system-ui,sans-serif;margin:0;display:flex;flex-direction:column;align-items:center}
+#stage{width:min(960px,94vw);margin:24px 0 8px;border:1px solid #333;border-radius:12px;overflow:hidden}
+#stage img{width:100%;display:block}
+#llm{width:min(960px,94vw);background:#1a1625;border:1px solid #4c3a8c;border-radius:12px;padding:14px 16px;font-size:18px;min-height:64px}
+#cap{opacity:.7;margin:8px 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+#controls{margin:12px;display:flex;gap:8px}
+button{background:#ff7a59;border:0;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer}
+button.ghost{background:#222}
+</style></head><body>
+<h2>Clockwork — I am the LLM inside your engine</h2>
+<div id="stage"><img id="f" src="01-projects.png"></div>
+<div id="cap"></div>
+<div id="llm"></div>
+<div id="controls"><button id="play">▶ Play scene</button><button class="ghost" id="prev">‹</button><button class="ghost" id="next">›</button></div>
+<p style="opacity:.6;font-size:13px">Recorded live: fixture Kane + real Chrome, zero LLM cost. I narrate as the agent. Real paid proof: run b967bbdd, shots 3 / projectiles 3, Test Manager link in docs/kane-proof.md.</p>
+<script>
+const cues=[
+["01-projects.png","I am the LLM inside Clockwork. You built a game. I know this game — and I can prove it works.","HOOK"],
+["02-editor.png","This is Space Shooter. I read its document and its test profile: SHOOT is hold, 190ms cooldown, or Kane would never fire.","I KNOW YOUR GAME — get_scene + get_game_test_profile"],
+["03-draft.png","You said: prove shooting works. I drafted a typed plan — one phase, two assertions, 45-frame budget. Nothing runs until you approve.","I DRAFT — propose_test_plan"],
+["04-approved.png","Approved. I snapshot your revision, freeze seed 1234, hand Kane a Test Mode URL. Time moves only when Kane presses STEP.","I FREEZE IT — snapshot + TestController"],
+["05-passed.png","Kane held SHOOT, stepped 45 frames: shots-fired 5, projectiles 4, accepted inputs 3. PASS — inputs delivered, frames in budget, evidence attached.","KANE PROVES IT — run_kane_test_phase"],
+["06-agent.png","And the result lands back in my chat as a typed tool result — so I decide what to test next. Build it. Prove it. Ship it.","I CLOSE THE LOOP — phase continuation"],
+];
+let i=0,timer=null;
+const img=document.getElementById('f'),llm=document.getElementById('llm'),cap=document.getElementById('cap');
+function show(n){i=(n+cues.length)%cues.length;img.src=cues[i][0];llm.textContent='LLM: '+cues[i][1];cap.textContent=(i+1)+'/'+cues.length+' — '+cues[i][2];}
+document.getElementById('prev').onclick=()=>show(i-1);
+document.getElementById('next').onclick=()=>show(i+1);
+document.getElementById('play').onclick=(e)=>{
+ if(timer){clearInterval(timer);timer=null;e.target.textContent='▶ Play scene';return;}
+ e.target.textContent='⏸ Pause';timer=setInterval(()=>show(i+1),2600);
+};
+show(0);
+</script></body></html>

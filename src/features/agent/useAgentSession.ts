@@ -148,7 +148,11 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   // An env-only setup exposes a read-only "env" model; select it rather than
   // showing "No model" while the agent endpoint could answer.
   const envModelId = models.find((m) => m.providerId === "env")?.id ?? "";
-  const effectiveModelId = selectedModelId ?? aiSettings?.defaultModelId ?? envModelId;
+  const selectedModel = selectedModelId ? models.find((m) => m.id === selectedModelId) : undefined;
+  const defaultModel = aiSettings?.defaultModelId
+    ? models.find((m) => m.id === aiSettings.defaultModelId)
+    : undefined;
+  const effectiveModelId = selectedModel?.id ?? defaultModel?.id ?? envModelId;
   const effectiveModel = useMemo(() => models.find((m) => m.id === effectiveModelId) ?? null, [models, effectiveModelId]);
   const effectiveProvider = effectiveModel ? providerById.get(effectiveModel.providerId) : undefined;
   const mock = Boolean(aiSettings?.mock);
@@ -522,7 +526,12 @@ export function useAgentSession(args: UseAgentSessionArgs) {
 
         if (toolCalls.length === 0) {
           if (!assistantText.trim()) {
-            setMessages((prev) => [...prev, { id: nanoid(), role: "assistant", content: "No changes made.", createdAt: new Date().toISOString() }]);
+            setMessages((prev) => [...prev, {
+              id: nanoid(),
+              role: "assistant",
+              content: "The model returned an empty response. Try again, or switch models in the model picker.",
+              createdAt: new Date().toISOString(),
+            }]);
           }
           setStatus("ready");
           return;

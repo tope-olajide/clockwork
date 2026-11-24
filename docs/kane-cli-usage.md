@@ -4,6 +4,38 @@ A field guide for the blog: what Kane does in this project, what it actually
 verifies, and the cool things discovered while making a slow browser agent test
 a fast real-time game.
 
+## Two ways this project invokes Kane
+
+Kane is used at two different layers, and they intentionally produce different artifacts:
+
+| Layer | Entry point | What runs | Where evidence lands |
+|---|---|---|---|
+| Engine QA | `scripts/kane/engine-e2e.mjs` | A saved `testmd` test creates a game from a starter, edits and undoes a value, runs Play, restarts it and returns to the editor | `.testmuai/runs/engine-template-e2e.*`, `.testmuai/evidence/engine-template-e2e.evidence`, Test Manager link when Kane returns one |
+| Engine QA, one command | `scripts/kane/engine-e2e-dev.mjs` | Starts or reuses the app, waits for Vite and `/api/health`, then runs the same saved test | `.testmuai/runs/engine-e2e-dev.log` plus the engine E2E artifacts |
+| Game testing | AI Testing phase panel or `kane-cli run` objectives | The game itself: Test Mode input/frame/observation assertions, or the AI Play loop | `.data/ai-play/<runId>/` for the in-app phase path; `.testmuai/runs/` for terminal objectives |
+
+The engine test is saved at `.testmuai/tests/engine-template-e2e_test.md`. Run it with:
+
+```bash
+npm run kane:engine-e2e
+# or, for machine-readable stdout without npm's banner:
+node scripts/kane/engine-e2e.mjs --url http://localhost:5173
+```
+
+To start the app first and run the same test in one command:
+
+```bash
+npm run kane:engine-e2e:dev
+```
+
+That wrapper reuses an already-running app, otherwise starts `npm run dev`, waits for Vite and `GET /api/health`, then runs the saved test. It writes app logs to `.testmuai/runs/engine-e2e-dev.log` and tears down only the app processes it started. Its stdout is still the same single JSON result.
+
+The runner prints one JSON object with `status`, `summary`, `durationSeconds`, `steps`, `finalState`, `testUrl`, `sessionId`, `evidencePath`, and the raw/result file paths. Exit code `0` means the saved test passed; `1` means it ran and failed; `2` means it could not start. The coding agent should read `status`, not just the exit code, and can inspect `.testmuai/runs/engine-template-e2e.ndjson` for every step.
+
+First authored pass (2026-11-24, session `aceb577f-0a26-456e-a2d7-944652113935`): `status: passed`, 1/1 steps, 286 s. It created `Engine E2E Platformer` from the Platform Jumper starter, passed canvas/hierarchy/Inspector and Object Y edit-undo checks, ran Play with `LIVES 3`, restarted with R, and finished back on the project scene. The one-command cold-start path then passed in 89 s with 1/1 replayed steps (session `e547a290-4de8-4797-af91-19efb79ce3af`) and stopped the app it started. The latest result is `.testmuai/runs/engine-template-e2e.result.json` and the 3.8 MB evidence pack is `.testmuai/evidence/engine-template-e2e.evidence`; both are gitignored. The replayed run did not create a new Test Manager share link, so `testUrl` is `null` in the latest result.
+
+This is deliberately separate from the in-app agent. The terminal runner has no model loop and does not call the built-in chat agent; it returns typed feedback to whoever invoked it. The reviewed phase path is the one that requires human plan approval and feeds `run_kane_test_phase` results back into the in-app agent.
+
 ## The core idea
 
 A real-time game runs at 60 frames per second. A browser agent like Kane needs

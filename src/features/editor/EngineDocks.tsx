@@ -572,7 +572,7 @@ export function EngineInspector({
       <div className="inspector-head">
         <span className="panel-title" style={{ marginRight: "auto" }}>Inspector</span>
         {selected && onAskAgent && (
-          <Button variant="ghost" size="sm" onClick={() => onAskAgent(selected.id)}><Bot size={12} /> Ask AI</Button>
+          <Button variant="ghost" size="sm" data-testid="ask-ai" onClick={() => onAskAgent(selected.id)}><Bot size={12} /> Ask AI</Button>
         )}
         <span className="chip">{scene.kind}</span>
       </div>

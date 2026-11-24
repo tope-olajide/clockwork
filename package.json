@@ -9,14 +9,16 @@
     ]
   },
   "scripts": {
-    "dev": "concurrently -n web,api \"vite\" \"tsx watch server/index.ts\"",
+    "dev": "concurrently -n web,api \"vite\" \"node --import tsx/esm server/index.ts\"",
     "build": "tsc -b tsconfig.json tsconfig.node.json && vite build",
     "typecheck": "tsc -b tsconfig.json tsconfig.node.json",
     "check:repo": "node scripts/check-repo.mjs",
     "test": "node --import tsx --test tests/*.test.ts",
     "smoke:phase": "node --import tsx scripts/kane/phase-smoke.mts",
+    "kane:engine-e2e": "node scripts/kane/engine-e2e.mjs",
+    "kane:engine-e2e:dev": "node scripts/kane/engine-e2e-dev.mjs",
     "preview": "vite preview",
-    "start": "node --import tsx server/index.ts"
+    "start": "node --import tsx/esm server/index.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.5",

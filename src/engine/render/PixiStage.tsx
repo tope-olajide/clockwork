@@ -1199,7 +1199,7 @@ export function EngineViewport({ onAskAgent }: { onAskAgent?: (objectId: string)
         )}
 
         {presencePill && (
-          <div className="agent-presence-pill" style={{ left: presencePill.left, top: presencePill.top }} aria-live="polite">
+          <div className="agent-presence-pill" data-testid="agent-presence-pill" style={{ left: presencePill.left, top: presencePill.top }} aria-live="polite">
             AGENT · {presence?.label ?? "edit"}
           </div>
         )}

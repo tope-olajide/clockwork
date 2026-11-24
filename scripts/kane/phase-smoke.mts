@@ -179,7 +179,7 @@ async function main() {
       ],
       stopWhen: ["passed", "failed"],
     }],
-    budget: { maxKanePhases: 1, maxKaneStepsPerPhase: 8, maxWallTimeSecondsPerPhase: 300, maxFramesPerAdvance: 600, maxFramesPerPhase: 3600 },
+    budget: { maxKanePhases: 1, maxKaneStepsPerPhase: 12, maxWallTimeSecondsPerPhase: 600, maxFramesPerAdvance: 600, maxFramesPerPhase: 3600 },
   };
   async function postPhase(body: unknown) {
     const res = await fetch(`${API}/api/kane/phase`, {
@@ -268,7 +268,7 @@ async function main() {
       ],
       stopWhen: ["passed", "failed"],
     }],
-    budget: { maxKanePhases: 1, maxKaneStepsPerPhase: 8, maxWallTimeSecondsPerPhase: 300, maxFramesPerAdvance: 600, maxFramesPerPhase: 3600 },
+    budget: { maxKanePhases: 1, maxKaneStepsPerPhase: 12, maxWallTimeSecondsPerPhase: 600, maxFramesPerAdvance: 600, maxFramesPerPhase: 3600 },
     revisions: [{ revision: 1, reason: "Smoke-seeded draft for the panel flow.", at: new Date().toISOString() }],
   };
   await cdp.evaluate(`localStorage.setItem(${JSON.stringify(`clockwork:test-plan:${ids.projectId}`)}, ${JSON.stringify(JSON.stringify(draft))})`);

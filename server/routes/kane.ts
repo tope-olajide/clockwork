@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AiPlayRequest, AiPlayResult, KaneCliStatus, KaneQaRequest } from "../../shared/protocol/kane";
+import { KANE_PHASE_LIMITS } from "../../shared/protocol/game-testing";
 
 import { env } from "../env";
 import { getSnapshot } from "../snapshots/repository";
@@ -36,13 +37,13 @@ function kaneCliEntry(): { command: string; args: string[] } {
   return { command: process.platform === "win32" ? "kane-cli.cmd" : "kane-cli", args: [] };
 }
 
-function execKane(extra: string[], timeout = 8_000): Promise<string> {
+function execKane(extra: string[], timeout = 20_000): Promise<string> {
   const cli = kaneCliEntry();
   return new Promise((resolve, reject) => {
     execFile(cli.command, [...cli.args, ...extra], {
       timeout,
       windowsHide: true,
-      env: { ...process.env, KANE_CLI_USER_AGENT: "clockwork" },
+      env: { ...process.env, KANE_CLI_USER_AGENT: "clockwork", NO_UPDATE_NOTIFIER: "1" },
     }, (error, stdout, stderr) => {
       if (error && !stdout && !stderr) reject(error);
       else resolve(String(stdout || stderr));
@@ -310,7 +311,14 @@ kaneRoutes.post("/phase", async (c) => {
   if (request.plan.scenarioId) params.set("scenario", request.plan.scenarioId);
   const url = `${origin}/s/${encodeURIComponent(snapshotId)}?${params.toString()}`;
   const startedAt = new Date().toISOString();
-  const timeoutSeconds = Math.min(env.kaneTimeoutSeconds, request.plan.budget.maxWallTimeSecondsPerPhase, 300);
+  // The approved plan carries its own wall-time budget. The env
+  // KANE_TIMEOUT_SECONDS default (180s) used to cap it, so a 300s-approved
+  // phase was killed at 185s even when Kane had already emitted a passing
+  // run_end. The plan is the user-approved bound; keep the shared hard ceiling.
+  const timeoutSeconds = Math.min(
+    request.plan.budget.maxWallTimeSecondsPerPhase,
+    KANE_PHASE_LIMITS.maxWallTimeSecondsPerPhase,
+  );
   let run: ReturnType<typeof startKaneRun>;
   try {
     run = startKaneRun({
@@ -321,7 +329,7 @@ kaneRoutes.post("/phase", async (c) => {
       snapshotId,
       headless: env.kaneHeadless,
       timeoutSeconds,
-      maxSteps: Math.min(env.kaneMaxSteps, request.plan.budget.maxKaneStepsPerPhase, 8),
+      maxSteps: Math.min(env.kaneMaxSteps, request.plan.budget.maxKaneStepsPerPhase, KANE_PHASE_LIMITS.maxStepsPerPhase),
       bugDetection: "off",
       evidenceRoot: env.kaneEvidenceDir,
     });

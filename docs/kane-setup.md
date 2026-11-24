@@ -46,7 +46,7 @@ KANE_CLI=kane-cli
 CLOCKWORK_PUBLIC_URL=http://localhost:5173
 ```
 
-The 180 s default fits an 8-step AI Play attempt but not a 12-step in-app engine-QA run: the K4 reruns here used `KANE_TIMEOUT_SECONDS=300` (configuration, not a code change). The runner clamps the value to 30–900 s and adds a 5 s grace on top of the process timer.
+The 180 s default fits an 8-step AI Play attempt. The approved AI Testing phase path does not use that default: the plan's own `maxWallTimeSecondsPerPhase` is the bound, with a hard ceiling of **600 s per phase**. The plan also caps a phase at **12 Kane steps** (12 was chosen after a 9-step objective hit the old 8-step limit). `KANE_TIMEOUT_SECONDS` still applies to non-phase runs; the runner clamps it to 30–900 s and adds a 5 s grace on top of the process timer.
 
 Kane has no enable/disable flag. If the CLI is missing or signed out, the Kane routes return an explicit install/auth error and no Kane tool is advertised to the model. Manual Play, editing, persistence, share, and export continue to work. If the account balance is zero, the run is rejected with an explicit `kane-credits` error.
 
@@ -93,6 +93,15 @@ kane-cli run "<objective>" \
 - A saved-test replay uses `kane-cli testmd run <file>` with `--no-adaptive-heal`, so a replay failure fails fast instead of re-authoring steps.
 - `KANE_HEADLESS=1` adds `--headless`; leave it unset for a demo so the audience sees Chrome play.
 - The objective is capped at 1,000 characters and the URL is formed server-side. The client cannot pass an arbitrary command, base URL, or key.
+
+### Phase budgets
+
+| Path | Steps | Wall time |
+|---|---|---|
+| AI Play | 8 | 140 s |
+| Approved AI Testing phase | **12** | **600 s** |
+
+Approved phases use `maxKaneStepsPerPhase` and `maxWallTimeSecondsPerPhase` from the approved plan. The server validates both against the shared hard ceilings and then passes them to Kane as `--max-steps` and `--timeout`; a plan may request less, never more.
 
 ### Exit codes
 

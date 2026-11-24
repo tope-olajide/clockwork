@@ -370,3 +370,52 @@ node --import tsx scripts/kane/negative-control.ts
 - Evidence packs and run NDJSON stay untracked under `.data/` and `.testmuai/` as intended.
 - The toolbar "Ask agent" button was a plain `DropdownMenu` trigger, so a click only opened the "Game Director" menu and the drawer needed a second click on `Open chat` (in whatever mode was last active). It is now the plan's split button: `agent-open` is its own button that opens the drawer in Build with the selection attached, and `agent-menu` (the chevron) opens the menu. Real CDP clicks at 1366×768 confirm main → `Build` + `Locked: Hint`, chevron → menu with the drawer still closed (`.data/split-main-click.png`, `.data/split-menu.png`). With no tool-capable model the main click falls back to Ask rather than landing on a disabled Build tab. The menu keeps its fourth entry, `Ask about this scene`, which the plan's three-item list does not name.
 - In-app QA needed `KANE_TIMEOUT_SECONDS=300` in this environment. The 140 s budget that fits AI Play does not fit a 12-step engine-QA run; the default remains 180 s in code.
+
+## Phase 7 — approved AI Testing phase through the real panel (2026-11-23)
+
+All runs below were approved with the panel's own **Approve** button (`scripts/kane/phase-live.mjs`, raw CDP against `http://localhost:5173`). The draft was seeded by the harness because the local planner was mock; plan *drafting* by a model is not claimed here. Kane CLI 0.10.6, signed in as `davidtheatomicshift`, project snapshots taken from a freshly created Space Shooter starter.
+
+| Run | Mode | Panel delivered | Kane side | Verdict |
+|---|---|---|---|---|
+| `668b4525` | authored | yes, inconclusive | exit 2, no `run_end` after 100.9 s | infrastructure failure, not a product result |
+| `4705987a` | saved-test replay | no (client timeout) | `run_end: passed`, shots 3 / projectiles 3 / accepted 1 / frames 45; evidence ~1 MB | Clockwork cancelled at 185 s because the phase timeout was capped by the 180 s env value; fixed |
+| `1737e04d` | saved-test replay | no (proxy drop) | `run_end: passed` in 153 s with `finalState` observations and a ~1 MB evidence pack | client never received `phase_result` when the Vite proxy closed the stream (~174 s) |
+| `62e57ee2` | saved-test replay, after retry fix | yes, typed **inconclusive** + evidence (1,076,242 bytes) | `run_end: passed`; `replay_decisions: 2`, `author_decisions: 0` | correctly not a pass: values were replayed transcripts, not fresh observation |
+| `1105bd78` | authored, after retry fix | yes, typed **inconclusive** + evidence (1,018,531 bytes) | run failed at the **9/8 step cap** after saving shots 3 / projectiles 3 / accepted 1 / frames 45, then spending one wait step | honest failure: approved budget too small for the objective |
+| `ad67a901` | authored | no (harness timeout) | `error: new_cdp_session: Target page, context or browser has been closed` at step 4, then no `run_end` at 305 s | infrastructure failure |
+| `e088e2c0` | authored, 12-step / 300 s budget | yes, typed **inconclusive** | planning used ~214 s; the last step finished at 290 s, then the 300 s cap killed it before `run_end` | honest timeout: wall budget too small, not a gameplay failure |
+| `98e21783` | authored, 12-step / 600 s budget | yes, typed **passed** + evidence (721,305 bytes, HTTP 200) | `run_end: passed` in 94.7 s; shots-fired 3 · projectiles 3 · accepted inputs 1 · frames 45 | **green accepted phase; both approved assertions passed** |
+| `ea1bb3b3` | authored, 12-step / 600 s budget, screenshot capture | yes, typed **passed** + evidence (776,545 bytes, HTTP 200) | `run_end: passed` in 78.1 s; shots-fired 3 · projectiles 3 · accepted inputs 1 · frames 45 | green rerun; committed panel screenshot below |
+
+![Green approved-phase panel result](screenshots/approved-phase-passed.png)
+
+*Run `ea1bb3b3` in the live panel: PASSED, both approved assertions observed 3, accepted inputs 1, frames 45. The screenshot was captured by `scripts/kane/phase-live.mjs` after the typed result arrived; it is not a reconstruction.*
+
+**What is now proven live (2026-11-24):** the panel approval gate runs Kane against the approved snapshot, the server composes the objective and URL, a terminal result reaches the panel with a per-criterion typed verdict, and the evidence link serves the CLI evidence bundle. Run `98e21783` produced a typed **PASSED** with `shots-fired gte 1 · observed 3` and `projectiles gte 1 · observed 3`, accepted inputs 1, frames 45, 94.7 s, and a 721,305-byte evidence download with no console or page errors; `.data/phase-live/panel-run.json` records the live panel result. Run `ea1bb3b3` repeated the pass in 78.1 s with a 776,545-byte evidence bundle and produced the committed screenshot above; it also had no console or page errors. The phase timeout uses the approved plan budget (`maxWallTimeSecondsPerPhase`), whose hard ceiling is now 600 s, instead of the 180 s environment default. `streamKanePhase` also re-posts the same approved request after a dropped stream, relying on the server's fingerprint idempotency to replay the stored result. The delivered green run finished inside one connection, so that retry was not re-triggered live after the fix; it addresses the reproduced 174 s proxy drop and is unit-covered by `tests/kane-api-retry.test.ts` (stream closes without a result; 409 busy), but is not itself claimed as browser-proven.
+
+**Why the budget changed:** run `1105bd78` needed 9 steps where the contract allowed 8, so `maxKaneStepsPerPhase` rose to 12. Run `e088e2c0` then finished all gameplay steps inside 300 s but spent ~214 s in Kane planning and was killed before finalization. The wall ceiling rose to 600 s, and run `98e21783` passed in 94.7 s. A saved-test replay remains an unsuitable substitute: run `62e57ee2` explicitly reported `replay_decisions: 2`, so its values came from recordings rather than fresh observation.
+
+**Environment fixes made while running this:**
+
+- A stale Kane Chrome held port 9222 and made the next CLI start fail with `connect_over_cdp ... ETIMEDOUT`; killing that process tree restored startup. This is local cleanup, not a product change.
+- Kane's Chrome also closed its own page mid-run once (`ad67a901`); no product error was logged. Retry after a fresh browser may succeed, but it was not counted as a pass.
+
+Evidence paths stay uncommitted under `.data/ai-play/<runId>/` (`raw.ndjson`, `stderr.log`, `result.json`, `evidence.evidence`); the panel records live in `.data/phase-live/panel-run.json` only for a completed harness run.
+
+### Agent UI verification (same day)
+
+`node scripts/agent-ui-live.mjs` exited 0 at `2026-11-23T16:24:38Z` against the real editor with a deterministic local OpenAI-compatible stub. Assertions in `.data/agent-ui/verify.json`:
+
+- Toolbar **Ask** opened the drawer locked to the current selection (`locked-selection` chip visible; Build tab), and inspector **Ask AI** opened Ask mode.
+- Plan preview rendered `PLAN PREVIEW · 2 changes`, exposed `plan-preview-pill`, and the debug snapshot showed the ghost on the real changed object id; **Apply** moved revision 0 → 1 and cleared the ghost.
+- A Build request produced presence: `AGENT · Move the selected object 40 units right` plus object ids and the violet outline, then cleared after the 2.5 s delay; revision 1 → 2 with the selection unchanged.
+- No console or page errors.
+
+Screenshots inspected manually: `.data/agent-ui/plan-ghost.png` (preview card, pill, faint ghost bounds) and `.data/agent-ui/presence.png` (violet outline and `AGENT` pill).
+
+**Defects fixed for that verification:**
+
+- `summarizePatchPath` in `src/engine/ai/executor.ts` treated nested Immer paths such as `scenes[0].objects[5].transform.x` as a scene-level path, so `changedIds` was empty and no ghost/presence could resolve. It now maps scene, object, layer, prefab and variable paths to real ids (`tests/agent-change-set.test.ts`, 2/2).
+- The locked-selection chip was present but hidden; it is now visible in the composer with `.chat-locked` styling.
+- The plan pill said `PLAN PREVIEW` even in Build; labels are now `PLAN PREVIEW` / `PREVIEW` / `CONFIRM CHANGES` by mode.
+- Presence had no stable selector for verification; `agent-presence-pill`, `plan-preview-pill`, `locked-selection` and `ask-ai` test ids were added without changing behavior.

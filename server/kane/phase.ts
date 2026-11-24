@@ -58,8 +58,8 @@ const planSchema = z
     budget: z
       .object({
         maxKanePhases: z.number().int().min(1).max(KANE_PHASE_LIMITS.maxPhases),
-        maxKaneStepsPerPhase: z.number().int().min(1).max(8),
-        maxWallTimeSecondsPerPhase: z.number().int().min(10).max(300),
+        maxKaneStepsPerPhase: z.number().int().min(1).max(KANE_PHASE_LIMITS.maxStepsPerPhase),
+        maxWallTimeSecondsPerPhase: z.number().int().min(10).max(KANE_PHASE_LIMITS.maxWallTimeSecondsPerPhase),
         maxFramesPerAdvance: z.number().int().min(1).max(600),
         maxFramesPerPhase: z.number().int().min(1).max(3600),
       })

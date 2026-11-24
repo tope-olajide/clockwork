@@ -60,8 +60,12 @@ export function envModelConfig() {
   const model = process.env.LLM_MODEL?.trim() || process.env.AI_MODEL?.trim();
   const baseUrl = process.env.LLM_BASE_URL?.trim() || process.env.AI_BASE_URL?.trim();
   const apiKey = process.env.LLM_API_KEY?.trim() || process.env.AI_API_KEY?.trim();
-  if (!model || !baseUrl || !apiKey) return null;
-  return { model, baseUrl, envKeyName: process.env.LLM_API_KEY ? "LLM_API_KEY" : "AI_API_KEY" };
+  if (!model || !baseUrl) return null;
+  return {
+    model,
+    baseUrl,
+    envKeyName: process.env.LLM_API_KEY !== undefined ? "LLM_API_KEY" : "AI_API_KEY",
+  };
 }
 
 export function listProviders() {
@@ -77,7 +81,7 @@ export function listProviders() {
       baseUrl: env.baseUrl,
       envKeyName: env.envKeyName,
       modelsEndpoint: false,
-      local: false,
+      local: /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(env.baseUrl),
       builtIn: true as const,
     }]
     : [];
@@ -91,11 +95,22 @@ export function getProvider(providerId: string) {
 export function getKeyStatus(providerId: string): { configured: boolean; source: "env" | "vault" | "session" | "missing"; hint?: string } {
   const provider = getProvider(providerId);
   if (!provider) return { configured: false, source: "missing" };
+  if (providerId === "env" && (provider as any).local) {
+    return { configured: true, source: "env", hint: "not required" };
+  }
   const envName = ("envKeyName" in provider && provider.envKeyName) ? provider.envKeyName : undefined;
-  if (envName && process.env[envName]) {
-    const val = process.env[envName]!;
-    const hint = val.length <= 8 ? "••••" : `${val.slice(0, 4)}…${val.slice(-4)}`;
-    return { configured: true, source: "env", hint };
+  if (envName) {
+    const val = process.env[envName];
+    // For env provider, even if the key is empty, it's considered configured if the provider is local
+    if (val !== undefined) {
+      if (val === "" && providerId === "env" && (provider as any).local) {
+        return { configured: true, source: "env", hint: "not required" };
+      }
+      if (val !== "") {
+        const hint = val.length <= 8 ? "••••" : `${val.slice(0, 4)}…${val.slice(-4)}`;
+        return { configured: true, source: "env", hint };
+      }
+    }
   }
   if (hasVaultKey(providerId)) return { configured: true, source: "vault", hint: getVaultHint(providerId) ?? "••••" };
   if (sessionKeys.has(providerId)) {
@@ -109,6 +124,14 @@ export function getKeyStatus(providerId: string): { configured: boolean; source:
 export function resolveApiKey(providerId: string): string | null {
   const provider = getProvider(providerId);
   if (!provider) return null;
+  
+  // For local env providers, return a dummy key if none is configured
+  if (providerId === "env" && (provider as any).local) {
+    const envName = ("envKeyName" in provider && provider.envKeyName) ? provider.envKeyName : undefined;
+    const envValue = envName ? process.env[envName] : undefined;
+    return envValue || "dummy-key-for-local";
+  }
+  
   const envName = ("envKeyName" in provider && provider.envKeyName) ? provider.envKeyName : undefined;
   if (envName && process.env[envName]) return process.env[envName]!;
   const vault = getVaultKey(providerId);
@@ -189,7 +212,13 @@ export function removeCustomModel(id: string) {
 }
 
 export function getDefaultModelId(): string | undefined {
-  return readStore().defaultModelId;
+  const stored = readStore().defaultModelId;
+  // If no default is set and an env model is available, use it
+  if (!stored) {
+    const envModel = listAllModels().find(m => m.providerId === "env");
+    if (envModel) return envModel.id;
+  }
+  return stored;
 }
 
 export function setDefaultModelId(modelId: string | undefined) {

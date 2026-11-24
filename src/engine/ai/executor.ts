@@ -53,18 +53,40 @@ export interface PreviewCommandsResult {
 
 const MAX_COMMANDS = 50;
 
-function summarizePatchPath(path: (string | number)[]): { entityKind: ChangeSetChange["entityKind"]; entityId: string; fieldPath: string } {
-  const [root, id, ...rest] = path;
-  if (root === "scenes" && typeof id === "string") return { entityKind: "scene", entityId: id, fieldPath: rest.join(".") || "(scene)" };
-  if (root === "assets" && typeof id === "string") return { entityKind: "asset", entityId: id, fieldPath: rest.join(".") || "(asset)" };
-  if (root === "prefabs" && typeof id === "string") return { entityKind: "prefab", entityId: id, fieldPath: rest.join(".") || "(prefab)" };
-  if (root === "variables" && typeof id === "string") return { entityKind: "variable", entityId: id, fieldPath: rest.join(".") || "(variable)" };
-  if (root === "settings") return { entityKind: "project", entityId: "project", fieldPath: ["settings", ...(rest as string[])].join(".") };
-  // nested scene entities best-effort
-  if (root === "scenes" && typeof path[1] === "number") {
-    // rare path form; fallback
+function summarizePatchPath(
+  path: (string | number)[],
+  after: ProjectDocument,
+  before: ProjectDocument,
+): { entityKind: ChangeSetChange["entityKind"]; entityId: string; fieldPath: string } {
+  const [root, second, collection, index, ...rest] = path;
+  if (root === "scenes") {
+    // Immer writes nested entities by array index: ["scenes", 0, "objects", 5, "transform", "x"].
+    // Resolving that index to an id is what makes ghosts and presence work.
+    if (typeof second === "string" && path.length === 2) {
+      return { entityKind: "scene", entityId: second, fieldPath: "(scene)" };
+    }
+    const sceneIndex = typeof second === "number" ? second : Number(second);
+    const scene = after.scenes[sceneIndex] ?? before.scenes[sceneIndex];
+    if (scene && (collection === "objects" || collection === "layers" || collection === "rules")) {
+      const list = collection === "objects" ? scene.objects : collection === "layers" ? scene.layers : scene.rules;
+      const itemIndex = typeof index === "number" ? index : Number(index);
+      const item = list[itemIndex];
+      const entityKind = collection === "objects" ? "object" : collection === "layers" ? "layer" : "rule";
+      const fieldPath = rest.join(".") || `(${entityKind})`;
+      if (item) return { entityKind, entityId: item.id, fieldPath };
+      return { entityKind, entityId: `${collection}[${itemIndex}]`, fieldPath };
+    }
+    if (scene) return { entityKind: "scene", entityId: scene.id, fieldPath: path.slice(2).join(".") || "(scene)" };
   }
-  return { entityKind: "project", entityId: String(id ?? "project"), fieldPath: rest.length ? rest.join(".") : String(root ?? "") };
+  if (root === "assets" || root === "prefabs" || root === "variables") {
+    const itemIndex = typeof second === "number" ? second : Number(second);
+    const list = root === "assets" ? after.assets : root === "prefabs" ? after.prefabs : after.variables;
+    const item = list[itemIndex] ?? (root === "assets" ? before.assets : root === "prefabs" ? before.prefabs : before.variables)[itemIndex];
+    const entityKind = root === "assets" ? "asset" : root === "prefabs" ? "prefab" : "variable";
+    if (item) return { entityKind, entityId: item.id, fieldPath: path.slice(2).join(".") || `(${entityKind})` };
+  }
+  if (root === "settings") return { entityKind: "project", entityId: "project", fieldPath: ["settings", ...(path.slice(1) as string[])].join(".") };
+  return { entityKind: "project", entityId: "project", fieldPath: path.join(".") || "project" };
 }
 
 function nameFor(document: ProjectDocument, kind: ChangeSetChange["entityKind"], id: string): string {
@@ -84,7 +106,7 @@ function nameFor(document: ProjectDocument, kind: ChangeSetChange["entityKind"],
 function buildChangeSet(before: ProjectDocument, after: ProjectDocument, patches: any[], _inversePatches: any[], transactionId: string, label: string): ChangeSetSummary {
   const byKey = new Map<string, ChangeSetChange>();
   for (const patch of patches as Array<{ op: string; path: (string|number)[]; value?: unknown }>) {
-    const info = summarizePatchPath(patch.path ?? []);
+    const info = summarizePatchPath(patch.path ?? [], after, before);
     const key = `${info.entityKind}:${info.entityId}`;
     if (!byKey.has(key)) {
       byKey.set(key, { entityId: info.entityId, entityKind: info.entityKind, entityName: nameFor(after, info.entityKind, info.entityId), fields: [], op: patch.op === "add" ? "create" : patch.op === "remove" ? "delete" : "update" });

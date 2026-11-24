@@ -1,0 +1,32 @@
+[
+  {
+    "frame": "01-projects.png",
+    "llm": "I am the LLM inside Clockwork. You built a game. I know this game - and I can prove it works.",
+    "caption": "Hook: engine + co-worker"
+  },
+  {
+    "frame": "02-editor.png",
+    "llm": "Space Shooter. I read its document and its test profile: SHOOT is hold, 190ms cooldown, or Kane would never fire.",
+    "caption": "Chat knows the game"
+  },
+  {
+    "frame": "03-draft.png",
+    "llm": "You said: prove shooting works. I drafted a typed plan - one phase, two assertions, 45-frame budget. Nothing runs until you approve.",
+    "caption": "propose_test_plan, approval boundary"
+  },
+  {
+    "frame": "04-approved.png",
+    "llm": "Approved. I snapshot your revision, freeze seed 1234, hand Kane a Test Mode URL. Time moves only when Kane presses STEP.",
+    "caption": "snapshot + lockstep"
+  },
+  {
+    "frame": "05-passed.png",
+    "llm": "Kane held SHOOT, stepped 45 frames: shots-fired 5, projectiles 4, accepted inputs 3. PASS - inputs delivered, frames in budget, evidence attached.",
+    "caption": "run_kane_test_phase typed verdict"
+  },
+  {
+    "frame": "06-agent.png",
+    "llm": "And the result lands back in my chat as a typed tool result - so I decide what to test next. Build it. Prove it. Ship it.",
+    "caption": "phase continuation closes the loop"
+  }
+]

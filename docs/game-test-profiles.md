@@ -98,8 +98,8 @@ when:
 - a phase claims a profile objective without asserting all of its `assertionIds`;
 - the scenario is unregistered, belongs to another template, or has an invalid setup;
 - any text field contains a URL, `javascript:` or markup;
-- the budget exceeds the hard caps (`maxKanePhases` 3, `maxKaneStepsPerPhase` 8,
-  `maxWallTimeSecondsPerPhase` 300, `maxFramesPerAdvance` 600, `maxFramesPerPhase` 3600),
+- the budget exceeds the hard caps (`maxKanePhases` 3, `maxKaneStepsPerPhase` 12,
+  `maxWallTimeSecondsPerPhase` 600, `maxFramesPerAdvance` 600, `maxFramesPerPhase` 3600),
   phases exceed `maxKanePhases`, or `maxFramesPerAdvance > maxFramesPerPhase`;
 - the object carries unknown keys (strict schemas) — nothing executable rides along.
 

@@ -158,7 +158,7 @@ test("the review cost estimate uses measured per-phase numbers", () => {
   const single = estimateDraftCost(draft);
   assert.equal(single.kaneRuns, 1);
   assert.equal(single.typicalSeconds, 85);
-  assert.equal(single.worstCaseSeconds, 300);
+  assert.equal(single.worstCaseSeconds, 600);
 
   const three = estimateDraftCost({
     ...draft,
@@ -166,5 +166,5 @@ test("the review cost estimate uses measured per-phase numbers", () => {
   });
   assert.equal(three.kaneRuns, 3);
   assert.equal(three.typicalSeconds, 255);
-  assert.equal(three.worstCaseSeconds, 900);
+  assert.equal(three.worstCaseSeconds, 1800);
 });
