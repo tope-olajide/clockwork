@@ -18,7 +18,7 @@ Slice 6 (agent transport, context, chat shell) is gate-closed on `AI_MOCK=1` evi
 
 Slice 9 (hardening and demo readiness) is implemented. Its matrix is only partly covered by the Kane runs, which exercised the editor cold at 1366×768; the `AI_ENABLED=0` manual path, the 1440/1920 and 1024 layouts, the keyboard-only run, the console-warning sweep and refresh-during-save recovery remain open.
 
-Slice 10 (Kane engine QA and in-product AI Play) is implemented and has real evidence in [`docs/kane-proof.md`](docs/kane-proof.md): K1, K3a, K3b, K4 and K5 passed against the real editor, and the independent negative control (an unsatisfiable win rule) failed and then passed after repair. AI Play and the other Kane surfaces are deliberately **not** listed below yet: the Slice 10 gate is still open on the manual/no-model browser pass, the no-model AI Play state, the fixture-driven UI artifact and AI HUD keyboard parity, and this file admits no feature while a blocking entry is open in [`docs/known-issues.md`](docs/known-issues.md).
+Slice 10 (Kane engine QA, AI Play and reviewed AI Testing) is implemented and has real evidence in [`docs/kane-proof.md`](docs/kane-proof.md). K1, K3a, K3b, K4 and K5 passed against the real editor, and the independent negative control failed and then passed after repair. The approved AI Testing phase flow now has live passes (`98e21783`, `94.7 s`; `ea1bb3b3`, `78.1 s`) with typed results and evidence. The saved engine E2E also passed authored (`286 s`) and replayed through the cold-start one-command wrapper (`89 s`). The broader Slice 10 gate still has open items — the manual/no-model browser pass, the no-model AI Play state, the fixture-driven UI artifact, AI HUD keyboard parity, and in-memory phase persistence — so the entries below state their limits instead of claiming the whole gate is closed.
 
 ## Editor
 
@@ -195,17 +195,24 @@ Completed in Slice 4 · 13/13 runtime checks plus browser pause/step/reset.
 ### Reviewable game-test plans
 
 Ask the built-in agent for a bounded test plan in natural language. It reads the template’s versioned controls, observations, objectives and scenarios, validates the proposal against the current revision and hard budgets, and places it in the AI Testing panel. Every revision needs a reason, the original user goal is immutable, and no Kane run starts until the plan is explicitly approved.
-Implemented · unit-tested; live model-to-plan acceptance pending.
+Implemented · unit-tested; the live approval/run path passed with a deterministic seeded draft. Real-model plan authorship is still unverified.
 
 ### Kane Test Mode and typed phase results
 
 The approved phase opens an immutable snapshot in deterministic Test Mode. Kane clicks profile-labelled controls, advances a bounded number of frames and stores observations. The server joins the terminal verdict with applied-input receipts, frame count, assertion values and evidence; the report never converts missing input, missing observations, timeouts or missing evidence into a pass.
-Implemented · typecheck, runner, phase and Test Mode tests pass; live Kane phase evidence pending.
+Implemented · unit-tested · live approved runs `98e21783` and `ea1bb3b3` passed with typed assertions, accepted input, 45 frames and evidence. Phase results remain in memory and do not survive a server restart.
+
+### Saved engine E2E and one-command runner
+
+`.testmuai/tests/engine-template-e2e_test.md` drives the real editor through Kane: create `Engine E2E Platformer` from the Platform Jumper starter, verify the canvas and hierarchy, select `Jumper`, edit and undo Object Y, run Play with `LIVES 3`, press Space, restart with R, and return to the editor. `scripts/kane/engine-e2e.mjs` writes raw NDJSON, a compact JSON result and the evidence pack under `.testmuai/`.
+
+Run it against an already-running app with `npm run kane:engine-e2e`, or use `npm run kane:engine-e2e:dev` to start the app, wait for Vite and `/api/health`, run the test and tear down only what it started. It is a terminal developer/CI path, not a product button or a CI workflow.
+Implemented · authored pass 1/1 in 286 s; cold-start one-command replay 1/1 in 89 s with clean teardown.
 
 ### AI Play fail → repair → replay
 
 AI Play runs Kane against a snapshot, reads the strict terminal verdict, applies the narrow embedded-collectible repair when applicable, and replays the same seed once. Both attempts, final states and evidence links remain visible, with Undo AI fixes.
-Implemented · real K1–K5 evidence recorded in [`docs/kane-proof.md`](docs/kane-proof.md); demo gate still open.
+Implemented · real fail→fix→same-seed-pass evidence recorded in [`docs/kane-proof.md`](docs/kane-proof.md); the broader Slice 10 demo gate still has the open items above.
 
 ### Agent chat attachments and history
 
