@@ -5,6 +5,15 @@ Paths are repo-relative; no local absolute paths. Raw run artifacts live under
 `.data/ai-play/<runId>/` (gitignored); the typed results below are the reviewable
 record.
 
+## Summary
+
+- **Outcome:** real Kane CLI runs passed through both the agent path and the review panel.
+- **Agent-driven phase:** `b967bbdd` passed (Space Shooter, 79.7 s, shots-fired 3, projectiles 3, accepted inputs 1, 45 frames). Phase 3 below.
+- **Approved through the panel:** `98e21783` (94.7 s) and `ea1bb3b3` (78.1 s) passed with the same observations and an evidence bundle. Details in `docs/kane-proof.md`, Phase 7.
+- **Chat closed loop:** run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (Meadow Sandbox coins and score HUD) passed in the simulator and in a real browser. Details in `docs/kane-proof.md`.
+- **Not proven:** replay from cache (no run showed `replay_decisions > 0`). Phase state on the server is in memory and clears on restart.
+- The earlier attempts that timed out, hit a step budget or ended inconclusive stay below as the build record. Each one led to a fix.
+
 ## Phase 3 — first live pass through the agent
 
 - **Date:** 2026-11-21
@@ -99,10 +108,12 @@ every attempt ran through the agent path (draft → approval →
 
 **Phase 4 status:** the adaptive loop is demonstrated (artifact-driven
 revisions, typed results, agent follow-ups, agent-proposed fixes), and the
-game-side kill chain is proven by attempt 3's in-game values. A second full
-`passed` verdict remains open: the blocker is Kane-model step discipline
-(wait habit, exact key naming), not the game or the harness. No further paid
-runs were spent chasing model variance.
+game-side kill chain is proven by attempt 3's in-game values. No
+`shoot-destroys-raider` attempt reached a typed `passed` verdict: the blocker
+was Kane-model step discipline (wait habit, exact key naming), not the game or
+the harness. No further paid runs were spent chasing model variance. Later
+approved phases did pass (`98e21783`, `ea1bb3b3`; see `docs/kane-proof.md`,
+Phase 7).
 
 Total live-run spend for Phase 4: 4 paid Kane runs.
 
@@ -116,7 +127,7 @@ Total live-run spend for Phase 4: 4 paid Kane runs.
   request a follow-up phase with its own tool call.
 - The agent loop was refactored so `send` (user message) and
   `continueWithPhaseResult` (panel result) share one `runTurn`: same
-  8-step tool loop, same revision-recovery, same error mapping.
+  tool loop (12 model steps per message now), same revision-recovery, same error mapping.
 - `run_kane_test_phase` tool cards render a dedicated rich card
   (`kane-phase-card`): phase id + verdict, failure kind, per-assertion values,
   accepted inputs and frames (`unknown`, never `0`, when null), duration and
@@ -229,8 +240,10 @@ recorded as environment-blocked, negative control fail → fix → pass).
 
 **Not live-tested:** replay-from-cache (no run ever showed
 `replay_decisions > 0`, so no replay speedup is claimed); the panel-to-agent
-handoff against a live model (covered by unit tests and the mock-model
-smoke); a single live session running draft → approve → run → follow-up
+handoff against a live model as of this Phase 8 statement (covered by unit
+tests and the mock-model smoke; the panel's result feeds the agent loop via
+`agent.continueWithPhaseResult`, and the approved phase flow was live-proven
+afterwards by `98e21783` and `ea1bb3b3`); a single live session running draft → approve → run → follow-up
 end to end (each link proven live separately); no demo video was recorded —
 the automated smoke was chosen instead. Balances and per-run credit costs
 are recorded per phase; Kane was never a feature flag and no pass was

@@ -1,6 +1,6 @@
 # Clockwork — Project Feature Audit
 
-**Audit date:** 2026-11-24
+**Audit date:** 2026-11-24 (counts, phase status and starter list updated 2026-11-25)
 **Scope:** the repository at `main` (`f67f31d` + working tree, including the saved engine E2E test and runner).
 **Method:** source inspection, command/behaviour/test inventories, and the project's own recorded browser and Kane evidence. Every feature below was checked against implementation files, not against plans or README copy. Where evidence is missing, the entry says so.
 
@@ -18,7 +18,7 @@ Because manual edits and agent edits share one command registry (`src/engine/com
 
 ### The problem it addresses
 
-- **The blank-canvas problem.** Building a playable 2D game normally starts with weeks of engine plumbing. Clockwork ships 12 genre starters plus three classic templates with real scenes, behaviours, rules and HUD configuration, so the first playable build exists before the first edit.
+- **The blank-canvas problem.** Building a playable 2D game normally starts with weeks of engine plumbing. Clockwork ships 14 genre starters plus three classic templates with real scenes, behaviours, rules and HUD configuration, so the first playable build exists before the first edit.
 - **The authoring-tool divide.** AI code generators produce text a user must review and wire up; visual editors require the user to know every property. Clockwork's agent operates the editor's own command vocabulary with ids from live context, so its output is a reviewable, undoable change set rather than a code dump.
 - **The testing gap.** A generated game is only useful if it runs. Clockwork integrates Kane CLI to drive a real Chrome session against an immutable snapshot in a one-off **AI Play** probe and a human-approved, phase-by-phase **AI Testing** flow, and it also runs a saved **engine E2E** test against the editor itself.
 
@@ -83,7 +83,7 @@ The editor route has four workspaces (`?tab=`): **Scene**, **Content**, **Logic*
 
 Verified from `src/engine/model/templates.ts`, `src/engine/model/game-starters/catalog.ts`, `build.ts`, and the per-starter modules under `src/engine/model/game-starters/`.
 
-**Count:** **12 genre starters** + **3 classic templates** + **Blank** = 16 creation options. The 12 starters are the "game templates" in the New Project gallery; the 3 classic templates appear under the Template selector. All 15 templates are playable starting documents, not placeholders.
+**Count:** **14 genre starters** + **3 classic templates** + **Blank** = 18 creation options, or a written brief. The 14 starters are the "game templates" in the New Project gallery; the 3 classic templates appear under the Template selector. All 17 templates are playable starting documents, not placeholders.
 
 | # | Template | Type | Authored content (verified in source/tests) |
 |---|---|---|---|
@@ -95,17 +95,18 @@ Verified from `src/engine/model/templates.ts`, `src/engine/model/game-starters/c
 | 6 | Flappy Flyer | Arcade | Flap impulse, moving gates, collision ends run |
 | 7 | Platform Jumper | Platformer | Move/jump, five cores, lives, hazards, moving platform |
 | 8 | Clockwork Meadows | Platformer | 18,400 px stage, tiled parallax art, stompable dragons, checkpoints, shards, moving root platforms, summit goal |
-| 9 | Endless Runner | Arcade | Jump/duck, accelerating obstacles, bonus cores |
-| 10 | Arena Survival | Survival | WASD movement, attack, chasers, hull, 60 s timer |
-| 11 | Falling Objects | Survival | Catch lane, meteors, bonus stars, three lives, timer |
-| 12 | Maze Escape | Puzzle | Grid maze walls, 15 dots, warden pursuit, gated exit |
-| 13 | Snake | Puzzle | Fixed-step grid movement, food, growth, self/wall collision |
-| 14 | Platformer (classic) | Platformer | Dusk scene, player controller, coins prefab, hazard, checkpoint, relay, win scene and rules |
-| 15 | Top-down (classic) | Top-down | Room walls, 8-way controller, health, patrol enemy, exit rule |
-| 16 | Puzzle (classic) | Puzzle | 5×7 grid, two keys, gate, two rules |
+| 9 | Meadow Sandbox | Platformer | Clockwork Meadows hero, art and parallax on a short 2,800 px stage with three easy ledges and no coins, enemies, hazards, variables or HUD. A clean starting point for adding features, for example with the agent |
+| 10 | Endless Runner | Arcade | Jump/duck, accelerating obstacles, bonus cores |
+| 11 | Arena Survival | Survival | WASD movement, attack, chasers, hull, 60 s timer |
+| 12 | Falling Objects | Survival | Catch lane, meteors, bonus stars, three lives, timer |
+| 13 | Maze Escape | Puzzle | Grid maze walls, 15 dots, warden pursuit, gated exit |
+| 14 | Snake | Puzzle | Fixed-step grid movement, food, growth, self/wall collision |
+| 15 | Platformer (classic) | Platformer | Dusk scene, player controller, coins prefab, hazard, checkpoint, relay, win scene and rules |
+| 16 | Top-down (classic) | Top-down | Room walls, 8-way controller, health, patrol enemy, exit rule |
+| 17 | Puzzle (classic) | Puzzle | 5×7 grid, two keys, gate, two rules |
 | — | Blank | Empty | One scene, one layer |
 
-**Evidence they are real:** each starter is constructed by code (`createGameStarterDocument`), covered by committed model/runtime tests (`tests/game-starters.test.ts`, `tests/game-starter-slice-b…f.test.ts`, `tests/space-shooter.test.ts`), and the New Project dialog renders generated preview images from the actual documents (`src/engine/model/game-starters/preview.ts`). Every starter has a game-test profile (`src/engine/model/game-test-profiles.ts`). Kane was also driven against several starters: Space Invaders (three runs; two partial or failed, one fast-restart pass), Asteroid Field (play/restart and editor-tuning passes), and Space Shooter (loss/restart observed, but the run failed its final checkpoint and no clean automated scoring pass exists). See §4.1 and `docs/kane-proof.md`.
+**Evidence they are real:** each starter is constructed by code (`createGameStarterDocument`), covered by committed model/runtime tests (`tests/game-starters.test.ts`, `tests/game-starter-slice-b…f.test.ts`, `tests/space-shooter.test.ts`), and the New Project dialog renders generated preview images from the actual documents (`src/engine/model/game-starters/preview.ts`). 13 starters have a built-in game-test profile (`src/engine/model/game-test-profiles.ts`); Meadow Sandbox uses a profile derived from the project by design (`src/engine/model/derived-test-profile.ts`), as do the classic templates, Blank and user projects. Kane was also driven against several starters: Space Invaders (three runs; two partial or failed, one fast-restart pass), Asteroid Field (play/restart and editor-tuning passes), and Space Shooter (an early exploratory loss/restart run failed its final checkpoint; three approved phases later passed, runs `b967bbdd`, `98e21783` and `ea1bb3b3`). See §4.1 and `docs/kane-proof.md`.
 
 ---
 
@@ -176,7 +177,7 @@ The saved test fails honestly rather than masking product problems: its first tw
 
 A phase verdict is strict (`server/kane/phase.ts`): `passed` requires Kane's pass, every assertion matching, at least one actually delivered input for a control-using phase, a frame count inside budget, no runtime error, and an evidence bundle. Missing input/observations/evidence, over-budget frames, timeouts and cancellations are `inconclusive` or `cancelled`, never a pass. Results are rendered per criterion by `buildTestReport`.
 
-**Honest status:** the phase flow is implemented, unit-tested, and **demo-proven as a pass** as of 2026-11-24. Run `98e21783` was approved through the live panel and returned a typed **PASSED** with both assertions matching (`shots-fired` 3, `projectiles` 3), accepted inputs 1, frames 45, 94.7 s, and a 721,305-byte evidence bundle (HTTP 200) with no console or page errors. Run `ea1bb3b3` repeated the pass in 78.1 s (776,545-byte evidence) and is captured in [the panel screenshot](screenshots/approved-phase-passed.png). Earlier budget limits were real: an 8-step cap stopped run `1105bd78`, and a 300 s wall cap stopped `e088e2c0` during finalization; the caps are now 12 steps and 600 s. Server idempotency state is still in memory. The direct panel run does not feed the agent loop; only the `run_kane_test_phase` tool does. See `docs/kane-proof.md` (Phase 7).
+**Status:** the phase flow is implemented, unit-tested, and **live-proven as a pass** as of 2026-11-24. Run `98e21783` was approved through the live panel and returned a typed **PASSED** with both assertions matching (`shots-fired` 3, `projectiles` 3), accepted inputs 1, frames 45, 94.7 s, and a 721,305-byte evidence bundle (HTTP 200) with no console or page errors. Run `ea1bb3b3` repeated the pass in 78.1 s (776,545-byte evidence) and is captured in [the panel screenshot](screenshots/approved-phase-passed.png). Earlier budget limits were real: an 8-step cap stopped run `1105bd78`, and a 300 s wall cap stopped `e088e2c0` during finalization; the caps are now 12 steps and 600 s. Run `b967bbdd` (79.7 s, shots-fired 3, projectiles 3, accepted inputs 1, 45 frames) passed when the agent drove a phase. The review panel's result also feeds the agent loop: `EditorPage` calls `agent.continueWithPhaseResult(result)`. Server phase and idempotency state is in memory and is cleared on server restart. Phase saved-test replay is wired in (`POST /api/kane/phase` accepts `replayTestKey`), with no measured phase replay speedup yet. See `docs/kane-proof.md` (Phase 7).
 
 ### 4.4 Kane constraints
 
@@ -200,7 +201,7 @@ A phase verdict is strict (`server/kane/phase.ts`): `passed` requires Kane's pas
 | # | Feature | Status |
 |---|---|---|
 | F1 | Create a project from Blank, a template, a written brief (agent builds the first pass), or a `.clockwork.json` import | Implemented; brief flows through the agent, not a model-free generator |
-| F2 | 12 genre starters + 3 classic templates, with generated preview thumbnails and category filters | Implemented |
+| F2 | 14 genre starters + 3 classic templates, with generated preview thumbnails and category filters | Implemented |
 | F3 | Dashboard search, status/template filters, sort | Implemented and browser-verified |
 | F4 | Rename, duplicate (fresh ids), archive/restore (read-only), delete | Implemented and browser-verified |
 | F5 | Autosave to IndexedDB with Unsaved → Saving… → Saved; document and scene restore on reload | Implemented and browser-verified |
@@ -279,7 +280,7 @@ A phase verdict is strict (`server/kane/phase.ts`): `passed` requires Kane's pas
 | F52 | Error handling: typed codes, actionable cards, stop/retry, bounded revision re-plan, agent undo | Implemented |
 | F53 | Prompt presets/suggestions in the empty state and `/` menu | Implemented; no real-model golden run recorded |
 | F54 | "From brief" project creation hands the brief to the agent in Build mode | Implemented |
-| F55 | Kane tools in the agent loop: `verify_with_kane`, `run_ai_play`, `run_kane_test_phase` | Implemented; `verify_with_kane` proven by K4 |
+| F55 | Kane tools in the agent loop: `verify_with_kane`, `run_ai_play`, `run_kane_test_phase` | Implemented; `verify_with_kane` proven by K4. Closed loop proven in chat by run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (2026-11-25): on a Meadow Sandbox project the agent added 6 coins tagged `coin`, a score variable and a Score HUD widget, then `verify_with_kane` PASSED at revision 9 (SCORE 0 → 1, COIN COUNT 6 → 5, COLLECTED 0 → 1, PLAYER X 240 → 473.67 after 45 frames of MOVE RIGHT), with simulator and browser agreeing on every readout. The agent also drove approved phase `b967bbdd` to a pass. The chat agent has 12 model steps per message, with the last 3 reserved for a requested Kane check |
 
 ### G. Kane testing (9)
 
@@ -291,8 +292,8 @@ A phase verdict is strict (`server/kane/phase.ts`): `passed` requires Kane's pas
 | F59 | Test Mode: paused frame 0, labelled controls, bounded ADVANCE, observations, input receipts, no wall-clock | Implemented and unit-tested |
 | F60 | Typed phase verdict joining Kane verdict + assertions + receipts + frames + evidence | Implemented and unit-tested |
 | F61 | Per-criterion test report (PASS/FAIL/INCONCLUSIVE) with evidence links and limitations | Implemented and unit-tested |
-| F62 | 12 template game-test profiles with controls/observations/objectives and one scenario | Implemented |
-| F63 | Saved `_test.md` replay path (`testmd run --no-adaptive-heal`) and replay registry | Implemented; replay passed (1/1 in 89 s), but no controlled speedup benchmark |
+| F62 | 13 built-in game-test profiles (every genre starter except Meadow Sandbox) with controls/observations/objectives and one scenario, plus a derived profile for every other game (status, player X/Y, up to 10 variables, up to 6 tag counts, event counts) | Implemented |
+| F63 | Saved `_test.md` replay path (`testmd run --no-adaptive-heal`) and replay registry | Implemented; wired into the phase runner via `replayTestKey`. The engine E2E replayed 1/1 steps in 89 s; no phase replay speedup has been measured |
 | F64 | Engine-QA objectives and evidence ledger for the app itself (K1–K5) | Implemented as scripts; results recorded, not CI |
 | F68 | Saved engine E2E `testmd` test + runner: creates a Platform Jumper project, edits/undoes Object Y, plays, restarts, returns to the editor, and emits compact JSON | Implemented; real pass 2026-11-24 (1/1, 286 s) |
 | F69 | One-command dev + engine E2E wrapper (`npm run kane:engine-e2e:dev`) that reuses or starts the app, waits for readiness, and cleans up | Implemented; cold-start pass 2026-11-24 (1/1 replayed, 89 s), clean teardown |
@@ -350,26 +351,26 @@ Project lifecycle, editor viewport and transforms, undo/redo, assets pipeline, t
 
 ### Implemented but not fully verified
 
-- AI Testing phase-result persistence across server restart and replay reuse. The live approve-and-run path is green, but idempotency state is in memory.
+- AI Testing phase-result persistence across server restart. The live approve-and-run path is green, but phase and idempotency state is in memory.
 - Prompt presets, headless playtest parity.
 - Provider vault persistence across restart, custom provider chat, key-absence audit.
 - Ship/export acceptance run (zip served offline, share link input/restart).
-- 12-starter Kane coverage: Space Invaders, Asteroid Field, Space Shooter and Platform Jumper were attempted; Platform Jumper's saved engine E2E passed, Asteroid Field's play/restart and editor-tuning runs passed, and there is no clean automated scoring or win proof for Space Shooter. Do not claim all 12 starters are Kane-verified.
+- Kane coverage of the 14 starters: Space Invaders, Asteroid Field, Space Shooter and Platform Jumper were attempted. Platform Jumper's saved engine E2E passed, Asteroid Field's play/restart and editor-tuning runs passed, and Space Shooter has three approved-phase passes. Most other starters have no Kane run.
 - The one-command dev wrapper's tear-down under every failure mode; the cold-start, readiness and reuse paths were exercised, but a mid-run crash was not.
 
 ### Experimental / constrained
 
 - Auto-fix handles one defect class only.
-- Saved-test replay works mechanically but has shown no measured speedup; live `testmd` runs still authored steps.
+- Saved-test replay is wired into the phase runner and the engine E2E replayed in 89 s, but no phase replay speedup has been measured.
 - Deterministic replay exists in the runtime but is not exposed in Play UI.
 
-### Not implemented (do not advertise)
+### Scope limits
 
 - Accounts, cloud sync, multiplayer, real-time collaboration.
 - Arbitrary user scripting/code, 3D, skeletal animation.
 - Mobile editor layout below 1024 px.
 - Visual/pixel-diff validation or autonomous gameplay exploration by Kane.
-- "Fully autonomous AI game development": the agent is bounded, mode-gated, and every change is reviewable.
+- The agent is bounded, mode-gated and reviewable; it is not autonomous game development.
 - Automatic bug fixing beyond the embedded-collectible repair.
 
 ### Constraints
@@ -383,10 +384,9 @@ Project lifecycle, editor viewport and transforms, undo/redo, assets pipeline, t
 - Rate limiting and AI budget state are in server memory.
 - The Neon Runner demo intentionally seeds an uncollectible coin; that failure is staged demo data, not a random bug.
 
-### Discrepancies between appearance and reality
+### Scope notes
 
-- The AI Play panel embeds an **AI Testing plan** section, but running a phase from that panel does not feed the agent conversation; only the tool path does.
-- "Engine QA" in `verify_with_kane` runs against a **game snapshot**, not the editor; editor QA is the external objectives and the saved engine E2E.
-- The 12 starters have game-test profiles; the three classic templates (platformer/topdown/puzzle) do not, so Test Mode reports unavailable for them.
+- `verify_with_kane` runs against a **game snapshot** (first in the engine simulator, then once in a real browser), not the editor. Editor QA is the external objectives and the saved engine E2E.
+- 13 starters have a built-in game-test profile. Meadow Sandbox, the three classic templates, Blank and user projects use a profile derived from the project, so every game has a Test Mode.
 - The default `AI Play` auto-fix is deterministic Clockwork logic, not the language model, unless the agent's `run_ai_play` tool is used.
-- `features.md` still labels AI Play and the phase flow as not listed pending gates; it is older and more conservative than this audit. Use `docs/FEATURE_VERIFICATION.md` and the recorded runs for the current status.
+- `features.md` is older and more conservative than this audit. Use `docs/FEATURE_VERIFICATION.md` and the recorded runs for the current status.

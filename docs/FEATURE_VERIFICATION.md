@@ -1,15 +1,15 @@
 # Clockwork — Feature Verification Ledger
 
-**Purpose:** map every material claim in `docs/PROJECT_FEATURE_AUDIT.md` and `docs/HACKATHON_SUBMISSION_DESCRIPTION.md` to the file that implements it, and state what that file does and does not prove. Claims without evidence are listed at the end and must not be advertised.
+**Purpose:** map every material claim in `docs/PROJECT_FEATURE_AUDIT.md` and `docs/HACKATHON_SUBMISSION_DESCRIPTION.md` to the file that implements it, and state what that file does and does not prove. Items not yet covered are listed in section 8.
 
-**Date:** 2026-11-24. **Scope:** working tree at `main` (`f67f31d` + uncommitted changes). Documentation-only audit; no application source, configuration or dependencies were modified. The only code added in this pass is the saved engine E2E test, its terminal runner and the one-command dev wrapper.
+**Date:** 2026-11-25 (counts and phase status updated; the original audit scope dates from 2026-11-24). **Scope:** working tree at `main` (`f67f31d` + uncommitted changes). Documentation-only audit; no application source, configuration or dependencies were modified. The only code added in this pass is the saved engine E2E test, its terminal runner and the one-command dev wrapper.
 
 ---
 
 ## 1. How to read this ledger
 
 - **Implemented** — the code path exists and is reachable from the UI or API.
-- **Tested** — covered by a committed test under `tests/` (23 files, 130 tests, run with `node --import tsx --test tests/*.test.ts`).
+- **Tested** — covered by a committed test under `tests/` (27 files, 176 tests, run with `pnpm test`).
 - **Observed** — exercised in a recorded browser session or Kane run (see `docs/kane-proof.md`, `docs/demo-readiness-evidence.md`).
 - **Unverified** — code exists but no accepted run or test demonstrates the end-to-end behavior.
 
@@ -21,19 +21,19 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 
 | Claim | Source of truth | How counted | Status |
 |---|---|---|---|
-| 12 genre starters | `src/engine/model/game-starters/catalog.ts` → `GAME_STARTERS` | 12 entries, each with id, category, blurb, mechanics | Verified; each built by `build.ts` and covered by `tests/game-starters.test.ts` + slice tests |
+| 14 genre starters | `src/engine/model/game-starters/catalog.ts` → `GAME_STARTERS` | 14 entries (Space Shooter, Space Invaders, Asteroid Field, Ping Pong, Brick Breaker, Flappy Flyer, Platform Jumper, Clockwork Meadows, Meadow Sandbox, Endless Runner, Arena Survival, Falling Objects, Maze Escape, Snake), each with id, category, blurb, mechanics | Verified; each built by `build.ts` and covered by `tests/game-starters.test.ts` + slice tests |
 | 3 classic templates | `src/engine/model/templates.ts` → `TEMPLATES` | `platformer`, `topdown`, `puzzle` | Verified by source and template tests |
-| 16 creation options (12 + 3 + Blank) | `src/features/projects/NewProjectDialog.tsx` | Starter cards + template options + Blank card | Verified in source; gallery exercised in browser evidence |
-| 1 game-test profile per starter (12) | `src/engine/model/game-test-profiles.ts` | 12 registry keys (`space-shooter`, `space-invaders`, `asteroid-field`, `ping-pong`, `brick-breaker`, `flappy-flyer`, `platform-jumper`, `endless-runner`, `arena-survival`, `falling-objects`, `maze-escape`, `snake`) | Verified by source; profiles load without throwing (unit test) |
-| No profiles for classic templates | same registry | `platformer`/`topdown`/`puzzle` absent | Verified by source; consequence stated in audit |
+| 18 creation options (14 + 3 + Blank), or a written brief | `src/features/projects/NewProjectDialog.tsx` | Starter cards + template options + Blank card | Verified in source; gallery exercised in browser evidence |
+| 13 built-in game-test profiles | `src/engine/model/game-test-profiles.ts` | Every genre starter except Meadow Sandbox | Verified by source; profiles load without throwing (unit test) |
+| Derived profile for every other game | `src/engine/model/derived-test-profile.ts`; `gameTestProfileForDocument` falls back to it | Meadow Sandbox, the classic templates (`platformer`/`topdown`/`puzzle`), Blank and user projects. Exposes status, player X/Y, every variable (up to 10), up to 6 object-tag counts and event counts (COLLECTED, DESTROYED, DAMAGE EVENTS, SHOTS FIRED) | Verified by source; every game has a Test Mode. Meadow Sandbox has no built-in profile on purpose, so readouts for a score and coins added later appear automatically |
 | 57 commands | `src/engine/commands/registry.ts` | Count of registered command definitions across `project.*`, `scene.*`, `layer.*`, `object.*`, `objects.*`, `prefab.*`, `asset.*`, `tilemap.*`, `rule.*`, `variable.*`, `hud.*`, `behavior.*` | Verified by direct count |
 | 26 behaviour types | `src/engine/model/schema.ts` → behaviour `type` union; `behaviorTypeSchema` | Enumerated 26 engine types (catalog also lists 3 UI field types, total 29 catalog entries) | Verified by enum and runtime switch |
 | 5 rule conditions / 8 rule actions | `src/engine/model/schema.ts` + `src/features/editor/logic/*` | Condition: variable, overlap, input, timer, scene-start. Action: set-variable, show-message, go-scene, play-sound, spawn, destroy, set-behavior-param, log | Verified by schema and runtime evaluator |
 | 16 starter assets | `src/engine/assets/starter-manifest.ts` → `STARTER_ASSETS` | 13 images + 3 audio entries | Verified by array |
-| 23 unit test files, 130 tests | `tests/*.test.ts` | File count and `npm test` run | Verified by `glob` and a passing suite on 2026-11-24 |
+| 27 test files, 176 tests | `tests/*.test.ts` | File count and `pnpm test` run | Passing on 2026-11-25; type-check and `pnpm check:repo` also pass |
 | 22 agent tools | `shared/ai-tools.ts` | 10 read + 6 write + 3 Kane + 3 aliases, minus capability-gated vision | Verified by source; tool names listed in audit |
 | 8 engine-QA objective files | `scripts/kane/objectives/` | K1–K5, with K3 split into K3a/K3b, plus the superseded K3 and the steer probe | Verified by directory listing and objective text |
-| 21 saved testmd files | `.testmuai/tests/*_test.md` | 20 game-play tests + the engine E2E | Verified by listing |
+| 1 tracked saved testmd file | `.testmuai/tests/engine-template-e2e_test.md` | Only the engine E2E is tracked. `.testmuai/runs/`, `.testmuai/evidence/` and `.testmuai/tests/output-*/` are gitignored. Twenty exploratory game-play definitions were removed from the tree; they remain in git history and their results stay in `docs/kane-proof.md` | Verified by listing |
 | 1 saved engine E2E test | `.testmuai/tests/engine-template-e2e_test.md` | Platform Jumper creation, canvas/hierarchy/Inspector, Object Y edit/undo, Play, Space, R, return to editor | Verified by a passing Kane run on 2026-11-24 (1/1, 286 s) |
 | 1 one-command dev + E2E wrapper | `scripts/kane/engine-e2e-dev.mjs`, `package.json` | Starts or reuses the app, waits for Vite + `/api/health`, runs the saved test, cleans up | Verified by cold-start and reuse paths on 2026-11-24; cold start passed 1/1 replayed steps in 89 s |
 
@@ -126,7 +126,9 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 | Strict typed verdict | `server/kane/phase.ts` | Unit tests for pass/inconclusive/cancelled | Verified at unit level |
 | Per-criterion report | `buildTestReport` | Unit tests | Verified at unit level |
 | **Live end-to-end accepted phase run** | panel approval → `/api/kane/phase` → typed result + evidence | 2026-11-24 runs `98e21783` (94.7 s) and `ea1bb3b3` (78.1 s): typed **PASSED** (shots 3, projectiles 3, accepted 1, frames 45), evidence HTTP 200, no console/page errors — [panel screenshot](screenshots/approved-phase-passed.png), `docs/kane-proof.md` | **Verified live** |
-| Result persistence across restart | in-memory store | Source | **Not persisted — limitation** |
+| Result persistence across restart | `server/kane/phase-session.ts` (a `Map`) | Source | Not persisted; see section 8 |
+| Panel result feeds the agent loop | `EditorPage` calls `agent.continueWithPhaseResult(result)` | Source | Verified in source |
+| Saved-test replay in the phase runner | `POST /api/kane/phase` accepts `replayTestKey` and replays a recorded `_test.md` with healing disabled | Source; the engine E2E replayed 1/1 steps in 89 s | Wired in; no measured phase replay speedup yet |
 
 ### 6.3 Engine QA of the application
 
@@ -137,11 +139,13 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 | K3a repair + play win | agent Build prompt, applied change, Play, click-to-steer | Passed 282.1 s / 60.1 credits | Verified |
 | K3b undo/redo | agent edit + counters | Passed 218.9 s / 59.29 credits | Verified |
 | K4 in-app verification card | `verify_with_kane` tool + result card | Passed 65.2 s in-app; 206.7 s terminal rerun | Verified |
-| K2 defect discovery | Build with no model | Defect fixed; reruns environment-blocked | **Not a passed run — do not claim** |
+| K2 defect discovery | Build with no model | Defect fixed; three reruns died in Kane's own browser during screenshot capture | Environment-blocked, not a passed run |
+| Chat agent closed loop (agent → Kane → agent) | `verify_with_kane` in the agent loop; Meadow Sandbox starter | Run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (2026-11-25): the user asked the in-app agent to add coins tagged `coin`, +1 score per coin and a SCORE HUD, then verify with Kane. The agent applied 6 coins, a score variable and a Score HUD widget, ran a headless preflight, then called `verify_with_kane`. The check ran in the engine simulator, then once in a real browser. **PASSED** at project revision 9: SCORE 0 → 1, COIN COUNT 6 → 5, COLLECTED 0 → 1, PLAYER X 240 → 473.67 after holding MOVE RIGHT for 45 frames. Simulator and browser agreed on every readout. Evidence: `/api/kane/runs/a20a4b28-5387-4849-a978-a5ca5aa499c3/evidence` (local server). The user had to send a follow-up message before Kane ran because the agent used its 8-step budget. The budget is now 12 steps with the last 3 reserved for a requested Kane check, and the agent sees HUD widgets | Verified |
+| Agent-driven approved phase | `run_kane_test_phase` on Space Shooter | Run `b967bbdd`: PASSED, 79.7 s, shots-fired 3, projectiles 3, accepted inputs 1, 45 frames | Verified |
 | Saved engine E2E | `.testmuai/tests/engine-template-e2e_test.md` + `scripts/kane/engine-e2e.mjs` | Passed 2026-11-24: 1/1 steps, 286 s, session `aceb577f-0a26-456e-a2d7-944652113935`; final `lives: 3`, Object Y `780`, back on `/project/.../scene/...` | Verified |
 | One-command dev + E2E | `scripts/kane/engine-e2e-dev.mjs`, `npm run kane:engine-e2e:dev` | Cold start: app launched, Vite + `/api/health` ready, saved test passed 1/1 replayed in 89 s, app torn down and ports free; reuse path also exercised | Verified by run; not a CI job |
 
-**Coverage limit:** these objectives exercise project creation, project open, hierarchy, inspector, canvas keys, undo/redo, reload, agent drawer and Play. Assets, Logic, Presentation, Ship, settings and mobile layouts were not covered by Kane.
+**Coverage limit:** these objectives exercise project creation, project open, hierarchy, inspector, canvas keys, undo/redo, reload, agent drawer and Play. Assets, Logic, Presentation, Ship, settings and mobile layouts are not covered by Kane yet.
 
 ---
 
@@ -157,21 +161,21 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 
 ---
 
-## 8. Claims explicitly NOT verified (do not advertise as working)
+## 8. Not covered yet
 
-1. **Phase result persistence** — in memory; lost on server restart.
-2. **Phase panel feeding the agent loop** — it does not; only `run_kane_test_phase` does.
-3. **Saved-test replay reuse in the phase runner** — replay exists, but the phase runner does not use saved tests; no measured speedup.
-4. **Prompt presets** — implemented; no real-model golden run recorded.
-5. **Provider key persistence across restart, custom provider chat** — not gate-closed.
-6. **All 12 starters tested by Kane** — Space Invaders, Asteroid Field, Space Shooter and Platform Jumper were attempted; Platform Jumper's saved engine E2E passed, Asteroid Field's play/restart and editor-tuning runs passed, and there is no clean automated scoring or win proof for Space Shooter. Do not claim "all templates Kane-verified".
-7. **Visual regression / pixel diffing** — Kane runs with `--assertion-mode dom`; no screenshot judging.
-8. **Autonomous gameplay or autonomous repair beyond embedded collectibles** — the repair is a deterministic policy for one defect class.
-9. **Multi-user collaboration, cloud sync, accounts, mobile editor** — not implemented.
-10. **Real-time replay UI** — `Runtime.replay()` exists, no Play control.
-11. **CI browser suite** — none committed; 23 Node test files and terminal Kane scripts only.
-12. **Accessibility audit** — not performed; `docs/known-issues.md` records it as outstanding.
-13. **One-command wrapper as a CI service** — it is a local command, not a committed CI workflow.
+- **Phase state persistence.** Phase results and idempotency state are in memory (`server/kane/phase-session.ts`) and are cleared on server restart.
+- **Phase replay speedup.** Saved-test replay is wired into the phase runner, but no phase replay speedup has been measured.
+- **K2.** Environment-blocked: the defect it caught is fixed, and its three reruns died in Kane's browser. It is not recorded as a pass.
+- **Prompt presets.** Implemented; no real-model golden run recorded.
+- **Provider settings.** Key persistence across restart and custom-provider chat have no recorded run.
+- **From-brief project creation.** No recorded real-model brief run.
+- **Kane coverage of every starter.** Platform Jumper (saved engine E2E), Asteroid Field (play/restart, editor tuning) and Space Invaders (creation, HUD, fast restart) have passing runs, and Space Shooter has approved phase passes. Most starters have no Kane run.
+- **Visual regression.** Kane runs with `--assertion-mode dom`; there is no screenshot or pixel judging.
+- **Repair scope.** The AI Play repair is a deterministic policy for one defect class, an embedded collectible.
+- **Replay UI.** `Runtime.replay()` exists with no Play control.
+- **CI.** No browser suite or Kane workflow is committed. There are 27 Node test files and terminal Kane scripts. The one-command wrapper is a local command.
+- **Accessibility.** Not audited; see `docs/known-issues.md`.
+- **By design.** Multi-user collaboration, cloud sync, accounts and a mobile editor layout are not implemented.
 
 ---
 
@@ -180,7 +184,7 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 | Artifact | What it records |
 |---|---|
 | `docs/kane-proof.md` | Dated Kane runs with objectives, durations, credits, findings, evidence paths, and negative controls |
-| `docs/known-issues.md` | Maintained limitation ledger; source for every "unverified" entry above |
+| `docs/known-issues.md` | Maintained limitation ledger; source for the items in section 8 |
 | `docs/demo-readiness.md` / `docs/demo-readiness-evidence.md` | Demo script and browser-observed behavior |
 | `docs/ai-play.md` | AI Play design, consent, evidence, repair policy, limits |
 | `docs/game-test-profiles.md` | Profile schema and per-template coverage |

@@ -50,8 +50,9 @@ an approved frame count and press **STEP**; pressing a control alone does not ad
 game. Every control produces an input receipt with the frames that actually carried the
 action, and a rejected or clamped request says so.
 
-Test Mode requires a registered profile. A template without one reports
-`TEST MODE UNAVAILABLE` and stays at frame zero rather than approximating controls. Normal
+Test Mode needs a profile. The 13 starters with a built-in profile use it; every other
+game (Meadow Sandbox, the classic templates, Blank, user projects) gets a profile derived
+from the project (`src/engine/model/derived-test-profile.ts`), so every game has a Test Mode. Normal
 Play and the default snapshot player keep their real-time behaviour unchanged. See
 [`docs/testing-hooks.md`](./testing-hooks.md) for the selectors.
 
@@ -161,7 +162,7 @@ The repair moves the core above Ledge B with one `object.update`. The replay ass
 - One active AI Play run per project.
 - Snapshot-only URLs; the client cannot submit a URL.
 - 1,000-character objective cap and 64 KB request body.
-- 180-second timeout, 40-step cap.
+- At most 140 seconds and 8 Kane steps per AI Play run. The 180 s / 40 step values are the global defaults, not the AI Play limits.
 - Kane has no feature flags. Installation, sign-in and a positive credit balance are the runtime gates.
 - Evidence, raw logs, and `.data` are gitignored.
 - AI Play is local/self-hosted in v1 because it launches Chrome.

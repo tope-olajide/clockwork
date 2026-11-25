@@ -1,170 +1,92 @@
 # Clockwork Known Issues and Limitations
 
-This file records anything that could reduce confidence or score: incomplete features, failing checks, deferred verification, deliberate scope cuts, and environment requirements. Keep it honest and current. Do not hide a failure here to make the product look finished.
+An honest record of what is not covered, not measured or constrained by design. Entries are removed only when the issue is fixed and verified. Real Kane runs are listed in [`kane-proof.md`](kane-proof.md).
 
-**Last updated:** 2026-11-21 (phase contract hardened; live phase acceptance still open)
-**Branch:** `feat/game-starter-templates`
+**Last updated:** 2026-11-25
 
 ## Current status
 
-- **The approved-plan Kane phase flow is implemented and locally tested, but not live-tested.** The phase objective now names visible controls and STEP advancement, frame budgets reach Test Mode, only delivered inputs count, no-input and over-budget results are INCONCLUSIVE, and baselines include the plan scene/scenario. What remains is one real approved phase through the agent, a second evidence-driven phase or deliberate failure, and tracked evidence. This is the top demo gate; see [`docs/demo-readiness.md`](demo-readiness.md).
-- **Phase result persistence is incomplete.** Server idempotency/budget state is in memory and is lost on restart. The client stores results in `localStorage`, but the server cannot replay a typed phase result after a restart.
-- **The direct test-plan panel does not feed the agent loop.** Running a phase from the panel records the result but does not append it to the agent conversation. Only the `run_kane_test_phase` agent tool closes the loop.
-- **Saved-test replay is not used by the phase runner.** `KANE_AI_PLAY_TEST` remains a legacy AI Play path and has no measured real replay. Every approved phase currently authors a fresh Kane run.
-- **The submission surface was stale.** README, `features.md`, this file, `docs/ai-play.md` and visible “arrives in Slice …” copy were updated on 2026-11-21; any remaining stale copy should be treated as a demo blocker.
+- 176 tests across 27 test files pass (`pnpm test`). Type-check and `pnpm check:repo` pass.
+- The approved-phase Kane flow is live-proven (runs `98e21783`, `ea1bb3b3`, `b967bbdd`). The review panel's result feeds the agent loop through `agent.continueWithPhaseResult`.
+- The chat agent closed loop is proven on a Meadow Sandbox project (run `a20a4b28-5387-4849-a978-a5ca5aa499c3`, 2026-11-25): the agent added coins, a score variable and a Score HUD, then `verify_with_kane` passed in the simulator and in a real browser.
+- Engine QA K1, K3a, K3b, K4 and K5 passed. The saved engine E2E passed twice (286 s authored, 89 s cold-start replay).
 
-## Historical status
+## Kane and AI Testing
 
-- **Slice 1 implemented and committed (`10b839e`, with fixes in `748786a`) and most dashboard flows are now browser-verified.** Engine model, Zod schemas/migration, command bus + validation + patch history, IndexedDB persistence/autosave, `.clockwork.json` transfer, templates, and real dashboard/editor/overview/settings surfaces are wired up. Verified: creation through the dialog from all three templates, search, all three filter groups, archived read-only (overview + editor, `+ Add` blocked), restore, duplicate, delete with confirmation, and **download → delete → re-import with an identical document** (ids, revision, scenes, layers, objects, variables; `updatedAt` excluded).
-- **Slice 1 gate items now verified (26/26 run):** project and object rename, start-scene change plus fallback after deleting the start scene, add/delete scene/layer/object each with exactly one revision and one undo entry (and undo restoring counts), scene delete revision/undo, the `Unsaved → Saving… → Saved` transition, and malformed-import rejection with no partial project.
-- **Slice 1 gaps closed:** >20 MB imports are rejected with a visible error and a disabled Create button; corrupted documents show the recovery panel and its `Delete damaged project` action now works (it was a no-op because `removeProject` returned early with no current document); duplicates get a new project id and fresh disjoint object ids with no shared mutable objects; the overview `Play` and new `Share` buttons are disabled with Slice 4/8 explanations.
-- **Slice 1 gate closed:** one consolidated cold-profile run (headless Chrome 1440×900, production preview) passed 45/45 checks with zero console errors, covering dashboard rename/reload, search/filters, archive/read-only/restore, Blank and Template creation, per-command revision + undo, redo, save-state transition, reload persistence, settings rename/start-scene/export/import, start-scene deletion fallback, disabled Play/Share, malformed and >20 MB imports, duplicate ids, corrupted recovery, and damaged-project deletion. **Bug fixed:** `?section=project` rendered the overview because the settings branch only tested placeholder sections, so the settings panel was unreachable; the branch now keys off `sectionKey === "project"`. Slice 1 features are listed in `features.md`.
-- **Fixes applied during Slice 1:** enabled Immer `enablePatches()` in command runner; **fixed undo/redo revision semantics: stored prevRevision in history entries, undo sets revision to prevRevision, redo sets to prevRevision + 1**; preserved URL search params on scene-route redirects (keeps `?debug=1`).
-- **Slice 2 gate closed (24/24 in one cold-profile run at 1366×768).** Headless browser verification also passed an earlier 17/17 checks: Pixi canvas mounts and sizes, platformer scene renders with layers/opacity/parallax, rulers map to world coordinates, `?debug=1` shows FPS/camera, hierarchy selection drives the inspector, dragging an object produces exactly one revision and one undo entry (undo verified), wheel zoom changes zoom without touching revision/history, and layer drag-reorder changes the stack. Two engine bugs were fixed here: `layer.reorder` sorted by stale order values and silently restored the original order; fast drag gestures could commit an empty preview because pointer-up read React state instead of the gesture.
-- **Slice 2 additions verified:** scale and rotation via their handles (scale 1.362, rotation 65.35°), 8 px snapping on a drag (committed `x=648`), dock/panel open state, tool and workspace tab persisting across reload with no revision change, and hierarchy virtualization (600 objects rendered as a 20-row window, stable after scrolling). Fixed in this pass: gizmo handles no longer capture pointer-down inside a short selected object, so a centre drag moves instead of resizing.
-- **Slice 2 additions verified:** multi-select inspector shows shared transform fields with mixed values; applying X to two objects is one revision and one undo entry; Group selection (inspector and canvas menu) creates a group parent with children in one revision and undo removes it; Create prefab stores a prefab rooted at the selected object. Fixed: the canvas context menu used to close on its own pointer-down, making its actions unusable.
-- **Multi-object prefabs:** `prefabSchema` stores `root` plus `objects[]`, and Create prefab from a multi-selection builds a group root whose children are cloned with remapped ids (descendants are captured too). Instantiation, overrides, update and detach remain Slice 5.
-- **Slice 2 gate additions verified in the consolidated run:** marquee selected 20 objects; dragging all 20 was one revision/one undo and undo restored all positions; guides were visible during 8/16/32 px snaps and gone on release; cursor-anchored zoom kept the world point fixed; Fit/1:1 buttons and `0`/`1` keys work and rulers track the camera; layer reorder survived reload; dock width is now draggable (300 → 370 px) and both width and collapse state persist; an invalid scene deep link falls back with a toast.
-- **Bugs fixed in the Slice 2 pass:** the ruler overlays were above the viewport toolstrip and swallowed clicks on Fit/1:1 (rulers are now `pointer-events: none`); a failed project load was invisible above 1023 px because it used `.too-small` (`display: none`) — it now uses an always-visible `.project-error`; dock widths were fixed and are now resizable/persisted; invalid-scene redirects had no toast; `Esc` now selects the parent of a selected object when one exists.
-- **Performance caveat:** the 2,000-rect target was measured with rAF uncapped: **801 fps ≈ 1.25 ms/frame** with hardware ANGLE (Intel UHD, D3D11). This machine caps every page, blank included, at ~40.9 fps, so 55 fps cannot be observed on-screen here; the 18.2 ms budget has ~14× headroom. Rendering uses batched `Texture.WHITE` sprites for rects/sprites instead of one `Graphics` per object.
-- **Slice 4 runtime and manual Play verified.** Thirteen direct runtime checks passed: settle/collision, jump, configured double jump, coyote jump, jump buffer, collectible increment, hazard respawn, goal win, camera clamp, camera deadzone, deterministic replay, scoped errors, and read-only dispatch rejection. A separate renderer check confirmed parallax offsets at the configured factors (sky 0.05 → 380 px, far 0.3 → 280 px, play 1 → 0 px, UI 0 → 400 px at camera x=1600). A cold-profile browser run at 1366×768 verified Play from the Overview button and Playtest rail item, start-scene loading, read-only UI, HUD, F1 debug overlay, pause/step/reset, goal completion (`WON`), Escape, and zero console errors. With `--disable-frame-rate-limit --disable-gpu-vsync`, Play averaged **655 fps** across 20 samples over 10 seconds (560–858 fps); the on-screen ~40 Hz cap remains environmental.
-- **Slice 4 fixes found by verification:** keyboard input crashed when `event.target` was `window` (now guarded); camera clamping used project settings instead of the actual viewport (now `setViewport`); the HUD/debug/error overlays were painted under the Pixi canvas (now z-indexed); the `won` variable did not stop the run (now sets `WON`); checkpoint logging repeated every frame (now once per checkpoint); parallax treated the first layer as factor 1 instead of its configured factor.
-- **Slice 4 limitations:** Play is a dedicated `/play/:projectId` route rather than an editor overlay; document commands are blocked but there is no separate editor-command surface in Play. Runtime capture/replay exists in `Runtime.replay()` but has no Play UI control. Audio SFX paths exist, but the Platformer template has no audio assets, so sound was not exercised in the browser. Music/HTMLAudio looping is not implemented. Telemetry is shown in the Play UI but is not exposed to the agent as a read tool.
-- **Slice 3 gate closed (cold-profile run at 1366×768).** Starter art/audio ship in `public/starter/**` and seed into IndexedDB with stable ids; asset browser has search, kind filters, rename, usage counts and drag-to-canvas; the slicer has manual frames; tilemaps render a grid/hover and paint/erase/fill with one-undo strokes. Fixed a real renderer bug: Pixi could not parse extensionless blob URLs, so sprites fell back to tinted rects; textures now decode via `Image` + `Texture.from`. Evidence is in `docs/implementation-log.md` (Slice 3 gate).
-- **Slice 5 gate closed (2026-11-17).** Presentation subtabs, logic/rules, prefabs, HUD/messages, input rebinding and animation runtime behavior are verified; evidence is in `docs/implementation-log.md` (Slice 5 gate). Music/SFX audibility itself was not measured headless — loop/volume state and UI controls were verified. A prefab-refresh duplicate-id bug was found and fixed during the gate.
-- **Slice 5 implementation detail.** Added Logic/Content/Presentation workspace pages; rule/variable/prefab/animation/HUD/scene-audio model and commands; rule reference validation/flagging helpers; prefab instantiate/update/detach/revert flows (Immer-draft-safe cloning); runtime rule safety, prefab spawn/transition preservation, animation frame application, scene music/volume handling, HUD visibility/message styling; Presentation `?tab=presentation&ptab=` state and subtab UI; behavior catalog/editor, variable-usage/rule previews, prefab controls, input rebinding/conflict UI, and inspector prefab controls. Platformer template includes coin prefab/instances, Win scene/rules, and HUD/message defaults. `pnpm typecheck` and `pnpm build` pass. Headless browser evidence at 1366×768 (cold profiles, production preview): Presentation subtabs update `?ptab=look|animation|audio|ui` and `ptab=audio` survives reload; Scene/Content/Logic/Presentation switches work and Scene returns with canvas; Logic shows the Platformer rule "When coins >= 3 → set won true, then go to Win" marked `Once`; Content Instantiate ×10 completed without cloning errors (revision advanced, "Instantiated prefab ×10.", 13 instances reported) and selected prefab instances expose Detach/Revert/Update-from-selection controls; Game UI shows HUD/Input map/Messages with `Conflicts: KeyW (up, jump)` in the template; a Look gravity input change was applied in UI; Play `/play/:projectId` loads `running` with HUD `CORES 0` and variables `{"coins":0,"won":false,"lives":3}`. **Not yet verified end-to-end:** authoring+play "coins == 3 → go to Win scene" triggering exactly once in a controlled run; deleted-object rule flagged in authoring and refused/skipped in play; gravity/jump inspector changes measurably affecting playtest behavior; prefab edit/update with instance-override survival and detach preventing further propagation; rebinding jump to `KeyW` working in play; HUD bound updates during play, bar max, and hide/removal in play; `show-message` display and clear after duration; per-scene music play/loop and music/SFX volume audibility; animation clip preview and playback on assigned runtime object; numerical viewport-camera preservation across workspace switches.
-- **Slice 5 bug fixed during verification:** prefab instantiate/update paths cloned Immer draft objects with `structuredClone`, causing “could not be cloned” in browser command execution; cloning now unwraps drafts. Presentation workspace initially lacked subtab controls that mutate `?ptab=`; controls were restored.
-- **Remaining Slice 2 scope cut:** hierarchy drag-reparent is verified, but drag-reparent onto groups in very large scenes has no dedicated perf test.
-- **Slice 6 gate-closed on mock evidence; Slice 6.5 implemented and still open.** Slice 6 added Hono NDJSON `POST /api/ai/step`, env/mock + OpenAI-compatible streaming, shared protocol/read-only tool defs, client context + read-only tool executor (including `capture_viewport`), agent session stream/tool loop, and editor agent drawer with `⌘J`/Ask-agent entry points. Slice 6.5 added provider catalog/model metadata, AES-256-GCM key vault/store with env→vault→session precedence, `/api/ai` provider/model/settings/key/test/custom-provider/custom-model routes with server-side model resolution (no client-supplied credentials), AI Settings UI (`?section=ai`), `docs/model-setup.md`, agent model picker integration with per-project model override in `localStorage` (`clockwork:agent-model:<projectId>`), model-aware Build/Plan and `capture_viewport` capability gating (client + server), typed agent error cards/actions, and basic context/model-window trimming in the OpenAI-compatible stream path. `node node_modules/typescript/bin/tsc -b tsconfig.json tsconfig.node.json` and `./node_modules/.bin/vite build` pass. **Slice 6 is gate-closed on mock evidence** (`docs/implementation-log.md`), and a real provider tool-call turn is now proven: the K3a/K3b/K4 runs streamed `apply_commands` from the env model and the change was applied. **Still not verified (Slice 6.5):** key persistence across restart, session-only loss on restart, masked hints/test connection, custom provider+model real chat, model picker search/grouping/default/per-chat selection surviving reload in real UI flows, capability-gating/error UX in real use, key absence from browser storage/network/SSE/logs, fresh-install no-key setup UX, and SSRF/rate/body-limit hardening. **Deviation:** vault persistence uses encrypted `.data/vault.json` (not SQLite). `apply_commands` is implemented and proven in K3a/K3b; the Slice 6.5 gate remains unclosed.
-- **Slice 10 is implemented and has real Kane evidence, but is not gate-closed.** The engine-QA and AI Play surfaces exist and the K1–K5 runs are recorded in `docs/kane-proof.md`; the open boxes are the manual/no-model browser pass, the no-model AI Play state, the fixture-driven UI loop artifact, AI HUD keyboard parity, and the share/export re-run. See “Slice 10 — Kane engine QA and AI Play” below.
-- **No committed browser/UI test suite.** Game-starter model/runtime tests are committed; Slice 4 and partial Slice 5 checks used temporary Node/browser harnesses, and those harnesses are not part of the repository. Kane objectives and the negative-control harness are committed under `scripts/kane/`, but they need a running API and a logged-in Kane CLI, so they are not a self-contained suite. `pnpm check:repo` is a source-tree check only.
-- **The viewport and Play require WebGL/canvas.** Without WebGL the document stays editable from the docks, but the scene and the player do not render.
+- **Phase state is in memory.** Phase results and idempotency state live in a `Map` in `server/kane/phase-session.ts` and are cleared on server restart. The client keeps results in `localStorage`, but the server cannot replay a typed phase result after a restart.
+- **No measured phase replay speedup.** `POST /api/kane/phase` accepts `replayTestKey` and replays a recorded `_test.md` with healing disabled, but no phase replay timing has been recorded. The engine E2E replayed 1/1 steps in 89 s. `KANE_AI_PLAY_TEST` (the AI Play replay path) is contract-verified only.
+- **K2 is environment-blocked.** K2 caught a real defect (Build accepted with no model). The fix is in. Its three reruns died in Kane's own browser during screenshot capture, so K2 is recorded as environment-blocked, not as passed.
+- **Kane Chrome sessions are flaky on this machine.** A stale browser held CDP port 9222 (`connect_over_cdp ... ETIMEDOUT`), and a later run lost its page mid-step. Neither is a product result.
+- **Phase stream retry is not browser-proven.** `streamKanePhase` retries the same approved request every 5 s (up to 18 attempts) because long streams can outlive the Vite dev proxy. The runs after the fix finished in one connection, so the retry has not fired live.
+- **Model plan drafting is not claimed.** The live panel run used a deterministic seeded draft with the mock planner. Approval, execution, verdict and evidence were exercised, not model authorship.
+- **Auto-fix covers one defect class.** The AI Play repair moves an embedded collectible. Other failures are reported, not repaired. The independent negative control (runs `b050f47c-…`, `52baa697-…`) used a deterministic repair too, so model-driven diagnosis is evidenced only by K5's product repair and the K3a agent run.
+- **Kane time and cost.** AI Play is capped at `min(KANE_TIMEOUT_SECONDS, 140)` s plus 5 s grace. A real AI Play attempt costs about 22–24 credits at 80–95 s, and engine-QA runs cost 38–63 credits. Engine QA needs `KANE_TIMEOUT_SECONDS=300` here.
+- **Starter coverage by Kane is partial.** Platform Jumper (saved engine E2E), Asteroid Field (play/restart, editor tuning) and Space Invaders (creation, HUD, fast restart) have passing runs. There is no clean automated scoring or win proof for Space Shooter, and console cleanliness was not verified (a `/favicon.ico` 404 was recorded). Asteroid splitting and scoring, win and loss paths for the other starters, and editor-to-Play tuning for Space Invaders are not covered.
+- **No visual judging.** Kane runs use `--assertion-mode dom`. There is no pixel or screenshot comparison.
 
-## Audit — Slices 3–7 code review (2026-11-17)
+## Agent and AI providers
 
-An independent read of the Slice 3–7 code against `docs/clockwork-implementation-plan.md` found the following gaps that are **not** already covered by the entries above. None of these were fixed in this audit; the affected slice gates remain open. The ordered remediation plan is [`docs/slice-3-7-fixes.md`](slice-3-7-fixes.md).
+- **Provider settings are partly verified.** Key persistence across restart, session-only key loss, masked hints, test connection, custom provider and model chat, model picker behaviour after reload, key absence from storage, network and logs, fresh-install setup and SSRF/rate/body-limit hardening have no recorded run.
+- **No real-model golden prompt run.** The seven prompts in `docs/golden-prompts.md` and the prompt presets have not been run against a real model.
+- **Revision-conflict auto re-plan has no forced-conflict browser run.** It re-plans at most twice per turn and never auto-applies.
+- **Build-mode feedback is partial.** Changed objects pulse through agent presence, but there is no dedicated toast or agent-undo action beyond the normal undo history.
+- **`start_playtest` is a headless simulation.** Browser telemetry parity is unverified.
+- **Transport deviates from the original plan.** It is NDJSON on `/api/ai/step`, not SSE on `/api/agent/step`. Read tools keep their original names, with `get_project_summary`, `query_project` and `inspect_entity` accepted as aliases.
+- **Rate limiting is in memory.** 60 POST/min per IP and route, reset on restart. The `/api/*` body limit is 1 MB. This suits a local single-user app, not a multi-instance deployment.
+- **Vault.** Keys persist in encrypted `.data/vault.json` (not SQLite). They become unreadable if `CLOCKWORK_SECRET` changes or `.data/secret.key` is deleted. Session-only keys are lost on server restart.
 
-### Slice 4 — Runtime, play mode, telemetry
+## Editor, runtime and starters
 
-- Residual input/sub-stepping/tilemap-span gaps are fixed and verified (see `docs/implementation-log.md`, “Slice 4 residuals”); the only remaining inputs caveat is that pointer maps to the action button only and gamepad support uses the first standard pad.
+- **No committed browser/UI test suite.** Kane objectives and the negative-control harness are in `scripts/kane/`, but they need a running API and a logged-in Kane CLI. `pnpm check:repo` is a source-tree check only.
+- **WebGL/canvas is required.** Without it the document stays editable from the docks, but the viewport and Play do not render.
+- **Play has no replay control.** `Runtime.replay()` exists with no Play UI. Music looping is not implemented. Play telemetry is shown in the UI but is not a read tool for the agent. Pointer input maps to the action button only, and gamepad support uses the first standard pad.
+- **Kinematic moving platforms do not carry the player.**
+- **Slice 5 items without end-to-end runs.** Music and SFX audibility, `show-message` timing, HUD bar max and hide in Play, animation clip playback on a runtime object, instance-override survival after prefab update, and viewport camera preservation across workspace switches.
+- **Hierarchy drag-reparent into groups in very large scenes has no dedicated perf test.**
+- **Composite shapes edit coarsely.** The Appearance inspector changes the first primitive's colour and stroke only. Width and height change the bounds.
+- **No touch movement.** Starters use keyboard movement, with no virtual joystick. There is no Racing starter.
+- **Space Shooter is tuned for 1280×720.** Editing resolution or gravity afterwards can break the fixed lane.
+- **Rendering performance** was measured at 801 fps (1.25 ms/frame, 2,000 rects, uncapped). This machine caps every page at about 40.9 fps, so the 55 fps target cannot be observed on screen here.
 
+## Ship and export
 
-### Slice 5 — Logic authoring, prefabs, presentation
+- **Export and share have no acceptance run.** Zip export, snapshot create/read/delete, the Ship panel and cover capture typecheck and the player bundles with esbuild. Unzipping and serving offline, share-link input and restart, malformed and oversized rejection, and cover-after-save were not run (`kane-proof.md`, Bar 1). Snapshot players did run for AI Play (`/s/:id?ai=1`).
+- **Snapshots are local SQLite.** `.data/snapshots.sqlite` is single-instance. Links expire after 1–168 hours and are purged lazily.
+- **Exported builds embed assets as data URLs** in `project.json`, plus an `assets/` folder. Exporting needs the local API server to bundle the player. The zip itself does not.
 
-### Slice 6 — Agent transport, context, chat shell
+## Hardening and demo readiness
 
-- **One real provider tool-call turn was unverified; it is now proven.** The Slice 6 browser gate ran entirely against `AI_MOCK=1` because this environment had no provider credentials. On 2026-11-18 the env provider (`LLM_MODEL`/`LLM_BASE_URL`/`LLM_API_KEY`) streamed real `apply_commands` tool calls that applied during the K3a, K3b and K4 runs (`docs/kane-proof.md`). The original mock-only limitation is kept here as history, not as an open gap.
-- **Transport is NDJSON on `/api/ai/step`, not SSE `/api/agent/step` with the AI SDK** as written in task 2. It is internally consistent and streams, but it is a spec deviation.
-- **Read-tool names deviate from §5.4.** The implementation exposes `list_scenes`, `get_scene`, `search_entities`, `get_object`, `get_variables`, `get_selection`, `capture_viewport`. §5.4 aliases `get_project_summary`, `query_project` and `inspect_entity` are accepted by the client and listed in the server tool definitions; the original names remain for compatibility.
-- **Hardening is in-memory only.** Rate limiting (60 POST/min per IP and route) lives in server memory and resets on restart; body limit is 1 MB for `/api/*`. Adequate for the local single-user v1, not a multi-instance deployment.
+- **The Slice 9 acceptance matrix is incomplete.** Not run: the cold-start 5-minute manual path with `AI_ENABLED=0`, the 1440/1920 visual audit, 1024 px drawer behaviour, a keyboard-only run, a console-warning sweep and refresh-during-save recovery.
+- **No-model states have no browser evidence.** This covers the manual create, edit, save, reopen, play, share and export pass with `AI_ENABLED=0`, and the hidden or disabled no-model AI Play state.
+- **Fixture-driven AI Play UI artifact.** The failed → fix → passed panel flow has no stored artifact. Real runs of the same loop are recorded in `kane-proof.md`.
+- **AI HUD keyboard parity** (`?ai=1`) is unverified in a browser.
+- **Coach tour and `?demoReset=1`** are unverified in a real browser. Confirm the reset does not remove other projects.
+- **Accessibility** (focus order, contrast, keyboard paths) was not audited.
+- **The visual target** was checked at 1366×768 only.
 
-### Slice 9 — Hardening and demo readiness
+## Product limits by design (v1)
 
-- **Partly verified, still not passed.** K1 and K3b ran the editor cold at 1366×768, and K3a/K4/K5 exercised model and Kane paths, but the Slice 9 acceptance matrix is not complete: the cold-start 5-minute manual path with `AI_ENABLED=0`, the 1440/1920 visual audit, 1024 drawer behavior, a keyboard-only run, a console-warning sweep, and refresh-during-save recovery have not been run.
-- **Coach tour and demo reset are unverified in a real browser.** The tour is dismissible and stored per browser; `?demoReset=1` deletes the existing `Neon Runner` record and reseeds the uncollectible Core B. Confirm it does not remove other projects.
-- **`check:repo` is a source-tree check only.** It does not prove the app runs, and it treats `dist/` as acceptable locally if untracked.
-- **Accessibility was not re-audited.** Focus order, contrast and keyboard paths were not measured in this pass.
+- Single-user and local-first. No accounts, teams, cloud sync, multiplayer or collaboration.
+- No arbitrary scripting, plugin marketplace, 3D, skeletal animation, particle or shader editor, or media generation.
+- No mobile editor layout below 1024 px. Shared and exported players work on mobile.
+- Share links, Kane engine QA and AI Play need the local Node server, because Kane launches Chrome. Exported zips do not.
+- Manual editing, Play, save, share and export work with no model, key or Kane. AI features need a provider key (environment, vault or session). `AI_MOCK=1` is a development fixture.
+- AI Play needs a logged-in Kane CLI and consumes Kane and provider credits. It asks for consent before the first run. Without Kane it is disabled and manual Play still works.
+- Custom providers must pass the SSRF-safe base-URL and connection check. A local provider is the only HTTP exception.
+- Undo history is session-scoped and does not survive reload.
+- The `Neon Runner` demo contains one uncollectible coin on purpose, for the AI Play fail → fix → pass demo. `?demoReset=1` restores it. The negative control uses a separate compact fixture with an unsatisfiable win rule.
+- The "Meadow Sandbox" starter has no built-in game-test profile on purpose, so Test Mode uses a derived one (see `FEATURE_VERIFICATION.md`).
 
-### Slice 8 — Ship, export, share
+## Resolved
 
-- **Implemented but not browser-verified.** Static zip export, snapshot creation/read/delete, `/s/:id` snapshot player, the Ship panel and cover capture all typecheck, and the standalone player bundles with esbuild. The acceptance run (unzip and serve offline, same physics, share link input/restart, malformed/oversized rejection, cover after save) was not made in the Slice 10 Kane pass; `docs/kane-proof.md` Bar 1 records it as a gap. Snapshot players did run for AI Play (`/s/:id?ai=1`), which exercises the route but not sharing or export.
-- **Snapshot storage is local SQLite.** `.data/snapshots.sqlite` is single-instance local storage; a deployed multi-instance server needs a shared store. Snapshot URLs expire after 1–168 hours and are purged lazily.
-- **Exported builds embed assets as data URLs** inside `project.json` (plus an `assets/` folder). The player bundle is built on demand by the Node server with esbuild, so exporting requires the local API server; the resulting zip itself does not.
-
-### Slice 7 — Agent writes, workflows, presence
-
-- **Agent presence is implemented but not browser-verified.** A transient `useAgentPresenceStore` now drives violet outlines, an `AGENT` pill, a 350 ms camera ease, hierarchy row scrolling and a 2.5 s clear; it deliberately never changes the user's selection. The Slice 10 Kane runs did not exercise it, so this remains unverified evidence.
-- **Plan-mode ghost preview is implemented but not browser-verified.** `previewCommands` now returns the dry-run document and changed ids; the canvas draws violet ghost bounds, deleted objects in red, and a top-center `PLAN PREVIEW` pill with Apply/Discard. Clearing on apply/discard/stale/mode change is wired, but the visual match is still unverified.
-- **`start_playtest` is implemented but not browser-verified.** It now runs `runHeadlessPlaytest` with the real `Runtime`, fixed 1/60 s steps, optional scripted inputs, a 15 s cap, variables/events/frames and an honest `passed` flag; it is a headless simulation, not a rendered run. Browser telemetry parity remains unverified; the Slice 10 Kane runs did not exercise it.
-- **Selection-level “Ask AI” is implemented but not browser-verified.** Canvas context menu, inspector and toolbar now open the drawer with a locked selection chip; the context packet carries `lockedSelection`, and the chip unlocks explicitly. Entry-point behavior remains unverified; the Slice 10 Kane runs did not exercise it.
-- **Prompt presets are implemented but not browser-verified.** `src/engine/ai/prompts.ts` exports the seven presets and `suggestionsFor`, the empty state renders them as cards, and `/` opens the preset list. `docs/golden-prompts.md` records expected tools and success; real-model runs are deferred.
-- **No golden-prompt verification.** The seven prompts and expected tool calls are documented in `docs/golden-prompts.md`, but no real-model run has been performed; task 12 remains unverified.
-- **Revision-conflict auto re-plan is implemented but unverified.** A failed tool with code `revision` appends a synthetic re-read/re-plan message and continues once per failure, at most twice per turn; conflicts never auto-apply. No forced-conflict browser run has been performed.
-- **Build-mode feedback is partial.** Changed objects pulse via agent presence, but there is no dedicated toast or agent-undo action beyond the generic undo history (task 4); unverified in the browser.
-
-## Slice 10 — Kane engine QA and AI Play (2026-11-18)
-
-Real Kane runs exist and are linked from [`docs/kane-proof.md`](kane-proof.md); this section records only what is still open. Kane CLI 0.10.5, signed in, local Chrome, 1366×768.
-
-Proven with real runs:
-
-- Manual Play is independent of Kane and a model: K5's manual replay after the fix reached `WON` with three coins (the manual **no-model, `AI_ENABLED=0`** browser pass is still open, below).
-- Kane is always enabled. Missing CLI, sign-out and zero credits now produce explicit errors; there is no environment flag to hide the feature.
-- Fixture streams render passed, failed and exit-2-with-no-`run_end` states, and the failed-step count is correct.
-- The AI Play objective speaks only in visible HUD labels and ends with `store ... as` plus assertions; a real run returned `status: "WON"`, `coins: "3"`, `last_error: "none"` in `run_end.final_state`.
-- Real closed loop, twice: the seeded embedded coin (K5, 81.5 s fail → 81.1 s pass) and an independent unsatisfiable win rule (negative control, 94.1 s fail → 81.6 s pass).
-- Engine QA K1, K3a, K3b and K4 passed; K1 caught two UI/accessibility defects and K4's first terminal run caught a real missing-duration defect, both fixed before their passing runs.
-- Raw NDJSON, final state and evidence paths are written server-side for every run; no key, prompt or token material is stored there.
-- `pnpm typecheck`, `pnpm build` and `pnpm check:repo` pass.
-
-Still open (blocks the Slice 10 gate):
-
-- **Manual/no-model browser pass with `AI_ENABLED=0`**: create, edit, save, reopen, play, share and export without an LLM or Kane. No evidence run yet, so the plan's final gate cannot be claimed.
-- **No-model AI Play state**: hidden or disabled with the explanation, manual Play never blocked or renamed. Implemented; no browser evidence.
-- **Fixture-driven AI Play UI artifact**: the failed-run → fix → passed-attempt panel flow is claimed in the log but no stored artifact proves the fixture loop in the UI.
-- **AI HUD keyboard parity**: the buttons dispatch the same input as keys and manual keys still work in `?ai=1`; unverified in a browser.
-- **K2** stays environment-blocked: the no-model defect it caught is fixed, but three post-fix runs died in Kane's browser during screenshot capture. Not claimed as a pass or a product failure.
-- **Saved-test replay** (`KANE_AI_PLAY_TEST`) is contract-verified only; it needs one authored real run before replay timing can be measured, so the “replay is the budget margin” claim is unmeasured.
-
-Cost and time caveats:
-
-- AI Play is capped at `min(KANE_TIMEOUT_SECONDS, 140)` seconds plus 5 s grace. A first negative-control attempt on the full six-jump Neon Runner route was **cancelled at 145 s with no `run_end`** (`verdict unknown`) rather than failing on its assertion; the control was rebuilt on the compact one-coin fixture. Engine QA needs `KANE_TIMEOUT_SECONDS=300` in this environment.
-- Each real AI Play attempt costs roughly 22–24 credits at 80–95 s; engine-QA runs cost 38–63 credits. These are the only remaining Kane-spending items (K2 on another machine, and optionally the saved-test replay).
-
-## Product limitations by design (v1)
-
-- Single-user and local-first. No accounts, teams, roles, comments, notifications, or authorization layer.
-- No cloud sync, multiplayer, or CRDT collaboration.
-- No arbitrary JavaScript/TypeScript scripting, plugin marketplace, 3D, skeletal animation, particle editor, or shader editor.
-- No mobile editor layout below 1024 px. Shared and exported players remain usable on mobile.
-- Share links, Kane engine QA, and AI Play require the local Node server; exported zips do not.
-- Manual editing, manual Play, save, share, and export work with no model, no provider key, and no Kane. AI is additive; `AI_ENABLED=0` hides AI surfaces without breaking the editor.
-- AI features require a provider key (environment variable, in-app vault, or session-only key). `AI_MOCK=1` is a development fixture, not a production model.
-- AI Play requires a logged-in Kane CLI (to play). The current auto-fix is deterministic (embedded-coin geometry), so it does not require a model; a model is only needed for non-rule agent diagnosis. Without Kane, AI Play is disabled; manual Play still works.
-- AI Play is local/self-hosted in v1 because it launches Chrome. A deployed server needs a dedicated runner/display or it cannot use AI Play.
-- AI Play consumes Kane and provider credits and uploads a Test Manager run unless configured otherwise; consent is required before the first run.
-- The `Neon Runner` demo intentionally contains one uncollectible coin for the seeded AI Play fail → fix → pass demo. Manual Play can still reach the goal; `?demoReset=1` restores the defect. It is a demo fixture, not a product bug. The independent negative control uses a separate compact fixture and an unsatisfiable win rule (`docs/kane-proof.md`).
-- Custom providers must pass the SSRF-safe base-URL and connection checks; a local provider is the only HTTP exception.
-- Session-only provider keys are intentionally lost on server restart. Vault keys become unreadable if `CLOCKWORK_SECRET` changes or `.data/secret.key` is deleted; the user must re-enter them.
-- Provider connection tests and agent calls consume provider credits; the UI must state this before testing.
-- Media generation (images/audio) is not included.
-- Undo history is session-scoped; it does not survive reload.
-
-## Scoring risks / what must be proven later
-
-- The end-to-end path must be demonstrated from a cold browser profile, not a warm dev session.
-- The agent ↔ Kane handshake is **proven** (2026-11-18): engine QA K1/K3a/K3b/K4, the seeded AI Play loop (K5) and the independent negative control all produced real NDJSON, `run_end` verdicts and evidence packs; the in-app `KaneRunCard` handshake passed in both in-app and terminal runs. A fixture pass was never counted as the proof.
-- The project must run without a model/key/Kane for the editor and manual Play paths; only AI features may be unavailable.
-- The full Neon Runner AI Play demo now shows a real failure and a real same-seed pass: attempt 1 `run_end.status: "failed"` in 85.0 s (two coins, still playing), deterministic fix, attempt 2 `"passed"` in 66.6 s with `STATUS: "WON"`, `COINS: "3"`, `LAST ERROR: "none"` (151.6 s total). Evidence is in `docs/kane-proof.md`.
-- The independent negative control passed on 2026-11-18: an unsatisfiable win rule (`coins >= 2` in a one-coin scene) made attempt 1 fail on the assertion (`STATUS` stayed `PLAYING`, coin collected, 94.1 s), and restoring the rule made attempt 2 pass (`WON`, `1`, `none`, 81.6 s). Runs `b050f47c-…` and `52baa697-…`, archives `.testmuai/runs/negative-control-attempt{1,2}.ndjson`. This proves the loop is not specific to the seeded embedded coin; the repair was applied deterministically, so model-driven diagnosis is still only evidenced by K5's product repair and the K3a agent run.
-- The visual target must be checked at 1366×768, not only on a large monitor.
-- Any failing `pnpm typecheck`, `pnpm build`, console error, or unchecked acceptance item must be recorded here with the date and slice.
-
-## Reporting rules
-
-1. Add an entry as soon as a limitation or failure is known.
-2. Include the slice, command, observed result, and whether it blocks the gate.
-3. Remove an entry only when the underlying issue is fixed and verified.
-4. Never list a feature in `features.md` while it has an open blocking entry here.
-
-## Game starter templates — all twelve implemented (2026-11-18)
-
-- **All twelve starter documents exist and are registered.** Space Shooter, Space Invaders, Asteroid Field, Ping Pong, Brick Breaker, Flappy Flyer, Platform Jumper, Endless Runner, Arena Survival, Falling Objects, Maze Escape and Snake are available. Combined local validation passes: 30/30 tests, typecheck, build and repository check. The build reports existing dependency annotation, mixed dynamic-import and bundle-size warnings.
-- **Slice A browser acceptance remains open.** The protected-score run recorded `SCORE 1150` after Kane's Space actions, but the user also pressed Space, so it is not independent proof. A later run did send six Space actions but its screenshot showed the game already `LOST` with an empty hull before scoring could occur. A 99-health retry remained `PLAYING` with full hull, but Kane's conditional flow incorrectly selected its stop-on-`LOST` branch and sent zero Space actions. The shooter now accepts one-frame press edges and has a passing runtime regression test; browser scoring remains unverified. A deliberate win-path acceptance, editor colour/speed changes affecting Play and a clean-console audit also remain open.
-- **Slice B browser acceptance is partial.** Kane verified Space Invaders creation, Play/HUD, and a fast R restart with reset values (`SCORE 0`, `SHIPS 3`, `INVADERS 24`); Asteroid Field creation, Play/HUD, A/W/E inputs, immediate restart (`SCORE 0`, `SHIPS 3`, `ROCKS 6`), and the editor-to-Play effect of setting Pilot turn speed to 0 also passed. A longer Space Invaders run reached the normal `LOST` state before its delayed running-state assertion; this is an automation-timing failure, not a confirmed product defect. The first run's console extraction timed out and recorded a `/favicon.ico` 404, so console cleanliness is not verified. Asteroid splitting/scoring, win/loss, Space Invaders gameplay effects/editor tuning, and console checks remain open.
-- **Browser acceptance remains open across the set.** Local runtime tests do not prove actual browser input, picker preview rendering, editor-to-Play tuning, all win/loss/reset paths, or console cleanliness. The remaining per-template browser report has not been produced. Kinematic moving platforms do not carry the player.
-- **Composite shape editing is coarse.** The Appearance inspector changes the first primitive's colour/stroke for a composite shape; it does not expose a per-primitive editor. Width/height change the shape bounds.
-- **Touch movement is still unsupported.** Pointer input maps to the action button only; the starter uses keyboard movement. No virtual joystick was added.
-- **Racing has no starter.** No racing template was specified, so no Racing card appears in the picker.
-- **Space Shooter is tuned for 1280×720** and the picker deliberately skips resolution/gravity overrides for game starters. Editing those settings afterwards can break the fixed lane.
-
-## Approved-phase live testing and agent UI (2026-11-24)
-
-**The phase panel is demo-proven as a pass.** Run `98e21783` (2026-11-24) was approved through the panel and returned a typed **PASSED**: `shots-fired gte 1 · observed 3`, `projectiles gte 1 · observed 3`, accepted inputs 1, frames 45, 94.7 s, and a 721,305-byte evidence bundle (HTTP 200) with no console or page errors. Run `ea1bb3b3` repeated the pass in 78.1 s; its live panel state is the committed [screenshot](screenshots/approved-phase-passed.png). The earlier failures in `docs/kane-proof.md` remain recorded: a 180 s env timeout, the Vite proxy dropping a long stream, a replay that correctly returned `inconclusive`, an 8-step cap, a stale Chrome, and a 300 s wall timeout.
-
-- **The phase budget now fits the objective.** `maxKaneStepsPerPhase` is 12 (run `1105bd78` needed 9) and `maxWallTimeSecondsPerPhase` is 600 s (run `e088e2c0` finished its last step at 290 s but was killed by the former 300 s cap; the passing run took 94.7 s). Plans may still request less, and the server re-checks both caps.
-- **Kane Chrome sessions are flaky in this environment.** A stale browser held CDP port 9222 and caused `connect_over_cdp ... ETIMEDOUT`; after cleanup, a later run lost its page mid-step (`new_cdp_session: Target page, context or browser has been closed`). Do not treat either as a product result.
-- **Long phase streams outlive the Vite dev proxy.** Server-side results were already written when the client saw no verdict. `streamKanePhase` now retries the same approved request every 5 s (up to 18 attempts), relying on the server's fingerprint idempotency. Production builds do not use this dev proxy, but the retry is safe there too. The delivered runs after the fix finished within one connection, so the retry was not re-triggered live and is not yet browser-proven; the 174 s drop it addresses is recorded.
-- **The approved plan budget now wins over the env cap** for phase wall time (`Math.min(plan.maxWallTimeSecondsPerPhase, 600)`); the previous 180 s env cap killed a passing 185 s run.
-- **Agent UI items are no longer unverified.** Plan ghosts, presence pill/outlines and locked-selection "Ask AI" passed a CDP browser run (`.data/agent-ui/verify.json`, screenshots `plan-ghost.png` and `presence.png`). The underlying ghost/presence id bug was in `summarizePatchPath`: nested `scenes[0].objects[5]…` paths resolved to the project/scene instead of the object, so `changedIds` stayed empty. Fixed and covered by `tests/agent-change-set.test.ts`. A hidden locked-selection chip and a mode-independent plan-pill label were also fixed.
-- **Model plan drafting is not claimed.** The live panel used a deterministic seeded draft with the mock planner; approval, execution, verdict and evidence were exercised, not model authorship.
+- Approved phase flow had no live pass: runs `98e21783`, `ea1bb3b3` and `b967bbdd` passed.
+- Review panel result did not reach the agent: `EditorPage` now calls `agent.continueWithPhaseResult`.
+- Phase runner could not replay saved tests: `replayTestKey` is wired in (speedup unmeasured, see above).
+- Phase budget too small: now 12 steps and 600 s per phase, and the plan budget wins over the 180 s env cap.
+- Chat agent ran out of steps before Kane (run `a20a4b28`): now 12 model steps per message with the last 3 reserved for a requested Kane check, and the agent sees HUD widgets.
+- Plan ghosts, agent presence and locked-selection "Ask AI" were unverified: passed a CDP browser run (`.data/agent-ui/verify.json`). The empty `changedIds` bug in `summarizePatchPath` is fixed and covered by `tests/agent-change-set.test.ts`.
+- Real provider tool calls were unverified: K3a, K3b and K4 streamed and applied `apply_commands` from the env model.
+- K1 defects (inspector could not collapse, unsafe hierarchy-row semantics) and K4's missing duration on the verification card are fixed.
+- Slice 1–5 gates closed with recorded runs (`implementation-log.md`).
+- Stale submission copy in README, `features.md` and `docs/ai-play.md` was updated.
+- Historical planning docs moved to `docs/archive/` (for example `docs/archive/slice-3-7-fixes.md`).

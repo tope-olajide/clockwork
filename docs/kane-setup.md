@@ -1,9 +1,11 @@
 # Kane CLI in Clockwork
 
-Clockwork uses Kane in two places, both through the same CLI:
+Clockwork uses Kane in four ways, all through the same CLI:
 
-1. **Engine QA** — Kane drives the Clockwork editor in a real Chrome window, verifies the app's flows, and captures evidence.
-2. **AI Play** — Kane plays a saved game snapshot through the visible AI HUD. The editor reads the `run_end` verdict and the auto-fix agent repairs the game, then Kane replays the same seed.
+1. **AI Testing**: a human reviews and approves a test plan, then Kane runs one approved phase at a time against a Test Mode snapshot (`run_kane_test_phase` or the review panel).
+2. **AI Play**: a one-off probe. Kane plays a saved game snapshot through the visible AI HUD. The editor reads the `run_end` verdict and the auto-fix agent can repair the game, then Kane replays the same seed.
+3. **Saved engine E2E**: `pnpm kane:engine-e2e` runs `.testmuai/tests/engine-template-e2e_test.md` against the real Clockwork editor in Chrome and captures evidence.
+4. **Agent verification tools in chat**: `verify_with_kane`, `run_ai_play` and `run_kane_test_phase` let the in-app agent verify what it built.
 
 The integration is built around Kane's documented NDJSON contract. Clockwork never scrapes terminal prose and never treats a progress step as a verdict: only `run_end.status === "passed"` is a pass.
 
@@ -46,7 +48,7 @@ KANE_CLI=kane-cli
 CLOCKWORK_PUBLIC_URL=http://localhost:5173
 ```
 
-The 180 s default fits an 8-step AI Play attempt. The approved AI Testing phase path does not use that default: the plan's own `maxWallTimeSecondsPerPhase` is the bound, with a hard ceiling of **600 s per phase**. The plan also caps a phase at **12 Kane steps** (12 was chosen after a 9-step objective hit the old 8-step limit). `KANE_TIMEOUT_SECONDS` still applies to non-phase runs; the runner clamps it to 30–900 s and adds a 5 s grace on top of the process timer.
+180 s and 40 steps are only the defaults. Each path sets its own limits (see "Limits by path" below). The approved AI Testing phase path does not use the defaults: the plan's own `maxWallTimeSecondsPerPhase` is the bound, with a hard ceiling of **600 s per phase**. The plan also caps a phase at **12 Kane steps** (12 was chosen after a 9-step objective hit the old 8-step limit). `KANE_TIMEOUT_SECONDS` still applies to non-phase runs; the runner clamps it to 30–900 s and adds a 5 s grace on top of the process timer.
 
 Kane has no enable/disable flag. If the CLI is missing or signed out, the Kane routes return an explicit install/auth error and no Kane tool is advertised to the model. Manual Play, editing, persistence, share, and export continue to work. If the account balance is zero, the run is rejected with an explicit `kane-credits` error.
 
@@ -71,7 +73,7 @@ The status route caches for 20 seconds because `whoami` performs a real CLI chec
 
 ## 4. The exact Kane command
 
-Engine QA and AI Play use one runner (`server/kane/runner.ts`):
+Engine QA and AI Play use one runner (`server/kane/runner.ts`). The `--max-steps 40 --timeout 180` values below are the defaults (`KANE_MAX_STEPS` / `KANE_TIMEOUT_SECONDS`); each path overrides them as shown in "Limits by path":
 
 ```bash
 kane-cli run "<objective>" \
@@ -94,12 +96,16 @@ kane-cli run "<objective>" \
 - `KANE_HEADLESS=1` adds `--headless`; leave it unset for a demo so the audience sees Chrome play.
 - The objective is capped at 1,000 characters and the URL is formed server-side. The client cannot pass an arbitrary command, base URL, or key.
 
-### Phase budgets
+### Limits by path
 
-| Path | Steps | Wall time |
+These all hold; they apply to different paths.
+
+| Path | Timeout | Steps |
 |---|---|---|
-| AI Play | 8 | 140 s |
-| Approved AI Testing phase | **12** | **600 s** |
+| Defaults (env `KANE_TIMEOUT_SECONDS` / `KANE_MAX_STEPS`) | 180 s | 40 |
+| `verify_with_kane` (`POST /api/kane/qa`) | 180 s default | min(40, 6 + 2 per step + 2 per readout) |
+| AI Play (`POST /api/kane/ai-play`) | at most 140 s | at most 8 |
+| Approved test phase (`POST /api/kane/phase`) | plan budget, at most 600 s per phase | at most 12 per phase, at most 3 phases |
 
 Approved phases use `maxKaneStepsPerPhase` and `maxWallTimeSecondsPerPhase` from the approved plan. The server validates both against the shared hard ceilings and then passes them to Kane as `--max-steps` and `--timeout`; a plan may request less, never more.
 

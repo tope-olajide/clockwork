@@ -11,7 +11,7 @@ const WEB_PORT = 5212;
 const API = `http://localhost:${API_PORT}`;
 const WEB = `http://localhost:${WEB_PORT}`;
 const CHROME = process.env.CLOCKWORK_CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
-const OUT = join(ROOT, "docs", "video-scene");
+const OUT = join(ROOT, "docs", "archive", "video-scene");
 mkdirSync(OUT, { recursive: true });
 
 const PHASE_ID = "fire-creates-projectile";

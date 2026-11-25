@@ -1,12 +1,16 @@
 # How Kane CLI tests Clockwork games
 
-A field guide for the blog: what Kane does in this project, what it actually
-verifies, and the cool things discovered while making a slow browser agent test
-a fast real-time game.
+What Kane does in this project, what it actually verifies, and what was learned
+while making a slow browser agent test a fast real-time game.
 
-## Two ways this project invokes Kane
+## Four ways this project uses Kane
 
-Kane is used at two different layers, and they intentionally produce different artifacts:
+1. **AI Testing:** reviewed, approved phases (`run_kane_test_phase` or the review panel).
+2. **AI Play:** a one-off snapshot probe with an AI HUD and optional deterministic repair.
+3. **Saved engine E2E:** `pnpm kane:engine-e2e` and `.testmuai/tests/engine-template-e2e_test.md`.
+4. **Agent verification tools in chat:** `verify_with_kane`, `run_ai_play` and `run_kane_test_phase`.
+
+The table below lists the entry points for engine QA and game testing. They intentionally produce different artifacts:
 
 | Layer | Entry point | What runs | Where evidence lands |
 |---|---|---|---|
@@ -60,7 +64,7 @@ to be a stronger test than real-time play: every frame is accounted for.
 
 ## What a real run looks like
 
-The first passing Space Shooter phase (run `b967bbdd`, 79.7 s, ≈ 25 credits):
+The first passing Space Shooter phase, driven by the in-app agent (run `b967bbdd`, 79.7 s, ≈ 25 credits). It is a different run from the two phases approved through the review panel (`98e21783`, 94.7 s, and `ea1bb3b3`, 78.1 s). All three are real passes with the same observations (shots-fired 3, projectiles 3, accepted inputs 1, 45 frames):
 
 1. Navigate to the snapshot URL (`ai=1&testMode=step&seed=1234&maxAdvance=45…`).
 2. Toggle `SHOOT` on.
@@ -83,7 +87,7 @@ Not pixels — **mechanics**, through a versioned game-test profile per template
 | Layer | Example (Space Shooter) |
 |---|---|
 | Controls | `SHOOT` hold, `MOVE LEFT/RIGHT` hold — labelled buttons Kane can see |
-| Observations | `SHOTS FIRED`, `PROJECTILES`, `SCORE`, `HULL`, `ENEMIES`, `SHOTS FIRED`, `DESTROYED` |
+| Observations | `SHOTS FIRED`, `PROJECTILES`, `SCORE`, `HULL`, `ENEMIES`, `DESTROYED` |
 | Objectives | input-creates-projectile → shoot-destroys-enemy → survive-encounter |
 | Scenarios | `shooting-range` spawns one Raider in the lane so a kill is reachable |
 
@@ -122,7 +126,13 @@ approved plan replays the stored result instead of billing a second run.
 **Credit exhaustion is explicit.** With Kane mandatory (no feature flags), a zero
 balance returns a clear `kane-credits` message instead of a mysterious failure.
 
-## By the numbers (Phase 3 pass)
+## Worked example: the chat agent closes the loop (run `a20a4b28`)
+
+Run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (2026-11-25) on a Meadow Sandbox project. The user asked the in-app agent to add coins tagged `coin`, give +1 score per coin, add a SCORE HUD, then verify with Kane. The agent applied the changes (6 coins, a score variable, a Score HUD widget), ran a headless preflight, then called `verify_with_kane`. The check ran first in the engine simulator, then once in a real browser. It PASSED at project revision 9: SCORE 0 → 1, COIN COUNT 6 → 5, COLLECTED 0 → 1, PLAYER X 240 → 473.67 after holding MOVE RIGHT for 45 frames. The simulator and browser agreed on every readout. Evidence is at `/api/kane/runs/a20a4b28-5387-4849-a978-a5ca5aa499c3/evidence` on the local server.
+
+One caveat: the user had to send a follow-up message before Kane ran, because the agent ran out of its 8-step budget. The budget is now 12 steps with the last 3 reserved for a requested Kane check, and the agent now sees HUD widgets (it had re-added one it could not see).
+
+## By the numbers (run `b967bbdd`)
 
 - 8 Kane steps, 79.7 seconds, ≈ 25 credits
 - 1 accepted input, 45 frames advanced
@@ -133,6 +143,6 @@ balance returns a clear `kane-credits` message instead of a mysterious failure.
 
 The proven ladder continues: input-creates-projectile → **shoot-destroys-enemy**
 (a fired projectile kills the scenario Raider, a death is recorded, score hits
-100) → survive-encounter — then the same treatment for the other eleven genre
-templates, and saved-test replay so stable phases replay cheaply instead of
-re-authoring every run.
+100) → survive-encounter — then the same treatment for the remaining genre starters. Saved-test replay for
+phases is wired in (`POST /api/kane/phase` accepts `replayTestKey`), but no phase
+replay speedup has been measured yet.

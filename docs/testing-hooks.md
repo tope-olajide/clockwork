@@ -24,8 +24,9 @@ CSS classes or layout-dependent text.
 `/s/:snapshotId?ai=1&testMode=step&seed=1234` starts the runtime **paused at frame 0**
 with no `requestAnimationFrame` loop. Frames advance only through bounded requests, and
 every queued control has a planned press/release frame, so nothing depends on wall time.
-A template without a registered profile renders `test-mode-unavailable` and stays at
-frame zero instead of falling back to real time.
+Games without a built-in profile use a profile derived from the project, so every game
+has a Test Mode. If no profile can be resolved, the player renders `test-mode-unavailable`
+and stays at frame zero instead of falling back to real time.
 
 | Selector | Meaning |
 |---|---|
@@ -50,7 +51,7 @@ invalid scenario stays unapplied and is reported as `none`, never as a successfu
 
 | Selector | Meaning |
 |---|---|
-| `test-plan-panel` | AI Testing plan section (absent when the template has no profile). |
+| `test-plan-panel` | AI Testing plan section. Every game resolves a profile (built-in or derived), so it is always present. |
 | `test-plan-objective` | Natural-language goal input. |
 | `test-plan-suggest-<objectiveId>` | Profile-suggested objective; fills the goal input. |
 | `test-plan-request` | Sends the goal to the planning model. Never starts Kane. |
@@ -132,5 +133,4 @@ The bridge is removed when the editor unmounts. It never exposes provider keys.
 - `GET /api/snapshots/:id`, `DELETE /api/snapshots/:id`.
 - `/api/ai/*` — models, providers, settings, key status and the NDJSON step stream.
 
-See `docs/known-issues.md` for which of these are browser-verified. As of Slice 9,
-Slice 6.5–9 acceptance and Kane evidence are deferred to Slice 10.
+See `docs/known-issues.md` for which of these are browser-verified, and `docs/kane-proof.md` for Kane evidence.

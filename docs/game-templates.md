@@ -1,6 +1,6 @@
 # Built-in game starter templates
 
-All thirteen starter implementations are documented here. Combined local validation passes (tests, typecheck, build and repository check). Browser gameplay, editor-to-Play tuning, reset and console gates remain open; do not treat local runtime tests as browser evidence.
+All fourteen genre starters are documented here. Each one is covered by the unit and simulation suite (`pnpm test`), which builds every starter document and checks its gravity, art style, behaviors and HUD bindings. Real-browser Kane runs cover Space Shooter (approved AI Testing phases), Platform Jumper (the saved engine E2E) and Meadow Sandbox (the chat agent's coin check); see [`docs/kane-proof.md`](kane-proof.md).
 
 ## Ping Pong
 

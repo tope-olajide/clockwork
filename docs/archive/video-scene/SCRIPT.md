@@ -1,10 +1,15 @@
-# Clockwork video — "Don't trust me. Trust Kane." (I am the LLM)
+# Clockwork storyboard: "Don't trust me. Trust Kane." (archived)
 
-You asked for real proof with the AI agent + Kane, not a mock tour. This scene IS that:
-I played the LLM. Fixture Kane + real Chrome did the browser work. Zero LLM cost to record,
-same code path as your paid runs.
+> **Archived storyboard for an earlier demo video.** The frames were captured
+> with fixture Kane and a mock planner over the real app in Chrome, at zero
+> credit cost, so the on-screen numbers in frames 05 and 06 (shots-fired 5,
+> projectiles 4, accepted inputs 3) come from that fixture capture. The real
+> paid Kane run for the same phase is `b967bbdd` (shots-fired 3, projectiles 3,
+> accepted inputs 1, 45 frames), recorded in
+> [`docs/kane-proof.md`](../../kane-proof.md). The narration is written in the
+> voice of the in-app agent.
 
-Play it: open `docs/video-scene/index.html` (auto-advance) or `scene.gif`.
+Play it: open `docs/archive/video-scene/index.html` (auto-advance) or `scene.gif`.
 
 ## The standout story (3:45)
 
@@ -15,7 +20,7 @@ LLM (me): "I am the LLM inside Clockwork. You built a game. I know this game —
 You: "Most demos show you a pass. I'll show you a fail my engine caught, fixed, then proved."
 
 Cut to your REAL evidence (no re-record needed):
-- `.data/ai-play/87f6f320.../evidence.evidence` FAILED → repair `Move Core A out of Ground` → `646cff5d...` PASSED `STATUS WON, coins 3`.
+- `.data/ai-play/87f6f320.../evidence.evidence` FAILED → repair `Move Core A out of Ground` → `646cff5f...` PASSED `STATUS WON, coins 3`.
 - Phase 3 live run `b967bbdd`: passed, 1 input, 45 frames, shots 3 / projectiles 3 + Test Manager link.
 
 ### 0:30 I KNOW YOUR GAME — frame 02-editor.png
@@ -43,7 +48,7 @@ Show agent drawer rich card: `shots-fired gte 1 · observed 5 · passed`, `Accep
 
 ## How to record voiceover (10 min)
 
-1. `npx vite docs/video-scene --port 5213` or just double-click `index.html`, hit Play, screen-record with Xbox Game Bar (Win+G).
+1. `npx vite docs/archive/video-scene --port 5213` or just double-click `index.html`, hit Play, screen-record with Xbox Game Bar (Win+G).
 2. Read the LLM lines above verbatim — that IS the agent talking.
 3. For "real proof" B-roll: scroll `docs/kane-proof.md` Phase 3 + open one Test Manager link for 5 seconds. Say: "Same route, same judge, paid run."
 4. Disclose once: "Motion captured with fixture Kane + mock planner, zero credits. Verdicts shown are real paid runs."

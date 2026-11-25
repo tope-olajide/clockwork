@@ -1,5 +1,12 @@
 # Clockwork — Vertical Slice Implementation Plan
 
+> **This is the original build brief, kept for reference.** Its `[ ]`
+> checkboxes are the brief's acceptance criteria and were never ticked as work
+> landed; by the brief's own rule (see `docs/implementation-log.md`), progress
+> is recorded in the log, not here. For what was built and proven, read the
+> log's [final status](implementation-log.md#final-status-2026-11-25) and
+> [`docs/kane-proof.md`](kane-proof.md).
+
 **Status:** implementation brief, branch `feat/game-engine`
 **Audience:** the engineer (or coding agent) implementing this branch
 **Out of scope for this branch:** automated test suites and the Kane K1–K4 engine-QA suite. Those run in the separate verification branch. The final slice does run real AI Play loops as product acceptance, because AI Play is a product feature, not the test suite.

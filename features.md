@@ -18,13 +18,13 @@ Slice 6 (agent transport, context, chat shell) is gate-closed on `AI_MOCK=1` evi
 
 Slice 9 (hardening and demo readiness) is implemented. Its matrix is only partly covered by the Kane runs, which exercised the editor cold at 1366×768; the `AI_ENABLED=0` manual path, the 1440/1920 and 1024 layouts, the keyboard-only run, the console-warning sweep and refresh-during-save recovery remain open.
 
-Slice 10 (Kane engine QA, AI Play and reviewed AI Testing) is implemented and has real evidence in [`docs/kane-proof.md`](docs/kane-proof.md). K1, K3a, K3b, K4 and K5 passed against the real editor, and the independent negative control failed and then passed after repair. The approved AI Testing phase flow now has live passes (`98e21783`, `94.7 s`; `ea1bb3b3`, `78.1 s`) with typed results and evidence. The saved engine E2E also passed authored (`286 s`) and replayed through the cold-start one-command wrapper (`89 s`). The broader Slice 10 gate still has open items — the manual/no-model browser pass, the no-model AI Play state, the fixture-driven UI artifact, AI HUD keyboard parity, and in-memory phase persistence — so the entries below state their limits instead of claiming the whole gate is closed.
+Slice 10 (Kane engine QA, AI Play and reviewed AI Testing) is implemented and has real evidence in [`docs/kane-proof.md`](docs/kane-proof.md). K1, K3a, K3b, K4 and K5 passed against the real editor, and the independent negative control failed and then passed after repair. The approved AI Testing phase flow now has live passes (`98e21783`, `94.7 s`; `ea1bb3b3`, `78.1 s`) with typed results and evidence. The saved engine E2E also passed authored (`286 s`) and replayed through the cold-start one-command wrapper (`89 s`). On 2026-11-25 the in-app chat agent closed the loop on a Meadow Sandbox project: it added coins, a score variable and a Score HUD, then called `verify_with_kane`, which passed in the simulator and in a real browser (run `a20a4b28-5387-4849-a978-a5ca5aa499c3`, revision 9). K2 caught a real product defect, and its three reruns died in Kane's own browser, so it is recorded as environment-blocked. The remaining Slice 10 open items are the manual/no-model browser pass, the no-model AI Play state, the fixture-driven UI artifact and AI HUD keyboard parity. Phase results are held in memory and clear on a server restart, and no phase replay speedup has been measured yet.
 
 ## Editor
 
 ### Project dashboard
 
-Create a project from Blank or a Platformer, Top-down or Puzzle template, then search, filter by status and template, sort, rename, duplicate, archive/restore, and delete projects from the dashboard.
+Create a project from Blank, one of 14 genre starters, a Platformer, Top-down or Puzzle template, or a written brief, then search, filter by status and template, sort, rename, duplicate, archive/restore, and delete projects from the dashboard.
 Completed in Slice 1 · gate 45/45 · verified at 1440×900 (single cold-profile run).
 
 ### Scene and layer editing
@@ -200,7 +200,17 @@ Implemented · unit-tested; the live approval/run path passed with a determinist
 ### Kane Test Mode and typed phase results
 
 The approved phase opens an immutable snapshot in deterministic Test Mode. Kane clicks profile-labelled controls, advances a bounded number of frames and stores observations. The server joins the terminal verdict with applied-input receipts, frame count, assertion values and evidence; the report never converts missing input, missing observations, timeouts or missing evidence into a pass.
-Implemented · unit-tested · live approved runs `98e21783` and `ea1bb3b3` passed with typed assertions, accepted input, 45 frames and evidence. Phase results remain in memory and do not survive a server restart.
+Implemented · unit-tested · live approved runs `98e21783` (94.7 s) and `ea1bb3b3` (78.1 s) passed through the review panel, and agent-driven run `b967bbdd` (79.7 s) also passed, each with typed assertions, accepted input, 45 frames and evidence. The panel's phase result feeds the agent loop (`agent.continueWithPhaseResult`). Phase results remain in memory and do not survive a server restart.
+
+### Test Mode profiles for every game
+
+Test Mode has 13 built-in profiles, one for each genre starter except Meadow Sandbox. Any other game (Meadow Sandbox, the classic templates, Blank and user projects) gets a profile derived from the project itself, with status, player X/Y, every variable (up to 10), up to 6 object-tag counts and event counts (COLLECTED, DESTROYED, DAMAGE EVENTS, SHOTS FIRED).
+Implemented · `src/engine/model/game-test-profiles.ts` and `src/engine/model/derived-test-profile.ts`.
+
+### Agent verification in chat
+
+The chat agent can call `verify_with_kane`, `run_ai_play` and `run_kane_test_phase`. It gets 12 model steps per message; when the user asks for Kane, the last 3 are reserved for the check and the agent stops editing. If the budget runs out, the chat says so. HUD widgets are in the agent context, and `hud.add` rejects a duplicate widget id. A `verify_with_kane` check runs in the engine simulator first and then in a real browser.
+Implemented · live pass on run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (2026-11-25, revision 9): SCORE 0 → 1, COIN COUNT 6 → 5, COLLECTED 0 → 1, PLAYER X 240 → 473.67 after MOVE RIGHT for 45 frames, with simulator and browser agreeing on every readout.
 
 ### Saved engine E2E and one-command runner
 

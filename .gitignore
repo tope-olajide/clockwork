@@ -159,3 +159,5 @@ vite.config.ts.timestamp-*
 *.tsbuildinfo
 # Local browser profile from automation runs (cookies, logins, history)
 .tmp-art/
+# Kane CLI per-run output folders (results live in docs/kane-proof.md)
+.testmuai/tests/output-*/

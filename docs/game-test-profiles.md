@@ -8,7 +8,9 @@ untouched: a profile is metadata, not logic.
 
 - `src/engine/model/game-test-profile.ts` — Zod schema and the registry keyed by
   `templateOrigin`.
-- `src/engine/model/game-test-profiles.ts` — the built-in profile for every starter.
+- `src/engine/model/game-test-profiles.ts` — the 13 built-in profiles.
+- `src/engine/model/derived-test-profile.ts` — the profile derived from the project
+  itself for every game without a built-in one.
 - `src/engine/model/game-test-scenarios.ts` — code-registered derived setups.
 - `src/engine/model/game-test-plan.ts` — the bounded `TestPlan` schema and validator.
 
@@ -44,8 +46,9 @@ Rules enforced by `validateGameTestProfile`:
 
 ## Built-in profiles
 
-Every current starter has one profile. Each names only the actions its authored
-behaviors actually read, plus observations that exist in that starter's document.
+There are 13 built-in profiles: every genre starter except Meadow Sandbox. Each names
+only the actions its authored behaviors actually read, plus observations that exist in
+that starter's document.
 
 | Starter | Controls (action, mode) | Representative objectives |
 |---|---|---|
@@ -56,11 +59,23 @@ behaviors actually read, plus observations that exist in that starter's document
 | `brick-breaker` | MOVE LEFT/RIGHT, SERVE (`jump`, hold) | serve→ball, break brick+score, board loses bricks |
 | `flappy-flyer` | FLAP (`jump`, pulse) | flap registers, pass gate→score, survive flight |
 | `platform-jumper` | MOVE LEFT/RIGHT, JUMP (`jump`) | jump registers, collect core, keep health |
+| `meadow-run` (Clockwork Meadows) | MOVE LEFT/RIGHT (`left`/`right`, hold), JUMP (`jump`, pulse) | jump registers, collect shard→score, stomp dragon |
 | `endless-runner` | JUMP (`jump`), DUCK (`down`, hold) | jump registers, collect core, survive run |
 | `arena-survival` | MOVE LEFT/RIGHT/UP/DOWN, ATTACK (`action`) | attack connects, moves right, survive wave |
 | `falling-objects` | MOVE LEFT/RIGHT | catch bonus, dodge meteor, moves right |
 | `maze-escape` | MOVE LEFT/RIGHT/UP/DOWN | collect dot, open exit, moves right |
 | `snake` | TURN LEFT/RIGHT/UP/DOWN (all pulse) | head moves right, eat→score+length, stay alive |
+
+### Derived profiles
+
+Any other game gets a profile derived from the project itself
+(`gameTestProfileForDocument` falls back to `deriveGameTestProfile`), so every game has
+a Test Mode. That covers Meadow Sandbox, the classic templates (Platformer, Top-down,
+Puzzle), Blank and user projects. The derived profile offers MOVE LEFT/RIGHT/UP/DOWN,
+JUMP and ACTION, and exposes status, player X/Y, every variable (up to 10), up to 6
+object-tag counts and the event counts COLLECTED, DESTROYED, DAMAGE EVENTS and SHOTS
+FIRED. Meadow Sandbox deliberately has no built-in profile, so readouts for a score or
+coins added later appear automatically.
 
 Each profile records the underlying variable/tag/event for every observation, so a
 criterion can be traced to real runtime state rather than to pixels. Space Shooter is
@@ -141,8 +156,9 @@ Example accepted plan:
 }
 ```
 
-Phase 1 validates plan vocabulary only. Test Mode frame advancement and input
-receipts arrived in Phase 2, and Phase 4 executes one approved phase at a time.
+`validateTestPlan` checks plan vocabulary and budgets only; it never runs anything.
+Test Mode frame advancement and input receipts are covered in `docs/testing-hooks.md`,
+and "Phase execution" below describes how one approved phase runs at a time.
 
 ## Plan authoring and review (Phase 3)
 
@@ -201,9 +217,9 @@ a reported frame count within budget, and an evidence bundle. Otherwise the resu
 and the delivered-input/frame counts. The result is returned as a tool message in the
 same agent conversation and shown in the review panel.
 
-Session state and idempotency are in-memory on the server for this phase: repeating an
+Session state and idempotency are held in memory on the server (`server/kane/phase-session.ts`) and are cleared on restart. Repeating an
 identical approved plan fingerprint replays the stored result instead of paying for a
-second run; restarting the server clears it. The key is derived server-side, so changing
+second run. The key is derived server-side, so changing
 the client session id cannot reset the phase budget. The client persists returned phase
 results in `localStorage` under
 `clockwork:test-plan-runs:<projectId>:<sessionId>:<planFingerprint>`, so revising the plan

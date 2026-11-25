@@ -1,5 +1,9 @@
 # Clockwork Implementation Log
 
+> **Current status:** see the final entry, [Final status (2026-11-25)](#final-status-2026-11-25).
+> Entries below are a chronological record, so an early entry's "deferred" or
+> "open" note describes that day and is resolved by a later entry.
+
 Append one entry per slice. Do not edit the implementation plan to claim completion; record real evidence here.
 
 ## Template
@@ -484,3 +488,19 @@ Append one entry per slice. Do not edit the implementation plan to claim complet
 - Regression fixes from validation: zero-delta ball collision checks no longer depenetrate into adjacent bricks; platform hazards are non-solid so contact damage can trigger; Snake board grid uses fewer composite primitives to stay within the schema limit; Endless Runner's director has a defined visual color. Focused test corrections account for floating-point tolerance and the Snake fixed-step interval.
 - Browser/Kane validation: not run. This respects the request to defer the expensive browser gates; picker previews, gameplay controls, editor-to-Play tuning, win/loss/reset and console cleanliness still require browser evidence.
 - Acceptance: automated local gates pass; overall template acceptance remains open until the twelve browser report rows are completed. No template is being claimed as browser-verified here.
+
+## Final status (2026-11-25)
+
+**State of the build.** Fourteen genre starters, three classic templates and Blank are implemented and generate valid documents. The type-check passes and the full unit and simulation suite passes: 176 tests across 27 test files (`pnpm test`). `pnpm check:repo` passes.
+
+**Kane CLI evidence (real browser runs; full ledger in [`docs/kane-proof.md`](kane-proof.md)):**
+
+- Chat agent closed loop on Meadow Sandbox: the in-app agent added collectible coins, a score variable and a SCORE HUD widget, then called `verify_with_kane`. The check ran first in the engine simulator, then once in a real browser. Run `a20a4b28` passed at project revision 9: SCORE 0 → 1, COIN COUNT 6 → 5, COLLECTED 0 → 1, with both the simulator and the browser agreeing on every readout.
+- Approved AI Testing phases on Space Shooter: run `b967bbdd` (agent-driven, 79.7 s) and runs `98e21783` (94.7 s) and `ea1bb3b3` (78.1 s) through the review panel each returned a typed PASSED with delivered input, frame budget and an evidence bundle.
+- Engine QA: K1, K3a, K3b, K4 and K5 passed against the real editor. K2 caught a real product defect; the fix is in, and its three reruns were stopped by Kane's own browser crashing, so K2 is recorded as environment-blocked rather than passed.
+- Saved engine E2E (`pnpm kane:engine-e2e`): passed authored in 286 s, then replayed from the saved test in 89 s.
+- Negative control: a seeded uncollectible coin made AI Play fail with evidence; the deterministic repair moved it, and the rerun passed.
+
+**Changes this round.** Meadow Sandbox starter; parallax and camera fixes in Clockwork Meadows; the camera keeps the ground in view on high ledges; the chat agent now gets 12 steps per message with the last three kept for a requested Kane check; HUD widgets are included in the agent context; `hud.add` rejects duplicate ids.
+
+**Known limits.** Kept current in [`docs/known-issues.md`](known-issues.md).

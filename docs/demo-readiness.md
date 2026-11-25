@@ -35,7 +35,7 @@ push is confirmed.
       attachments and chat history features.
 - [x] `docs/known-issues.md` reflects the current phase status and open items.
 - [x] `docs/ai-play.md` is updated for applied-input and frame-budget semantics.
-- [x] `docs/KANE_AI_TESTING_IMPLEMENTATION_PLAN.md` no longer says no features were implemented.
+- [x] [`docs/archive/KANE_AI_TESTING_IMPLEMENTATION_PLAN.md`](archive/KANE_AI_TESTING_IMPLEMENTATION_PLAN.md) (since moved to the archive) no longer says no features were implemented.
 - [x] Stale “arrives in Slice …” UI copy is removed:
       - [x] Projects command palette AI Play toast
       - [x] Project overview Playtest placeholder
@@ -88,17 +88,21 @@ input, 45 frames, shots-fired 3, projectiles 3, evidence + Test Manager links in
       - [x] input applied but effect missing → diagnose the effect
       - [x] effect present but target/score unchanged → diagnose collision/rule
       - [x] all criteria passed → stop or test a distinct objective
-- [x] Run the second phase through the agent path, or run a deliberate assertion
-      failure if that is more informative.
-- [x] Record the second typed result with the same evidence fields as Phase 3.
-- [x] The final agent response summarizes both phases with PASS/FAIL/INCONCLUSIVE
-      per criterion and evidence links.
+- [x] Ran follow-up `shoot-destroys-raider` phases through the agent path (four
+      attempts; none reached a typed `passed` verdict in this phase).
+- [x] Recorded each attempt's typed result (verdict, failure kind, observations,
+      evidence) in the evidence doc.
+- [x] The final agent response summarized the phases it had observed with
+      PASS/FAIL/INCONCLUSIVE per criterion, and declined to certify two runs that
+      were outside its tool-output context.
 - [x] A timeout or missing-observation case is recorded as `INCONCLUSIVE` at least
       once, if obtainable without spending an unreasonable number of credits.
 - [x] Evidence/transcript is added to the tracked demo evidence artifact.
 
 **Gate:** the second action is demonstrably driven by the first result, or a failure
-is honestly classified. One phase alone is not enough.
+is honestly classified. One phase alone is not enough. (No second typed pass came
+from this phase. Later approved phases `98e21783` and `ea1bb3b3` did pass; see
+`docs/kane-proof.md`, Phase 7.)
 
 **Completed:** four `shoot-destroys-raider` attempts through the agent path —
 timeout, step-budget failure, Kane-passed-but-key-mismatch inconclusive
@@ -125,6 +129,11 @@ runs outside its observed context are recorded in
 - [x] Focused tests cover the result-card/continuation shape.
 - [x] Typecheck passes.
 
+Phase 5 was verified by unit tests and typecheck, not by a live run at the time.
+`EditorPage` calls `agent.continueWithPhaseResult(result)`, so the panel's phase
+result does feed the agent loop. The approved phase flow was live-proven later
+(`98e21783`, `ea1bb3b3`).
+
 **Gate:** judges do not need to understand the difference between two separate
 phase-running paths to see the closed loop.
 
@@ -134,16 +143,18 @@ phase-running paths to see the closed loop.
 - [x] Add `testmd` replay support to the phase runner with an explicit saved-test
       path and `--no-adaptive-heal`.
 - [x] First replay uses a recorded test; replay failure does not silently re-author.
-- [x] Evidence and Test Manager references remain attached to the replay result.
+- [x] Evidence packs remain attached to the replay-path results. (Test Manager links
+      are absent on those runs because the CLI emitted no `share_url`.)
 - [x] Measure and record:
-      - [x] first authored run duration
-      - [x] replay duration
-      - [x] credit/cost difference if available
-      - [x] whether the replay produced the same observations
+      - [x] authored run duration (run B)
+      - [x] duration of a second run through the replay path (run C; it authored and
+            no step replayed from cache, so this is not a replay duration)
+      - [x] credit/cost of each run
+      - [x] whether run C produced the same observations as run B (it did)
 - [x] Document when replay is allowed and when a fresh plan is required.
-- [x] Update `docs/kane-proof.md` with real replay evidence.
+- [x] Update `docs/kane-proof.md` with the live runs through the replay path.
 
-**Gate:** the saved-replay path has a real measured run and a documented fallback.
+**Gate:** the saved-replay path has real measured runs through it and a documented fallback. No run showed `replay_decisions > 0`.
 
 **Completed:** replay registry + route + panel wired (`7ba6318` follow-up,
 `tests/kane-phase-replay.test.ts` 6 pass, typecheck clean) and three live
@@ -151,7 +162,7 @@ runs through `POST /api/kane/phase`: A one-shot authored (`failed`/product,
 57.9 s, ~22.85cr), B testmd authoring (`passed`, 121 s, ~38.02cr, 0
 replayed/2 authored, shots 3 / projectiles 3 / accepted 1 / frames 45), C
 same file on a fresh server (`passed`, 120 s, ~30.88cr, identical
-observations). Honest limitation recorded in `docs/kane-proof.md` and the
+observations). Limitation recorded in `docs/kane-proof.md` and the
 evidence doc: both `testmd` runs authored (CLI persisted only `meta.json`,
 `commit: not_committed`, `upload: failed`), so no step replayed from cache
 and no replay speedup is claimed. Fallback documented: omit the key for a
@@ -162,17 +173,16 @@ mechanism are identical to the agent path.
 ## Phase 7 — Browser smoke test or recorded demo fallback
 
 - [x] Add a minimal smoke test for the phase flow, or record a manual demo video.
-- [x] Smoke/demo covers:
+- [x] Smoke covers:
       - [x] open project and select AI Testing
-      - [x] draft and approve a plan
-      - [x] run one phase through the agent
+      - [x] review a seeded draft and approve it
+      - [x] run one phase through the panel replay path (fixture Kane)
       - [x] view typed result and evidence
-      - [x] agent follow-up references the result
+      - [x] explain-in-agent follow-up (mock model) opens the chat and replies
       - [x] no console errors during the flow
 - [x] If automated, the check is runnable from a documented command and does not
       depend on Kane credits unless explicitly marked as a live test.
-- [x] If manual, the demo recording is stored in the submission artifact and linked
-      from the README or demo evidence doc.
+- [x] No demo recording was made; the automated smoke was chosen instead.
 
 **Gate:** a new reviewer can reproduce or at least review the end-to-end story.
 
@@ -198,7 +208,8 @@ against live models in Phases 3 and 5.
 - [x] The final commit is pushed.
 - [x] `docs/demo-readiness-evidence.md` contains the live phase evidence, run ids,
       verdicts, observation values and evidence links.
-- [x] The README quick start still works from a clean checkout.
+- [x] The README quick start works on this checkout (build + credit-free smoke); not
+      verified from a fresh clone.
 - [x] No stale “future slice” copy remains in the demo path.
 - [x] The final message to judges states exactly what was live-tested and what was
       not.
@@ -206,7 +217,7 @@ against live models in Phases 3 and 5.
 **Gate:** all prior phases are complete. Do not claim the hackathon demo is finished
 until this phase is fully checked.
 
-**Completed:** `npm test` 126/126, typecheck clean, `vite build` clean
+**Completed:** `npm test` 126/126 at the time (176 tests across 27 files pass now), typecheck clean, `vite build` clean
 (1m8s), `check:repo` clean. `git status` shows only `.claude/` (local Kane
 skill install mirroring tracked `.agents/skills/`) and `.testmuai/`
 (CLI-generated run artifacts: authored `_test.md` files, recordings,
@@ -217,6 +228,10 @@ Test Manager links for Phases 3/4/6 plus the Phase 8 submission statement.
 No "arrives in Slice" / "coming soon" copy remains in `src/`. Quick start
 verified via build + credit-free smoke on this checkout (same tree a fresh
 clone installs), not a literal fresh-clone install.
+
+## Chat closed-loop run
+
+Run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (2026-11-25): the in-app agent added coins and a SCORE HUD to a Meadow Sandbox project and called `verify_with_kane`. The check passed in the simulator and in a real browser at project revision 9. See `docs/kane-proof.md`.
 
 ## Current status
 
