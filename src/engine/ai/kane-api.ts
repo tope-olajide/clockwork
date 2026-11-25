@@ -1,9 +1,12 @@
 import type { AiPlayResult, KaneCliStatus, KaneEvent } from "@shared/protocol/kane";
 import type { KanePhaseEvent, KanePhaseRequest, KanePhaseResult } from "@shared/protocol/game-testing";
+import type { KaneCheckRequest } from "@shared/kane-check";
 
 export interface AiPlayStreamHandlers {
   onEvent?: (event: KaneEvent) => void;
   onResult?: (result: AiPlayResult) => void;
+  /** Called once with the server run id, as soon as it is known (needed for Stop). */
+  onRunId?: (runId: string) => void;
   signal?: AbortSignal;
 }
 
@@ -30,6 +33,13 @@ async function streamKane(
     throw Object.assign(new Error(body?.error || `AI Play failed (HTTP ${response.status}).`), { code: body?.code, status: response.status });
   }
   if (!response.body) throw new Error("AI Play returned no event stream.");
+  let reportedRunId: string | null = null;
+  const reportRunId = (runId: string | null | undefined) => {
+    if (!runId || reportedRunId === runId) return;
+    reportedRunId = runId;
+    handlers.onRunId?.(runId);
+  };
+  reportRunId(response.headers.get("X-Kane-Run"));
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -39,6 +49,7 @@ async function streamKane(
     if (!line.trim()) return;
     let event: KaneEvent;
     try { event = JSON.parse(line) as KaneEvent; } catch { return; }
+    if (event.type === "stream_start") reportRunId(event.runId);
     handlers.onEvent?.(event);
     if (event.type === "run_end") {
       final = event.result;
@@ -182,7 +193,7 @@ export function streamAiPlay(
 }
 
 export function verifyWithKane(
-  input: { snapshotId: string; objective: string; seed?: number },
+  input: { snapshotId: string; objective?: string; check?: KaneCheckRequest; sceneId?: string; seed?: number },
   handlers: AiPlayStreamHandlers = {},
 ): Promise<AiPlayResult> {
   return streamKane("/api/kane/qa", input, handlers);

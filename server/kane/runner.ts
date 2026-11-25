@@ -5,6 +5,11 @@ import { randomUUID } from "node:crypto";
 import type { AiPlayResult, KaneEvent, KaneFinalState, KaneStep } from "../../shared/protocol/kane";
 import { parseNdjsonLine, stepFromEvent, testMdStepFromEvent } from "./ndjson";
 
+/** Kane browser startup before its first action; not counted by `--timeout`. */
+export const KANE_STARTUP_ALLOWANCE_S = 90;
+/** How long Kane may keep running after it has emitted its verdict. */
+export const KANE_EXIT_GRACE_MS = 15_000;
+
 export interface KaneRunOptions {
   objective: string;
   /** Path to a saved `_test.md`; when set the run replays its recordings. */
@@ -19,6 +24,9 @@ export interface KaneRunOptions {
   bugDetection?: "off" | "continue" | "stop";
   evidenceRoot?: string;
   runId?: string;
+  /** Overrides for tests; production uses the constants above. */
+  startupAllowanceSeconds?: number;
+  exitGraceMs?: number;
 }
 
 interface ResolvedCli {
@@ -224,6 +232,9 @@ export function startKaneRun(options: KaneRunOptions): {
   let cancelled = false;
   const runStartedAt = Date.now();
   let timedOut = false;
+  let postTerminalKill = false;
+  const wallBudgetMs = (timeoutSeconds + (options.startupAllowanceSeconds ?? KANE_STARTUP_ALLOWANCE_S)) * 1000;
+  const exitGraceMs = options.exitGraceMs ?? KANE_EXIT_GRACE_MS;
   let child: ChildProcessWithoutNullStreams | null = null;
   let terminalEvent: Record<string, unknown> | null = null;
   let savedTestSurface = false;
@@ -253,12 +264,31 @@ export function startKaneRun(options: KaneRunOptions): {
   const pending = new Promise<void>((resolve) => {
     let buffer = "";
     let stderr = "";
+    let terminalAt: number | null = null;
+    let exitTimer: ReturnType<typeof setTimeout> | null = null;
 
+    // Kane's `--timeout` budgets its agent execution, not process wall time: the
+    // browser startup before the first action (50-80 s here) is not counted.
+    // The wall-clock budget therefore adds a startup allowance; otherwise it
+    // races Kane's own finalization.
     const timer = setTimeout(() => {
+      // A verdict that already arrived is final; only a missing one times out.
+      if (terminalEvent) return;
       timedOut = true;
-      push({ type: "error", code: "timeout", message: `Kane run timed out after ${timeoutSeconds}s.` });
+      push({ type: "error", code: "timeout", message: `Kane run timed out after ${Math.round(wallBudgetMs / 1000)}s without a final verdict.` });
       if (child) killTree(child);
-    }, timeoutSeconds * 1000 + 5_000);
+    }, wallBudgetMs);
+
+    // After run_end, Kane still uploads and closes its browser. Give that a
+    // short grace period, then stop the process; the verdict is kept either way.
+    const onTerminal = () => {
+      if (terminalAt !== null) return;
+      terminalAt = Date.now();
+      exitTimer = setTimeout(() => {
+        postTerminalKill = true;
+        if (child) killTree(child);
+      }, exitGraceMs);
+    };
 
     try {
       child = spawn(cli.command, args, {
@@ -289,6 +319,9 @@ export function startKaneRun(options: KaneRunOptions): {
         const parsed = parseNdjsonLine(line);
         if (!parsed) continue;
         const event = parsed.raw as Record<string, unknown>;
+        // A verdict only counts if it arrived before Stop or the timeout; one
+        // printed while the process is being killed is not accepted.
+        if ((cancelled || timedOut) && (event.type === "run_end" || event.type === "test_md_done")) continue;
         if (!savedTestSurface && event.type === "stream_start" && event.surface === "testmd") {
           savedTestSurface = true;
         }
@@ -301,6 +334,7 @@ export function startKaneRun(options: KaneRunOptions): {
             continue;
           }
           terminalEvent = event;
+          onTerminal();
           continue;
         }
         if (event.type === "test_md_summary") {
@@ -330,6 +364,7 @@ export function startKaneRun(options: KaneRunOptions): {
             ...(typeof event.share_url === "string" ? { test_url: event.share_url } : {}),
           };
           savedTestSession = typeof event.session_id === "string" ? event.session_id : undefined;
+          onTerminal();
           continue;
         }
         const mdStep = savedTestSurface ? testMdStepFromEvent(event) : null;
@@ -371,12 +406,13 @@ export function startKaneRun(options: KaneRunOptions): {
 
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (exitTimer) clearTimeout(exitTimer);
       if (buffer.trim()) {
         rawLines.push(buffer.trim());
         const parsed = parseNdjsonLine(buffer);
         if (parsed) {
           const event = parsed.raw as Record<string, unknown>;
-          if (event.type === "run_end") terminalEvent = event;
+          if (event.type === "run_end" && !cancelled && !timedOut && !terminalEvent) terminalEvent = event;
           const step = stepFromEvent(event);
           if (step) {
             steps.push(step);
@@ -420,14 +456,28 @@ export function startKaneRun(options: KaneRunOptions): {
         steps,
         exitCode: code,
         hasRunEnd: terminalEvent !== null,
-        timedOut,
-        cancelled,
+        // A received verdict stands: a later timeout, user Stop or the
+        // post-verdict cleanup kill cannot turn it into "unknown".
+        timedOut: terminalEvent ? false : timedOut,
+        cancelled: terminalEvent ? false : cancelled,
         elapsedMs: Date.now() - runStartedAt,
         localEvidence,
         evidenceUrl: localEvidence ? `/api/kane/runs/${encodeURIComponent(runId)}/evidence` : undefined,
       });
-      if (timedOut) result.status = "cancelled";
-      if (cancelled) result.status = "cancelled";
+      if (!terminalEvent && (timedOut || cancelled)) result.status = "cancelled";
+      // Lifecycle timings, kept separate on purpose: Kane's own `duration`
+      // (agent execution) is not the process wall time.
+      writeFileSync(join(runDir, "lifecycle.json"), JSON.stringify({
+        startedAt: new Date(runStartedAt).toISOString(),
+        verdictAtMs: terminalAt === null ? null : terminalAt - runStartedAt,
+        exitedAtMs: Date.now() - runStartedAt,
+        exitCode: code,
+        kaneDurationS: terminalEvent ? Number((terminalEvent as Record<string, unknown>).duration ?? NaN) : null,
+        wallBudgetMs,
+        killedAfterVerdict: postTerminalKill,
+        timedOut: !terminalEvent && timedOut,
+        cancelledByUser: cancelled,
+      }, null, 2));
       writeFileSync(join(runDir, "result.json"), JSON.stringify(result, null, 2));
       writeFileSync(join(runDir, "evidence-path.txt"), localEvidence ?? sourceEvidence ?? "");
       push({ type: "run_end", result });

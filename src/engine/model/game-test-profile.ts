@@ -2,6 +2,7 @@ import { z } from "zod";
 import { INPUT_ACTIONS, type ProjectDocument, type TemplateOrigin } from "./schema";
 import { getGameTestScenario } from "./game-test-scenarios";
 import { BUILT_IN_PROFILES } from "./game-test-profiles";
+import { deriveGameTestProfile } from "./derived-test-profile";
 
 /**
  * Versioned, read-only test vocabulary for a template.
@@ -35,6 +36,7 @@ export const RUNTIME_EVENT_TYPES = [
   "collect",
   "respawn",
   "checkpoint",
+  "stomp",
   "jump",
   "double-jump",
   "melee",
@@ -159,8 +161,12 @@ export function getGameTestProfile(origin: TemplateOrigin): GameTestProfile | un
   return BUILT_IN_PROFILES[origin];
 }
 
-export function gameTestProfileForDocument(document: ProjectDocument): GameTestProfile | undefined {
-  return getGameTestProfile(document.templateOrigin);
+/**
+ * The hand-written profile for the template when one exists, otherwise a
+ * profile derived from the project itself, so every game has a Test Mode.
+ */
+export function gameTestProfileForDocument(document: ProjectDocument): GameTestProfile {
+  return getGameTestProfile(document.templateOrigin) ?? deriveGameTestProfile(document);
 }
 
 export function profileScenarios(profile: GameTestProfile) {

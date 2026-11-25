@@ -30,6 +30,12 @@ export interface AiPlayResult {
   durationMs: number;
   exitCode?: number;
   createdAt: string;
+  /** Present for structured checks: the server's join of stored values to expectations. */
+  check?: {
+    kaneStatus: KaneRunStatus;
+    reason: string;
+    outcomes: import("../kane-check").KaneCheckOutcome[];
+  };
 }
 
 export type KaneEvent =
@@ -64,9 +70,13 @@ export interface AiPlayRequest {
 }
 
 export interface KaneQaRequest {
-  objective: string;
+  /** Free-text objective; ignored when `check` is present. */
+  objective?: string;
   snapshotId?: string;
+  sceneId?: string;
   seed?: number;
+  /** Structured check compiled by the client (see shared/kane-check.ts). */
+  check?: import("../kane-check").KaneCheckRequest;
 }
 
 export interface KaneRunSummary {

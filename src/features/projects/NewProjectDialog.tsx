@@ -85,7 +85,7 @@ export function NewProjectDialog({
   const starterPreviews = useMemo(
     () =>
       Object.fromEntries(
-        GAME_STARTERS.map((item) => [item.id, previewDataUrl(createGameStarterDocument(item.id, "Preview"))]),
+        GAME_STARTERS.map((item) => [item.id, item.cover ?? previewDataUrl(createGameStarterDocument(item.id, "Preview"))]),
       ) as Record<string, string>,
     [],
   );

@@ -14,14 +14,16 @@ export function ChatMessage({
   message,
   canRegenerate,
   onRegenerate,
+  onStop,
 }: {
   message: DisplayMessage;
   canRegenerate: boolean;
   onRegenerate: () => void;
+  onStop?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
 
-  if (message.role === "tool" && message.toolCard) return <ToolActivity card={message.toolCard} />;
+  if (message.role === "tool" && message.toolCard) return <ToolActivity card={message.toolCard} onStop={onStop} />;
   if (message.role === "assistant") {
     if (!message.content && message.streaming) {
       return (

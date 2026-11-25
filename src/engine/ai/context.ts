@@ -14,6 +14,7 @@ interface EditorContextInput {
   camera?: { x: number; y: number; zoom: number };
   viewportSize?: { w: number; h: number };
   includeViewportCapture?: boolean;
+  kane?: ContextPacket["kane"];
 }
 
 function sceneSummary(scene: Scene) {
@@ -89,6 +90,10 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
         gravity: document.settings.gravity,
         background: document.settings.background,
         audio: (document.settings as any).audio,
+        // HUD widgets live in project settings, not in a scene, so scene and
+        // entity lookups never show them. Without this the agent re-added a
+        // widget it could not see.
+        hud: document.settings.ui.hud.map((widget) => ({ id: widget.id, variable: widget.variable, label: widget.label, corner: widget.corner })),
       },
     },
     editor: {
@@ -129,5 +134,6 @@ export function buildContextPacket(input: EditorContextInput): ContextPacket {
     })),
     availableCommands,
     warnings: includeViewportCapture ? [] : ["Viewport capture is unavailable for this model (vision not supported)."],
+    ...(input.kane ? { kane: input.kane } : {}),
   };
 }

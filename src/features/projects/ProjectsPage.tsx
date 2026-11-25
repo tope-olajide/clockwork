@@ -20,8 +20,8 @@ import { TopBar } from "../../shell/TopBar";
 import { CommandPalette, buildStubCommands } from "../../shell/CommandPalette";
 import { runCommand } from "../../engine/commands/registry";
 import { createProjectFromTemplate } from "../../engine/model/templates";
-import { isGameStarterOrigin } from "../../engine/model/game-starters/catalog";
-import { applyStarterVisuals, seedStarterAssets } from "../../engine/assets/starter-seed";
+import { isGameStarterOrigin, usesMeadowArt } from "../../engine/model/game-starters/catalog";
+import { applyStarterVisuals, seedPlatformerAssets, seedStarterAssets } from "../../engine/assets/starter-seed";
 import type { ProjectDocument, TemplateOrigin } from "../../engine/model/schema";
 import {
   deleteProjectRecord,
@@ -169,6 +169,9 @@ export function ProjectsPage() {
         document = createProjectFromTemplate(baseTemplate, created.name || "Untitled project");
         if (created.mode === "brief") {
           document.templateOrigin = "brief";
+        }
+        if (usesMeadowArt(document.templateOrigin)) {
+          document = await seedPlatformerAssets(document);
         }
         const fixedSettings = isGameStarterOrigin(document.templateOrigin);
         if (created.settings && !fixedSettings) {

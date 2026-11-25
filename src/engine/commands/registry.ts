@@ -800,6 +800,11 @@ const commands: CommandDefinition[] = [
     z.object({ widget: hudWidgetSchema }),
     () => "Add HUD widget",
     (document, args) => {
+      // A repeated add used to push a second widget with the same id, so the
+      // HUD showed the label twice. Point the caller at hud.update instead.
+      if (document.settings.ui.hud.some((widget) => widget.id === args.widget.id)) {
+        throw new CommandError("CONFLICT", `HUD widget "${args.widget.id}" already exists; use hud.update to change it.`);
+      }
       document.settings.ui.hud.push(args.widget);
     },
   ),

@@ -7,6 +7,8 @@ import { pingPongTemplate } from "./ping-pong";
 import { brickBreakerTemplate } from "./brick-breaker";
 import { flappyFlyerTemplate } from "./flappy-flyer";
 import { platformJumperTemplate } from "./platform-jumper";
+import { meadowRunTemplate } from "./meadow-run";
+import { meadowSandboxTemplate } from "./meadow-sandbox";
 import { endlessRunnerTemplate } from "./endless-runner";
 import { arenaSurvivalTemplate } from "./arena-survival";
 import { fallingObjectsTemplate } from "./falling-objects";
@@ -29,6 +31,10 @@ export function createGameStarterDocument(id: GameStarterId, name: string): Proj
       return flappyFlyerTemplate(name);
     case "platform-jumper":
       return platformJumperTemplate(name);
+    case "meadow-run":
+      return meadowRunTemplate(name);
+    case "meadow-sandbox":
+      return meadowSandboxTemplate(name);
     case "endless-runner":
       return endlessRunnerTemplate(name);
     case "arena-survival":

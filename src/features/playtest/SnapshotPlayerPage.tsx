@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { decodeCheckSteps } from "../../../shared/kane-check";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Application } from "pixi.js";
 import { RotateCcw } from "lucide-react";
@@ -36,6 +37,8 @@ export function SnapshotPlayerPage() {
   const requestedSceneId = searchParams.get("scene");
   const requestedMaxAdvance = clampBudget(searchParams.get("maxAdvance"), 1, 600, 600);
   const requestedMaxFrames = clampBudget(searchParams.get("maxFrames"), 1, 3600, 3600);
+  const stepsParam = searchParams.get("steps");
+  const plannedSteps = useMemo(() => decodeCheckSteps(stepsParam), [stepsParam]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<Runtime | null>(null);
   const inputRef = useRef<InputManager | null>(null);
@@ -129,7 +132,8 @@ export function SnapshotPlayerPage() {
     let frames = 0;
     let fpsStarted = last;
 
-    void app.init({ background: document.settings.background, antialias: true, autoDensity: true, resolution: window.devicePixelRatio || 1 }).then(() => {
+    const resolution = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1)));
+    void app.init({ background: document.settings.background, antialias: true, autoDensity: true, resolution }).then(() => {
       if (disposed) { app.destroy(true, { children: true }); return; }
       const resize = () => {
         const width = Math.max(1, host.clientWidth);
@@ -150,11 +154,13 @@ export function SnapshotPlayerPage() {
         const width = host.clientWidth;
         const height = host.clientHeight;
         runtime.setViewport(width, height);
-        const scene = runtime.renderScene();
+        const alpha = runtime.status === "running" ? Math.max(0, Math.min(1, accumulator / FIXED_DT)) : 1;
+        const scene = runtime.renderScene(alpha);
+        const view = runtime.cameraView(alpha);
         renderer.render(scene, document);
-        renderer.applyCamera(scene, runtime.camera);
-        renderer.root.position.set(width / 2 - runtime.camera.x * runtime.camera.zoom, height / 2 - runtime.camera.y * runtime.camera.zoom);
-        renderer.root.scale.set(runtime.camera.zoom);
+        renderer.applyCamera(scene, view);
+        renderer.root.position.set(width / 2 - view.x * view.zoom, height / 2 - view.y * view.zoom);
+        renderer.root.scale.set(view.zoom);
       };
       renderRef.current = draw;
       const loop = () => {
@@ -294,6 +300,7 @@ export function SnapshotPlayerPage() {
               controller={controllerRef.current}
               seed={seed}
               scenarioId={scenarioId}
+              plannedSteps={plannedSteps}
               onChanged={() => { renderRef.current?.(); setTick((value) => value + 1); }}
             />
           ) : (

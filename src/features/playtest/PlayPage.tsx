@@ -83,7 +83,12 @@ export function PlayPage() {
     let disposed = false;
     const app = new Application();
     const renderer = new SceneRenderer();
-    void app.init({ background: "#0b0c0f", antialias: true, autoDensity: true, resolution: window.devicePixelRatio || 1 }).then(() => {
+    // Whole-number resolution: at fractional display scaling (125%, 150% on
+    // Windows) the canvas is drawn 1.25x and the browser downsamples it every
+    // frame, which smears moving sprites. A static frame hides it; a walking
+    // character with a scrolling camera reads as a doubled edge.
+    const resolution = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1)));
+    void app.init({ background: "#0b0c0f", antialias: true, autoDensity: true, resolution }).then(() => {
       if (disposed) {
         app.destroy(true, { children: true });
         return;
@@ -149,7 +154,11 @@ export function PlayPage() {
           const width = host.clientWidth;
           const height = host.clientHeight;
           runtime.setViewport(width, height);
-          const scene = runtime.renderScene();
+          // Draw between the last two fixed steps so movement is smooth on any
+          // display refresh rate; paused frames always show the exact state.
+          const alpha = pausedRef.current || runtime.status !== "running" ? 1 : Math.max(0, Math.min(1, accumulator / FIXED_DT));
+          const scene = runtime.renderScene(alpha);
+          const view = runtime.cameraView(alpha);
           const musicVolume = (current.settings.audio.masterVolume ?? 1) * (current.settings.audio.musicVolume ?? 1) * (scene.audio?.volume ?? 1);
           if (scene.audio?.musicAssetId) {
             void playSceneMusic(scene.audio.musicAssetId, musicVolume, scene.audio.loop ?? true);
@@ -158,9 +167,9 @@ export function PlayPage() {
             stopSceneMusic();
           }
           renderer.render(scene, current, textureVersionRef.current);
-          renderer.applyCamera(scene, runtime.camera);
-          renderer.root.position.set(width / 2 - runtime.camera.x * runtime.camera.zoom, height / 2 - runtime.camera.y * runtime.camera.zoom);
-          renderer.root.scale.set(runtime.camera.zoom);
+          renderer.applyCamera(scene, view);
+          renderer.root.position.set(width / 2 - view.x * view.zoom, height / 2 - view.y * view.zoom);
+          renderer.root.scale.set(view.zoom);
           perfRef.current = { step: renderStarted - stepStarted, render: performance.now() - renderStarted };
         }
         frames += 1;
@@ -187,7 +196,8 @@ export function PlayPage() {
       window.addEventListener("keydown", clearSteer);
       const onKey = (event: KeyboardEvent) => {
         if (event.key === "Escape") {
-          navigate(`/project/${projectId}`);
+          event.preventDefault();
+          togglePause();
         } else if ((event.key === "r" || event.key === "R") && !event.repeat) {
           event.preventDefault();
           reset();
@@ -275,6 +285,8 @@ export function PlayPage() {
   const scene = runtime?.scene ?? current?.scenes.find((candidate) => candidate.id === current.startSceneId) ?? current?.scenes[0] ?? null;
   const hud = current?.settings.ui.hud ?? [];
   const snapshot = runtime?.snapshot();
+  const result = paused ? "paused" : snapshot?.status === "won" ? "won" : snapshot?.status === "lost" ? "lost" : null;
+  const resultWidgets = hud.filter((widget) => widget.visible !== false && widget.style === "text").slice(0, 4);
 
   if (!current) {
     return (
@@ -309,6 +321,7 @@ export function PlayPage() {
     <div
       className="player-page"
       data-playtest={paused ? "paused" : (snapshot?.status ?? "running")}
+      data-result={result ?? ""}
       data-scene-id={scene?.id ?? ""}
       data-frame={snapshot?.frame ?? 0}
       data-fps={fps}
@@ -394,6 +407,39 @@ export function PlayPage() {
             </div>
           )}
           {runtime?.lastError && <div className="play-error">Runtime error: {runtime.lastError}</div>}
+          {result && (
+            <div className={`play-result ${result}`} role="dialog" aria-modal="true" aria-label={result === "won" ? "Stage complete" : result === "lost" ? "Run failed" : "Paused"}>
+              <div className="play-result-card">
+                <span className="play-result-eyebrow">
+                  {result === "won" ? "SUMMIT REACHED" : result === "lost" ? "THE TRAIL WINS" : "TAKE A BREATH"}
+                </span>
+                <h1>{result === "won" ? "Stage clear" : result === "lost" ? "Out of lives" : "Paused"}</h1>
+                <p>{scene?.name ?? "Meadow Run"}</p>
+                <div className="play-result-stats">
+                  {resultWidgets.map((widget) => (
+                    <span key={widget.id}>
+                      <small>{widget.label}</small>
+                      <strong>{String(snapshot?.variables[widget.variable] ?? 0)}</strong>
+                    </span>
+                  ))}
+                  <span>
+                    <small>TIME</small>
+                    <strong>{formatTime(snapshot?.elapsed ?? 0)}</strong>
+                  </span>
+                </div>
+                <div className="play-result-actions">
+                  {result === "paused" ? (
+                    <Button variant="primary" onClick={togglePause}><Play size={14} /> Resume</Button>
+                  ) : (
+                    <Button variant="primary" onClick={reset}><RotateCcw size={14} /> {result === "won" ? "Run it back" : "Try again"}</Button>
+                  )}
+                  <Button variant="secondary" onClick={reset}><RotateCcw size={14} /> Restart</Button>
+                  <Button variant="ghost" onClick={() => navigate(`/project/${projectId}`)}>Exit to editor</Button>
+                </div>
+                <span className="play-result-hint">Escape pauses · R restarts</span>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 

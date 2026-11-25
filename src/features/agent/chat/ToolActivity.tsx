@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Image as ImageIcon, Loader2, Wrench } from "lucide-react";
-import type { AgentToolCard } from "../useAgentSession";
+import type { AgentToolCard, KaneProgress } from "../useAgentSession";
 import { phaseCardView } from "../phase-continuation";
 
 const LABELS: Record<string, string> = {
@@ -26,7 +26,33 @@ const LABELS: Record<string, string> = {
   run_kane_test_phase: "Running a Kane phase",
 };
 
-export function ToolActivity({ card }: { card: AgentToolCard }) {
+const KANE_TOOLS = new Set(["verify_with_kane", "run_ai_play"]);
+
+function formatElapsed(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function KaneProgressLine({ progress, onStop }: { progress: KaneProgress; onStop?: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className="kane-progress" data-testid="kane-progress">
+      <div className="kane-progress-text">
+        <span className="kane-progress-step" data-testid="kane-progress-step">
+          {typeof progress.step === "number" ? `Step ${progress.step} · ` : ""}{progress.message}
+        </span>
+        <span className="kane-progress-time" data-testid="kane-progress-time">{formatElapsed(now - progress.startedAt)}</span>
+      </div>
+      {onStop && <button type="button" className="kane-progress-stop" data-testid="kane-progress-stop" onClick={onStop}>Stop</button>}
+    </div>
+  );
+}
+
+export function ToolActivity({ card, onStop }: { card: AgentToolCard; onStop?: () => void }) {
   const [open, setOpen] = useState(false);
   const label = LABELS[card.name] ?? card.name.replace(/_/g, " ");
   const result = card.result;
@@ -72,10 +98,25 @@ export function ToolActivity({ card }: { card: AgentToolCard }) {
           </div>
         );
       })()}
+      {KANE_TOOLS.has(card.name) && card.status === "running" && (
+        <KaneProgressLine progress={card.progress ?? { message: "Starting Kane", startedAt: Date.now() }} onStop={onStop} />
+      )}
+      {KANE_TOOLS.has(card.name) && card.status === "canceled" && (
+        <div className="kane-run-card" data-testid="kane-run-card-canceled">
+          <div className="kane-run-head"><span className="chip violet" data-testid="verdict-badge">CANCELLED</span><strong>{card.name === "run_ai_play" ? "KANE PLAY" : "ENGINE QA"}</strong></div>
+          <p>Stopped before Kane returned a verdict. Nothing was verified.</p>
+        </div>
+      )}
+      {KANE_TOOLS.has(card.name) && card.status === "error" && result && !result.ok && (
+        <div className="kane-run-card" data-testid="kane-run-card-error">
+          <div className="kane-run-head"><span className="chip danger" data-testid="verdict-badge">ERROR</span><strong>{card.name === "run_ai_play" ? "KANE PLAY" : "ENGINE QA"}</strong></div>
+          <p>{result.error ?? "Kane could not complete the run."}</p>
+        </div>
+      )}
       {data && (card.name === "verify_with_kane" || card.name === "run_ai_play") && (
         <div className="kane-run-card" data-testid="kane-run-card">
           <div className="kane-run-head">
-            <span className={`chip ${data.status === "passed" ? "success" : "danger"}`} data-testid="verdict-badge">{String(data.status ?? "unknown").toUpperCase()}</span>
+            <span className={`chip ${data.status === "passed" ? "success" : data.status === "cancelled" ? "violet" : "danger"}`} data-testid="verdict-badge">{String(data.status ?? "unknown").toUpperCase()}</span>
             <strong>{card.name === "run_ai_play" ? "KANE PLAY" : "ENGINE QA"}</strong>
             <span>{data.steps?.length ?? 0} steps</span>
             {typeof data.durationMs === "number" && data.durationMs > 0 && (

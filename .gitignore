@@ -157,3 +157,5 @@ vite.config.ts.timestamp-*
 
 # TypeScript incremental build
 *.tsbuildinfo
+# Local browser profile from automation runs (cookies, logins, history)
+.tmp-art/

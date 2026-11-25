@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Bot, Check, ChevronDown, Settings, X } from "lucide-react";
+import { AlertTriangle, Bot, Check, ChevronDown, FlaskConical, Settings, X } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
 import type { AgentMode, ChatAttachment } from "@shared/protocol";
-import type { DisplayMessage, AgentUiError, PendingPreview } from "./useAgentSession";
+import type { DisplayMessage, AgentUiError, PendingPreview, VerifyOffer } from "./useAgentSession";
+import type { KaneCliStatus } from "@shared/protocol/kane";
+import { KaneTestSheet, kaneUnavailableReason } from "./chat/KaneTestSheet";
 import { ModelPicker } from "./ModelPicker";
 import type { ModelInfo, ProviderInfo } from "../../engine/ai/api";
 import { suggestionsFor, type PromptPreset } from "../../engine/ai/prompts";
@@ -48,6 +50,13 @@ interface AgentDrawerProps {
   document: ProjectDocument;
   draftKey: string;
   history?: React.ReactNode;
+  kaneStatus?: KaneCliStatus | null;
+  verifyOffer?: VerifyOffer | null;
+  onDismissVerifyOffer?: () => void;
+  /** Runs the no-LLM smoke check directly. */
+  onKaneSmoke?: () => void;
+  /** Asks the agent to build and run a structured check for a description. */
+  onKaneAsk?: (description: string) => void;
 }
 
 function statusLabel(status: AgentDrawerProps["status"]) {
@@ -71,6 +80,7 @@ export function AgentDrawer(props: AgentDrawerProps) {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showJump, setShowJump] = useState(false);
+  const [kaneSheetOpen, setKaneSheetOpen] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
@@ -200,7 +210,7 @@ export function AgentDrawer(props: AgentDrawerProps) {
       renderedMessages.push(
         <div className="chat-tool-group" key={`tools-${group[0]?.id ?? index}`}>
           {group.map((toolMessage) => (
-            <ChatMessage key={toolMessage.id} message={toolMessage} canRegenerate={false} onRegenerate={onRegenerate} />
+            <ChatMessage key={toolMessage.id} message={toolMessage} canRegenerate={false} onRegenerate={onRegenerate} onStop={onStop} />
           ))}
         </div>,
       );
@@ -216,6 +226,19 @@ export function AgentDrawer(props: AgentDrawerProps) {
       />,
     );
   }
+
+  const kaneReason = kaneUnavailableReason({ status: props.kaneStatus ?? null, isBusy });
+  const canAskAgent = canBuildPlan || Boolean(aiSettings?.mock);
+  const askKane = (description: string) => {
+    setKaneSheetOpen(false);
+    props.onDismissVerifyOffer?.();
+    props.onKaneAsk?.(description);
+  };
+  const smokeKane = () => {
+    setKaneSheetOpen(false);
+    props.onDismissVerifyOffer?.();
+    props.onKaneSmoke?.();
+  };
 
   if (!open) return null;
 
@@ -256,6 +279,7 @@ export function AgentDrawer(props: AgentDrawerProps) {
         </div>
         <div className="chat-header-actions">
           <ModelPicker value={selectedModelId} onChange={onSelectModel} onOpenSettings={onOpenSettings} models={models} providers={providers} settings={aiSettings} label={modelLabel} />
+          <IconButton label="Test with Kane" data-testid="agent-kane-test" onClick={() => setKaneSheetOpen((value) => !value)} aria-expanded={kaneSheetOpen}><FlaskConical size={14} /></IconButton>
           {props.history}
           <IconButton label="New chat" onClick={onNewChat}><span className="chat-new-label">New</span></IconButton>
           <IconButton label="Close agent" onClick={onClose}><X size={14} /></IconButton>
@@ -335,6 +359,17 @@ export function AgentDrawer(props: AgentDrawerProps) {
         <button className="chat-jump" type="button" onClick={() => { stickRef.current = true; bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }}>
           Jump to latest
         </button>
+      )}
+
+      {props.verifyOffer && !kaneSheetOpen && !isBusy && (
+        <div className="kane-offer" data-testid="kane-offer" role="status">
+          <span>Changed: {props.verifyOffer.summary}. Verify it with Kane?</span>
+          <Button variant="primary" size="sm" disabled={Boolean(kaneReason) || !canAskAgent} onClick={() => askKane(`the change "${props.verifyOffer!.summary}" works as intended`)}>Verify</Button>
+          <Button variant="secondary" size="sm" onClick={() => props.onDismissVerifyOffer?.()}>Dismiss</Button>
+        </div>
+      )}
+      {kaneSheetOpen && (
+        <KaneTestSheet unavailableReason={kaneReason} canAskAgent={canAskAgent} onSmoke={smokeKane} onAsk={askKane} onClose={() => setKaneSheetOpen(false)} />
       )}
 
       {attachmentError && <div className="chat-attachment-error" role="alert">{attachmentError}</div>}

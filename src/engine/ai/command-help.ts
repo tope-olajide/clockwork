@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { commandDefinitions } from "../commands/registry";
+import { BEHAVIOR_CATALOG } from "../model/behavior-catalog";
 
 /**
  * The agent is told it may send `{ type, args }` commands, but the registry is
@@ -66,9 +67,37 @@ function typeName(schema: AnySchema, depth: number): string {
   }
   if (kind === "array") return inner.element ? `${typeName(inner.element as AnySchema, depth + 1)}[]` : "array";
   if (kind === "enum") return `enum(${(inner.options ?? []).join("|")})`;
-  if (kind === "union") return (inner.options ?? []).map((option) => typeName(option as AnySchema, depth + 1)).join("|");
+  if (kind === "union") {
+    // Discriminated unions (rule conditions/actions, visuals) were rendered as
+    // "object|object|…", hiding every valid `kind`. Name each variant instead.
+    const options = (inner.options ?? []) as AnySchema[];
+    const variants = options.map((option) => variantName(option, depth + 1));
+    return variants.join(" | ");
+  }
   if (kind === "null") return "null";
   return kind;
+}
+
+/** `{kind:"set-variable", name, op?, value}` for one union variant. */
+function variantName(option: AnySchema, depth: number): string {
+  const { schema: inner } = unwrapOptional(option);
+  if (inner?.type !== "object" || !inner.shape) return typeName(option, depth);
+  const fields = Object.entries(inner.shape).map(([name, field]) => {
+    const { schema: fieldInner, optional } = unwrapOptional(field as AnySchema);
+    const literal = fieldInner?.type === "literal" ? (fieldInner as any).value ?? (fieldInner as any).values?.[0] : undefined;
+    if (literal !== undefined) return `${name}:${JSON.stringify(literal)}`;
+    if (fieldInner?.type === "enum") return `${name}${optional ? "?" : ""}: enum(${((fieldInner.options ?? []) as string[]).join("|")})`;
+    return `${name}${optional ? "?" : ""}`;
+  });
+  return `{${fields.join(", ")}}`;
+}
+
+/** Behaviour types with their params, so `behaviors` and `behavior.add` can be filled correctly. */
+export function behaviorParamReference(): string[] {
+  return BEHAVIOR_CATALOG.map((entry: any) => {
+    const params = (entry.params ?? []).map((param: any) => `${param.key}: ${param.type}${param.default !== undefined && param.default !== "" ? ` = ${JSON.stringify(param.default)}` : ""}`);
+    return `${entry.type}{${params.join(", ")}} - ${entry.description ?? ""}`.trim();
+  });
 }
 
 function helpFor(type: string): CommandHelp | null {

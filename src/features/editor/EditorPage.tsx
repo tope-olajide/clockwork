@@ -696,6 +696,20 @@ export function EditorPage() {
       <Drawer open={hierarchyDrawer} onOpenChange={setHierarchyDrawer} title="Hierarchy" side="left"><EngineLeftDock /></Drawer>
       <Drawer open={inspectorDrawer} onOpenChange={setInspectorDrawer} title="Inspector" side="right"><EngineInspector tab={inspectorTab} onTab={setInspectorTab} onAskAgent={(objectId) => askAgentAbout(objectId, "ask")} /></Drawer>
       {debug && <DebugPanel onClose={() => setDebug(false)} />}
+      {!agentOpen && (
+        <button
+          type="button"
+          className="agent-launcher"
+          data-testid="agent-launcher"
+          aria-label="Open the AI agent"
+          aria-keyshortcuts="Meta+J Control+J"
+          title="Open the AI agent (⌘J / Ctrl+J)"
+          onClick={() => setAgentOpen(true)}
+        >
+          <span className="agent-launcher-orb" aria-hidden="true"><Sparkles size={12} /></span>
+          <span className="agent-launcher-label">Agent</span>
+        </button>
+      )}
       {agentOpen && <button className="agent-scrim" aria-label="Close agent" onClick={() => setAgentOpen(false)} />}
       {agent.pendingPreview && (
         <div className="plan-preview-pill" role="status" data-testid="plan-preview-pill">
@@ -761,6 +775,11 @@ export function EditorPage() {
         lockedSelection={lockedSelection ? { id: lockedSelection.id, name: lockedSelection.name } : null}
         onUnlockSelection={() => setLockedSelectionId(null)}
         document={current}
+        kaneStatus={agent.kaneStatus}
+        verifyOffer={agent.verifyOffer}
+        onDismissVerifyOffer={agent.dismissVerifyOffer}
+        onKaneSmoke={() => { void agent.runKaneCheckDirect(); }}
+        onKaneAsk={(description) => { void agent.requestKaneCheck(description); }}
         draftKey={`clockwork:agent-draft:${current.id}:${agent.sessionId}`}
         history={<ChatHistoryMenu
           sessions={agent.sessions}

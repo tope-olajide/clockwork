@@ -94,14 +94,15 @@ Verified from `src/engine/model/templates.ts`, `src/engine/model/game-starters/c
 | 5 | Brick Breaker | Arcade | Paddle, ball, brick health, ships, speed-up |
 | 6 | Flappy Flyer | Arcade | Flap impulse, moving gates, collision ends run |
 | 7 | Platform Jumper | Platformer | Move/jump, five cores, lives, hazards, moving platform |
-| 8 | Endless Runner | Arcade | Jump/duck, accelerating obstacles, bonus cores |
-| 9 | Arena Survival | Survival | WASD movement, attack, chasers, hull, 60 s timer |
-| 10 | Falling Objects | Survival | Catch lane, meteors, bonus stars, three lives, timer |
-| 11 | Maze Escape | Puzzle | Grid maze walls, 15 dots, warden pursuit, gated exit |
-| 12 | Snake | Puzzle | Fixed-step grid movement, food, growth, self/wall collision |
-| 13 | Platformer (classic) | Platformer | Dusk scene, player controller, coins prefab, hazard, checkpoint, relay, win scene and rules |
-| 14 | Top-down (classic) | Top-down | Room walls, 8-way controller, health, patrol enemy, exit rule |
-| 15 | Puzzle (classic) | Puzzle | 5×7 grid, two keys, gate, two rules |
+| 8 | Clockwork Meadows | Platformer | 18,400 px stage, tiled parallax art, stompable dragons, checkpoints, shards, moving root platforms, summit goal |
+| 9 | Endless Runner | Arcade | Jump/duck, accelerating obstacles, bonus cores |
+| 10 | Arena Survival | Survival | WASD movement, attack, chasers, hull, 60 s timer |
+| 11 | Falling Objects | Survival | Catch lane, meteors, bonus stars, three lives, timer |
+| 12 | Maze Escape | Puzzle | Grid maze walls, 15 dots, warden pursuit, gated exit |
+| 13 | Snake | Puzzle | Fixed-step grid movement, food, growth, self/wall collision |
+| 14 | Platformer (classic) | Platformer | Dusk scene, player controller, coins prefab, hazard, checkpoint, relay, win scene and rules |
+| 15 | Top-down (classic) | Top-down | Room walls, 8-way controller, health, patrol enemy, exit rule |
+| 16 | Puzzle (classic) | Puzzle | 5×7 grid, two keys, gate, two rules |
 | — | Blank | Empty | One scene, one layer |
 
 **Evidence they are real:** each starter is constructed by code (`createGameStarterDocument`), covered by committed model/runtime tests (`tests/game-starters.test.ts`, `tests/game-starter-slice-b…f.test.ts`, `tests/space-shooter.test.ts`), and the New Project dialog renders generated preview images from the actual documents (`src/engine/model/game-starters/preview.ts`). Every starter has a game-test profile (`src/engine/model/game-test-profiles.ts`). Kane was also driven against several starters: Space Invaders (three runs; two partial or failed, one fast-restart pass), Asteroid Field (play/restart and editor-tuning passes), and Space Shooter (loss/restart observed, but the run failed its final checkpoint and no clean automated scoring pass exists). See §4.1 and `docs/kane-proof.md`.

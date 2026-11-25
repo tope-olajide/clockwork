@@ -4,8 +4,8 @@ import { runCommand } from "../commands/registry";
 import { CommandError, validateDocument } from "../commands/validation";
 import { duplicateProjectDocument } from "../model/clone";
 import { createProjectFromTemplate } from "../model/templates";
-import { isGameStarterOrigin } from "../model/game-starters/catalog";
-import { applyStarterVisuals, seedStarterAssets } from "../assets/starter-seed";
+import { isGameStarterOrigin, usesMeadowArt } from "../model/game-starters/catalog";
+import { applyStarterVisuals, seedPlatformerAssets, seedStarterAssets } from "../assets/starter-seed";
 import { captureViewportCover } from "../ai/viewport-capture";
 import type { ProjectDocument, ProjectRecord, TemplateOrigin } from "../model/schema";
 import {
@@ -157,9 +157,11 @@ export const useEngineStore = create<EngineStore>((set, get) => ({
 
   createFromTemplate: async (template, name) => {
     const generated = createProjectFromTemplate(template, name);
-    const document = isGameStarterOrigin(generated.templateOrigin)
-      ? generated
-      : await seedStarterAssets(applyStarterVisuals(generated));
+    const document = usesMeadowArt(generated.templateOrigin)
+      ? await seedPlatformerAssets(generated)
+      : isGameStarterOrigin(generated.templateOrigin)
+        ? generated
+        : await seedStarterAssets(applyStarterVisuals(generated));
     await saveProjectDocument(document);
     set({
       document,
@@ -469,7 +471,10 @@ export async function createAndSaveProject(
   template: Exclude<TemplateOrigin, "brief" | "import">,
   name: string,
 ): Promise<ProjectDocument> {
-  const document = await seedStarterAssets(applyStarterVisuals(createProjectFromTemplate(template, name)));
+  const generated = createProjectFromTemplate(template, name);
+  const document = usesMeadowArt(generated.templateOrigin)
+    ? await seedPlatformerAssets(generated)
+    : await seedStarterAssets(applyStarterVisuals(generated));
   await saveProjectDocument(document);
   return document;
 }

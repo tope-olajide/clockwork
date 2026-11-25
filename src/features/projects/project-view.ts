@@ -20,6 +20,8 @@ export const TEMPLATE_LABELS: Record<TemplateOrigin, string> = {
   "brick-breaker": "Brick Breaker",
   "flappy-flyer": "Flappy Flyer",
   "platform-jumper": "Platform Jumper",
+  "meadow-run": "Clockwork Meadows",
+  "meadow-sandbox": "Meadow Sandbox",
   "endless-runner": "Endless Runner",
   "arena-survival": "Arena Survival",
   "falling-objects": "Falling Objects",
@@ -57,7 +59,7 @@ export function coverFor(template: TemplateOrigin): ProjectSummary["cover"] {
     template === "brick-breaker" ||
     template === "flappy-flyer"
   ) return "space";
-  if (template === "falling-objects") return "space";
+  if (template === "falling-objects" || template === "meadow-run" || template === "meadow-sandbox") return "space";
   if (template === "maze-escape" || template === "snake") return "puzzle";
   if (template === "puzzle") return "puzzle";
   if (template === "topdown" || template === "blank" || template === "brief" || template === "import") return "blank";

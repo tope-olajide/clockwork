@@ -16,6 +16,13 @@ import {
   validateScenarioSetup,
 } from "../src/engine/model/game-test-scenarios";
 
+/**
+ * Starters that deliberately have no built-in profile. Their Test Mode is
+ * derived from the project, so readouts for variables and tags added later
+ * (for example a score and coins) appear automatically.
+ */
+const DERIVED_PROFILE_STARTERS = new Set<string>(["meadow-sandbox"]);
+
 function shooterDocument() {
   return createGameStarterDocument("space-shooter", "Profile Shooter");
 }
@@ -46,7 +53,10 @@ test("profiles are resolved by templateOrigin and are not part of the document",
 test("every starter has a built-in profile that validates against its own document", () => {
   for (const id of GAME_STARTER_IDS) {
     const document = createGameStarterDocument(id, `Profile ${id}`);
-    const profile = getGameTestProfile(id);
+    if (DERIVED_PROFILE_STARTERS.has(id)) {
+      assert.equal(getGameTestProfile(id), undefined, `${id} must use the derived profile`);
+    }
+    const profile = DERIVED_PROFILE_STARTERS.has(id) ? gameTestProfileForDocument(document) : getGameTestProfile(id);
     assert.ok(profile, `${id} should have a registered profile`);
     const result = validateGameTestProfile(profile, { document });
     if (!result.ok) assert.fail(`${id}: ${result.errors.join("; ")}`);
@@ -57,7 +67,7 @@ test("every starter has a built-in profile that validates against its own docume
 
 test("every control maps to an existing logical action with a unique label", () => {
   for (const id of GAME_STARTER_IDS) {
-    const profile = getGameTestProfile(id);
+    const profile = gameTestProfileForDocument(createGameStarterDocument(id, "Controls"));
     assert.ok(profile);
     for (const control of profile.controls) {
       assert.ok((INPUT_ACTIONS as readonly string[]).includes(control.action), `${id}/${control.id} uses an unknown action`);
@@ -68,7 +78,7 @@ test("every control maps to an existing logical action with a unique label", () 
   }
 });
 
-test("profiles exist only for the 12 current starters", () => {
+test("profiles exist only for registered game starters", () => {
   for (const origin of ["blank", "brief", "import", "platformer", "topdown", "puzzle"] as const) {
     assert.equal(getGameTestProfile(origin), undefined, `${origin} must stay profile-less`);
   }

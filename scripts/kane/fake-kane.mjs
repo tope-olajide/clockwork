@@ -35,6 +35,11 @@ if (process.env.KANE_FIXTURE_NO_RUN_END === "1") {
   process.stderr.write("Error: could not start Chrome for this run.\n");
   process.exit(Number(process.env.KANE_FIXTURE_EXIT ?? 2));
 }
+// Models the real CLI lingering after its verdict (upload, browser teardown).
+const lingerAfterVerdict = async () => {
+  const ms = Number(process.env.KANE_FIXTURE_LINGER_MS ?? 0);
+  if (ms > 0) await sleep(ms);
+};
 
 if (args[0] === "testmd") {
   const summary = { overall_status: result, duration_s: 1.1, steps: { total: 2, passed: result === "passed" ? 2 : 1, failed: result === "passed" ? 0 : 1, skipped: 0, replay_decisions: 2, author_decisions: 0 } };
@@ -74,4 +79,5 @@ emit({
   session_dir: session,
   test_url: "http://localhost/fixture/test",
 });
+await lingerAfterVerdict();
 process.exit(exitCode);

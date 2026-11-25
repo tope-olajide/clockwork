@@ -1,7 +1,7 @@
 import type { Asset, GameObject, ProjectDocument } from "../model/schema";
 import { writeAssetBlob } from "../persistence/indexeddb";
 import { generateThumbnail, sha256Bytes } from "./asset-store";
-import { STARTER_ASSETS, STARTER_ASSET_IDS } from "./starter-manifest";
+import { PLATFORMER_ASSETS, STARTER_ASSETS, STARTER_ASSET_IDS } from "./starter-manifest";
 import { isGameStarterOrigin } from "../model/game-starters/catalog";
 
 async function fetchBlob(url: string): Promise<Blob> {
@@ -43,11 +43,11 @@ async function rasterizeSvg(blob: Blob, width: number, height: number): Promise<
  * than once: existing stable ids are skipped, and a single missing file never
  * prevents the project from being created.
  */
-export async function seedStarterAssets(document: ProjectDocument): Promise<ProjectDocument> {
+async function seedAssetSpecs(document: ProjectDocument, specs: typeof STARTER_ASSETS): Promise<ProjectDocument> {
   const existingIds = new Set(document.assets.map((asset) => asset.id));
   const added: Asset[] = [];
 
-  for (const spec of STARTER_ASSETS) {
+  for (const spec of specs) {
     if (existingIds.has(spec.id)) continue;
     try {
       const source = await fetchBlob(spec.url);
@@ -65,7 +65,7 @@ export async function seedStarterAssets(document: ProjectDocument): Promise<Proj
         width: spec.width,
         height: spec.height,
         size: blob.size,
-        tags: ["starter"],
+        tags: ["starter", ...(spec.tags ?? [])],
         thumbnail: spec.kind === "image" ? await generateThumbnail(blob, "image/png") : undefined,
         slices: spec.slices,
         animations: spec.animations,
@@ -82,6 +82,16 @@ export async function seedStarterAssets(document: ProjectDocument): Promise<Proj
     document.assets = [...document.assets, ...added];
   }
   return document;
+}
+
+/** Seeds only the bundled starter art used by the legacy templates. */
+export async function seedStarterAssets(document: ProjectDocument): Promise<ProjectDocument> {
+  return seedAssetSpecs(document, STARTER_ASSETS);
+}
+
+/** Seeds the original platformer art pack without rewriting a hand-authored starter. */
+export async function seedPlatformerAssets(document: ProjectDocument): Promise<ProjectDocument> {
+  return seedAssetSpecs(document, PLATFORMER_ASSETS);
 }
 
 function sprite(object: GameObject, assetId: string, width: number, height: number): void {

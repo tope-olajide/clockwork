@@ -11,8 +11,22 @@ function trimText(text: string, maxChars: number) {
   return text.slice(0, Math.max(0, maxChars - 40)) + "\n…[trimmed]";
 }
 
-const MAX_TOOL_RESULT_CHARS = 12000;
+// The full command + behaviour reference is ~17.5k chars; the overall request
+// is still bounded by the model's context window via historyBudget below.
+const MAX_TOOL_RESULT_CHARS = 20000;
 const MAX_MESSAGE_CHARS = 8000;
+const toolSupportCache = new Map<string, boolean>();
+const MAX_OUTPUT_TOKENS = Math.max(1024, Math.min(32_768, Number(process.env.AI_MAX_OUTPUT_TOKENS) || 8192));
+
+/** Tool arguments that are not valid JSON are flagged, never executed half-parsed. */
+function parseToolArgs(raw: string, truncated: boolean): unknown {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { _invalidJson: true, _truncated: truncated, _length: raw.length };
+  }
+}
 const MAX_HISTORY_MESSAGES = 24;
 
 /**
@@ -41,7 +55,9 @@ function toOpenAIMessages(req: StepRequest, maxContextChars: number, visionEnabl
     if (m.role === "tool") {
       text = trimText(text, MAX_TOOL_RESULT_CHARS);
       if (!visionEnabled) text = text.replace(/\[image attached\]/g, "[image omitted: vision not supported]");
-      text = trimText(text, Math.min(MAX_MESSAGE_CHARS, room));
+      // Tool results get their own (larger) cap; the 8k message cap cut
+      // list_commands in half and hid the variable/hud/behavior commands.
+      text = trimText(text, Math.min(MAX_TOOL_RESULT_CHARS, room));
       history.push({ role: "tool", tool_call_id: m.toolCallId ?? "tool_call", content: text });
     } else if (m.role === "assistant") {
       text = trimText(text, Math.min(MAX_MESSAGE_CHARS, room));
@@ -82,7 +98,11 @@ async function probeToolSupport(url: string, apiKey: string, model: string, sign
     tool_choice: "auto",
   };
 
-  const timeoutMs = 3000;
+  // Thinking models (qwen4-max, kimi-k3) take several seconds to send a first
+  // byte. A 3 s timeout that answered "no tools" silently stripped every tool
+  // from the real request, so the agent could only talk. Only a clear signal
+  // now disables tools; timeouts and unrelated errors fail open.
+  const timeoutMs = 10_000;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   // If the parent request is already aborted, abort probe too
@@ -96,13 +116,19 @@ async function probeToolSupport(url: string, apiKey: string, model: string, sign
       signal: ac.signal,
     });
 
-    if (!res.ok || !res.body) return false;
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      // e.g. max_tokens=1 or temperature rejected: says nothing about tools.
+      return !/tool|function/i.test(text);
+    }
+    if (!res.body) return true;
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let got = false;
 
-    // Read for up to timeoutMs; if we get any SSE data line, tools are supported
+    // A stream that ends with no data line at all is the gateway-hang case the
+    // probe exists for; any data line means tools are accepted.
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -112,8 +138,8 @@ async function probeToolSupport(url: string, apiKey: string, model: string, sign
     reader.cancel().catch(() => {});
     return got;
   } catch {
-    // Timeout, abort, or network error — assume tools not supported
-    return false;
+    // Timeout, abort or network error: we cannot tell, so fail open.
+    return true;
   } finally {
     clearTimeout(timer);
   }
@@ -153,7 +179,9 @@ export async function* openAICompatibleStream(opts: {
     model,
     stream: true,
     temperature: 0.2,
-    max_tokens: 1400,
+    // 1400 tokens cut multi-object apply_commands batches off mid-JSON, so the
+    // edit failed on every attempt. Override with AI_MAX_OUTPUT_TOKENS.
+    max_tokens: MAX_OUTPUT_TOKENS,
     messages: toOpenAIMessages(req, maxContextChars, visionEnabled),
   };
 
@@ -163,8 +191,12 @@ export async function* openAICompatibleStream(opts: {
   // within 3 s, the gateway doesn't support tools and we skip them.
   let sendTools = tools.length > 0;
   if (sendTools) {
-    const supported = await probeToolSupport(url, apiKey, model, opts.signal);
-    if (!supported) sendTools = false;
+    // A model that supported tools once still does; only probe until it passes.
+    const probeKey = `${url}|${model}`;
+    const supported = toolSupportCache.get(probeKey) ?? await probeToolSupport(url, apiKey, model, opts.signal);
+    if (supported) toolSupportCache.set(probeKey, true);
+    else sendTools = false;
+    if (!supported) console.log(`[ai-step] tool probe failed for ${model}; sending without tools`);
   }
 
   const body: Record<string, unknown> = { ...baseBody };
@@ -173,12 +205,26 @@ export async function* openAICompatibleStream(opts: {
     body.tool_choice = "auto";
   }
 
-  const response = await fetch(url, {
+  const post = (payload: Record<string, unknown>) => fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
     signal: opts.signal,
   });
+  let response = await post(body);
+
+  // Some models (e.g. kimi-k3) reject sampling parameters outright. Retry once
+  // without the parameter the provider named instead of failing every turn.
+  if (response.status === 400) {
+    const text = await response.clone().text().catch(() => "");
+    const rejected = ["temperature", "max_tokens"].filter((param) => new RegExp(`${param}.{0,80}not supported|unsupported.{0,80}${param}`, "i").test(text));
+    if (rejected.length) {
+      const retry = { ...body };
+      for (const param of rejected) delete retry[param];
+      if (rejected.includes("max_tokens")) retry.max_completion_tokens = MAX_OUTPUT_TOKENS;
+      response = await post(retry);
+    }
+  }
 
   if (!response.ok || !response.body) {
     const text = await response.text().catch(() => "");
@@ -197,6 +243,12 @@ async function* streamSSE(response: Response, withTools: boolean): AsyncGenerato
   let buffer = "";
   const toolCalls = new Map<number, { id: string; name: string; args: string }>();
   let sawToolCall = false;
+  let finishReason = "";
+  let contentChars = 0;
+  let reasoningChars = 0;
+  // One line per model step, so a stalled turn can be diagnosed (empty output,
+  // output-limit cut-off, or text that only lives in a reasoning field).
+  const logStep = () => console.log(`[ai-step] tools=${withTools} finish=${finishReason || "none"} content=${contentChars} reasoning=${reasoningChars} toolCalls=${toolCalls.size} names=${[...toolCalls.values()].map((tc) => `${tc.name}(${tc.args.length})`).join(",")}`);
 
   while (true) {
     const { value, done } = await reader.read();
@@ -210,23 +262,33 @@ async function* streamSSE(response: Response, withTools: boolean): AsyncGenerato
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") {
         for (const [, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
-          let parsed: unknown = {};
-          try { parsed = tc.args ? JSON.parse(tc.args) : {}; } catch { parsed = { _raw: tc.args }; }
+          const parsed = parseToolArgs(tc.args, finishReason === "length");
           yield ndjson({ type: "tool_call", callId: tc.id || `call_${Date.now()}`, name: tc.name, args: parsed });
         }
+        logStep();
         yield ndjson({ type: "step_end", finishReason: sawToolCall || toolCalls.size > 0 ? "tool-calls" : "stop" });
         return;
       }
       let json: any;
       try { json = JSON.parse(data); } catch { continue; }
-      const delta = json?.choices?.[0]?.delta;
+      const choiceFinish = json?.choices?.[0]?.finish_reason;
+      if (typeof choiceFinish === "string" && choiceFinish) finishReason = choiceFinish;
+      const delta = json?.choices?.[0]?.delta ?? json?.choices?.[0]?.message;
       if (!delta) continue;
       if (typeof delta.content === "string" && delta.content) {
+        contentChars += delta.content.length;
         yield ndjson({ type: "text_delta", text: delta.content });
       }
-      if (withTools && Array.isArray(delta.tool_calls)) {
+      const reasoning = delta.reasoning_content ?? delta.reasoning;
+      if (typeof reasoning === "string") reasoningChars += reasoning.length;
+      // Parse tool calls whenever the provider sends them. Gating on the probe
+      // result dropped real calls when the 3 s probe timed out; some providers
+      // also deliver them in a final `message` block instead of the delta.
+      const messageCalls = json?.choices?.[0]?.message?.tool_calls;
+      const deltaCalls = Array.isArray(delta.tool_calls) ? delta.tool_calls : Array.isArray(messageCalls) ? messageCalls : null;
+      if (deltaCalls) {
         sawToolCall = true;
-        for (const tc of delta.tool_calls) {
+        for (const tc of deltaCalls) {
           const idx = typeof tc.index === "number" ? tc.index : 0;
           const entry = toolCalls.get(idx) ?? { id: "", name: "", args: "" };
           if (tc.id) entry.id = tc.id;
@@ -256,9 +318,9 @@ async function* streamSSE(response: Response, withTools: boolean): AsyncGenerato
   }
 
   for (const [, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
-    let parsed: unknown = {};
-    try { parsed = tc.args ? JSON.parse(tc.args) : {}; } catch { parsed = { _raw: tc.args }; }
+    const parsed = parseToolArgs(tc.args, finishReason === "length");
     yield ndjson({ type: "tool_call", callId: tc.id || `call_${Date.now()}`, name: tc.name, args: parsed });
   }
+  logStep();
   yield ndjson({ type: "step_end", finishReason: sawToolCall || toolCalls.size > 0 ? "tool-calls" : "stop" });
 }

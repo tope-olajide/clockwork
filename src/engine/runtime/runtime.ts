@@ -27,6 +27,9 @@ export interface RuntimeObject {
   source: GameObject;
   x: number;
   y: number;
+  /** Position at the start of the current fixed step, used for render interpolation. */
+  previousX: number;
+  previousY: number;
   rotation: number;
   scaleX: number;
   scaleY: number;
@@ -80,6 +83,13 @@ function boolParam(params: Record<string, unknown>, key: string, fallback: boole
 function stringParam(params: Record<string, unknown>, key: string, fallback: string): string {
   const value = params[key];
   return typeof value === "string" ? value : fallback;
+}
+
+function moveToward(current: number, target: number, maxDelta: number): number {
+  if (maxDelta <= 0) return target;
+  if (current < target) return Math.min(target, current + maxDelta);
+  if (current > target) return Math.max(target, current - maxDelta);
+  return target;
 }
 
 function bodyDims(object: GameObject): { w: number; h: number } {
@@ -189,6 +199,8 @@ export class Runtime {
   elapsed = 0;
   status: "running" | "paused" | "won" | "lost" | "stopped" = "running";
   camera = { x: 0, y: 0, zoom: 1 };
+  /** Camera at the start of the current fixed step, used for render interpolation. */
+  previousCamera = { x: 0, y: 0, zoom: 1 };
   viewport = { width: 1280, height: 720 };
   checkpoint = { x: 0, y: 0 };
   lastError: string | null = null;
@@ -215,6 +227,8 @@ export class Runtime {
       source: structuredClone(source),
       x: source.transform.x,
       y: source.transform.y,
+      previousX: source.transform.x,
+      previousY: source.transform.y,
       rotation: source.transform.rotation,
       scaleX: source.transform.scaleX,
       scaleY: source.transform.scaleY,
@@ -244,6 +258,7 @@ export class Runtime {
     this.checkpoint = player ? { x: player.x, y: player.y } : { x: 0, y: 0 };
     this.camera = { x: player?.x ?? this.scene.camera.x, y: player?.y ?? this.scene.camera.y, zoom: this.scene.camera.zoom };
     this.clampCamera();
+    this.previousCamera = { ...this.camera };
     this.frame = 0;
     this.elapsed = 0;
     this.status = "running";
@@ -331,15 +346,35 @@ export class Runtime {
     return result;
   }
 
+  /** Remember the frame we are rendering from, for smooth interpolation. */
+  private captureInterpolationState(): void {
+    this.previousCamera = { ...this.camera };
+    for (const object of this.objects) {
+      object.previousX = object.x;
+      object.previousY = object.y;
+    }
+  }
+
+  /** After a teleport, do not interpolate across the whole map. */
+  snapInterpolation(): void {
+    this.previousCamera = { ...this.camera };
+    for (const object of this.objects) {
+      object.previousX = object.x;
+      object.previousY = object.y;
+    }
+  }
+
   step(input: InputFrame = emptyInput()): void {
     if (this.status !== "running") return;
     try {
+      this.captureInterpolationState();
       this.recordedInputs.push({ ...input });
       this.frame += 1;
       this.elapsed += FIXED_DT;
       this.updateBehaviors(input);
       this.integratePhysics();
       this.checkProjectileHits();
+      this.checkStomps();
       this.checkDamageContacts();
       this.checkInteractions();
       this.evaluateRules(input);
@@ -365,13 +400,21 @@ export class Runtime {
       if (controller) {
         const params = controller.params;
         const speed = numberParam(params, "speed", 280);
+        const acceleration = Math.max(0, numberParam(params, "accel", 0));
+        const deceleration = Math.max(0, numberParam(params, "decel", 0));
         const jumpVelocity = numberParam(params, "jumpVelocity", numberParam(params, "jump", 640));
+        const jumpCut = Math.max(0, Math.min(1, numberParam(params, "jumpCut", 1)));
         const airJumpCount = Math.max(0, Math.round(numberParam(params, "maxAirJumps", boolParam(params, "doubleJump", false) ? 1 : 0)));
         const coyoteMs = numberParam(params, "coyoteMs", 100);
         const bufferMs = numberParam(params, "bufferMs", 120);
         const gravityScale = numberParam(params, "gravityScale", 1);
         const maxFallSpeed = numberParam(params, "maxFallSpeed", 1400);
-        object.vx = input.left ? -speed : input.right ? speed : 0;
+        const targetVelocity = input.left ? -speed : input.right ? speed : 0;
+        const rate = targetVelocity === 0 ? deceleration : acceleration;
+        object.vx = rate > 0 ? moveToward(object.vx, targetVelocity, rate * FIXED_DT) : targetVelocity;
+        // Art is drawn facing right, so mirror the sprite when walking left.
+        // The collision body is a separate axis-aligned box and is unaffected.
+        if (Math.abs(object.vx) > 8) object.scaleX = object.vx < 0 ? -1 : 1;
         if (object.grounded) {
           object.coyoteMs = coyoteMs;
           object.airJumps = airJumpCount;
@@ -380,6 +423,9 @@ export class Runtime {
         }
         if (input.jumpPressed) object.jumpBufferMs = bufferMs;
         else object.jumpBufferMs = Math.max(0, object.jumpBufferMs - FIXED_DT * 1000);
+        if (input.jumpReleased && object.vy < 0 && jumpCut < 1) {
+          object.vy *= jumpCut;
+        }
         if (object.jumpBufferMs > 0) {
           if (object.grounded || object.coyoteMs > 0) {
             object.vy = -jumpVelocity;
@@ -421,10 +467,16 @@ export class Runtime {
         const period = (distance * 2) / Math.max(1, speed);
         const phase = (this.elapsed % period) / period;
         const offset = phase <= 0.5 ? phase * 2 * distance : (1 - phase) * 2 * distance;
+        const previousBox = boxOf(object);
+        const previousX = object.x;
+        const previousY = object.y;
         if (axis === "x") object.x = object.spawnX + offset;
         else object.y = object.spawnY + offset;
         object.vx = 0;
         object.vy = 0;
+        if (object.source.body?.type === "kinematic") {
+          this.carryRiders(object, previousBox, object.x - previousX, object.y - previousY);
+        }
       }
 
       const follow = behaviorOf(object.source, "follow");
@@ -1345,6 +1397,24 @@ export class Runtime {
     }
   }
 
+  private carryRiders(
+    platform: RuntimeObject,
+    previousBox: { left: number; top: number; right: number; bottom: number },
+    dx: number,
+    dy: number,
+  ): void {
+    if (dx === 0 && dy === 0) return;
+    for (const rider of this.objects) {
+      if (!rider.active || rider === platform || rider.source.body?.type !== "dynamic" || !rider.grounded) continue;
+      const box = boxOf(rider);
+      const standingOnTop = box.bottom >= previousBox.top - 4 && box.bottom <= previousBox.top + 5;
+      const overlappingX = box.left < previousBox.right && box.right > previousBox.left;
+      if (!standingOnTop || !overlappingX) continue;
+      rider.x += dx;
+      rider.y += dy;
+    }
+  }
+
   private checkProjectileHits(): void {
     for (const bullet of this.objects) {
       if (!bullet.active) continue;
@@ -1364,6 +1434,38 @@ export class Runtime {
       if (!target) continue;
       this.damageObject(target, damage);
       if (boolParam(projectile.params, "destroyOnHit", true)) bullet.active = false;
+    }
+  }
+
+  private checkStomps(): void {
+    const player = this.player();
+    if (!player || player.vy <= 0 || !player.active) return;
+    const playerBox = boxOf(player);
+    const halfHeight = bodyDims(player.source).h / 2;
+    for (const object of this.objects) {
+      if (!object.active || object === player) continue;
+      const stomp = behaviorOf(object.source, "stompable");
+      if (!stomp || !overlaps(player, object)) continue;
+      const enemyBox = boxOf(object);
+      const landedOnTop =
+        player.y < object.y &&
+        playerBox.bottom - enemyBox.top <= Math.max(18, Math.min(40, halfHeight * 0.45));
+      if (!landedOnTop) continue;
+
+      const scoreVariable = stringParam(stomp.params, "scoreVariable", "score");
+      const scoreAmount = numberParam(stomp.params, "scoreAmount", 50);
+      if (scoreVariable && scoreAmount) this.setVariable(scoreVariable, "add", scoreAmount);
+      const bounce = Math.max(0, numberParam(stomp.params, "bounce", 420));
+      const offsetY = player.source.body?.offsetY ?? 0;
+      player.y = enemyBox.top - offsetY - halfHeight - 1;
+      player.vy = -bounce;
+      player.grounded = false;
+      player.jumpBufferMs = 0;
+      this.damageObject(object, Number.MAX_SAFE_INTEGER);
+      const sfx = stringParam(stomp.params, "sfxAssetId", "");
+      if (sfx) void playAssetSound(sfx, effectiveVolume(this.document.settings.audio.masterVolume, this.document.settings.audio.sfxVolume));
+      this.event("stomp", `${player.source.name} stomped ${object.source.name}`, object.source.id);
+      return;
     }
   }
 
@@ -1403,12 +1505,22 @@ export class Runtime {
     if (boolParam(health.params, "respawnOnHit", false) && deathVariable && Number(this.variables[deathVariable]) > 0) {
       object.active = true;
       object.hp = Math.max(1, numberParam(health.params, "max", 1));
-      object.x = object.spawnX;
-      object.y = object.spawnY;
+      const respawn = boolParam(health.params, "respawnAtCheckpoint", false) ? this.checkpoint : { x: object.spawnX, y: object.spawnY };
+      object.x = respawn.x;
+      object.y = respawn.y;
       object.vx = 0;
       object.vy = 0;
+      object.grounded = false;
+      object.animationKey = "";
       object.invulnMs = Math.max(0, numberParam(health.params, "invulnMs", 0));
       if (variable) this.variables[variable] = object.hp;
+      this.snapInterpolation();
+      const respawnMessage = stringParam(health.params, "respawnMessage", "");
+      if (respawnMessage) this.message(respawnMessage, 1400);
+      const damageSfx = stringParam(health.params, "damageSfxAssetId", "");
+      if (damageSfx) {
+        void playAssetSound(damageSfx, effectiveVolume(this.document.settings.audio.masterVolume, this.document.settings.audio.sfxVolume));
+      }
       this.event("respawn", `${object.source.name} respawned`, object.source.id);
       return;
     }
@@ -1501,6 +1613,56 @@ export class Runtime {
     }
   }
 
+  /** World y of the base of a ground-standing object (collider first, art otherwise). */
+  private objectBaseY(object: RuntimeObject): number {
+    const body = object.source.body;
+    if (body) return object.y + body.offsetY + body.height / 2;
+    return object.y + bodyDims(object.source).h / 2;
+  }
+
+  /** Centre position for a player standing on `baseY`. */
+  private standingPointFor(player: RuntimeObject, x: number, baseY: number): { x: number; y: number } {
+    const body = player.source.body;
+    const height = body?.height ?? bodyDims(player.source).h;
+    const offsetY = body?.offsetY ?? 0;
+    return { x, y: baseY - offsetY - height / 2 };
+  }
+
+  private activateCheckpoint(
+    object: RuntimeObject,
+    checkpoint: NonNullable<ReturnType<typeof behaviorOf>>,
+    player: RuntimeObject,
+  ): void {
+    if (this.lastCheckpointId === object.source.id) return;
+    this.lastCheckpointId = object.source.id;
+    const params = checkpoint.params;
+    if (!object.source.tags.includes("checkpoint-active")) object.source.tags.push("checkpoint-active");
+
+    // A checkpoint can visibly react without a special-case renderer: swap the
+    // sprite frame and/or recolour shape art. Both survive restart because the
+    // runtime clones source objects on reset.
+    const visual = object.source.visual;
+    const activeFrame = params.activeFrame;
+    if (visual?.kind === "sprite" && typeof activeFrame === "number" && Number.isFinite(activeFrame)) {
+      visual.frame = Math.max(0, Math.round(activeFrame));
+      // Static activation art must not be overwritten by an idle animation.
+      object.source.animations = undefined;
+    }
+    const activeColor = stringParam(params, "activeColor", "");
+    if (activeColor) {
+      if (visual?.kind === "shape") for (const shape of visual.shapes) shape.color = activeColor;
+      else if (visual?.kind === "rect") visual.color = activeColor;
+      else if (visual?.kind === "sprite") visual.tint = activeColor;
+    }
+
+    this.checkpoint = this.standingPointFor(player, object.x, this.objectBaseY(object));
+    this.snapInterpolation();
+    this.message(stringParam(params, "message", "Checkpoint reached"), 1800);
+    this.event("checkpoint", `${object.source.name} reached`, object.source.id);
+    const sfx = stringParam(params, "sfxAssetId", "");
+    if (sfx) void playAssetSound(sfx, effectiveVolume(this.document.settings.audio.masterVolume, this.document.settings.audio.sfxVolume));
+  }
+
   private checkInteractions(): void {
     const player = this.player();
     if (!player) return;
@@ -1512,6 +1674,8 @@ export class Runtime {
         const variable = stringParam(params, "variable", "coins");
         const amount = numberParam(params, "amount", 1);
         this.setVariable(variable, "add", amount);
+        const countVariable = stringParam(params, "countVariable", "");
+        if (countVariable) this.setVariable(countVariable, "add", numberParam(params, "countAmount", 1));
         if (boolParam(params, "destroyOnCollect", true)) object.active = false;
         const sfx = stringParam(params, "sfxAssetId", "");
         if (sfx) void playAssetSound(sfx, effectiveVolume(this.document.settings.audio.masterVolume, this.document.settings.audio.sfxVolume));
@@ -1525,17 +1689,14 @@ export class Runtime {
           player.y = this.checkpoint.y;
           player.vx = 0;
           player.vy = 0;
+          this.snapInterpolation();
           this.event("respawn", `${player.source.name} respawned`, player.source.id);
         }
         continue;
       }
       const checkpoint = behaviorOf(object.source, "checkpoint");
       if (checkpoint && overlaps(player, object) && !object.source.tags.includes("goal")) {
-        this.checkpoint = { x: player.x, y: player.y };
-        if (this.lastCheckpointId !== object.source.id) {
-          this.lastCheckpointId = object.source.id;
-          this.event("checkpoint", `${object.source.name} reached`, object.source.id);
-        }
+        this.activateCheckpoint(object, checkpoint, player);
       }
     }
   }
@@ -1649,6 +1810,8 @@ export class Runtime {
         source: clone,
         x: clone.transform.x,
         y: clone.transform.y,
+        previousX: clone.transform.x,
+        previousY: clone.transform.y,
         rotation: clone.transform.rotation,
         scaleX: clone.transform.scaleX,
         scaleY: clone.transform.scaleY,
@@ -1715,11 +1878,38 @@ export class Runtime {
       const deadzoneY = numberParam(params, "deadzoneY", 60);
       const lerp = numberParam(params, "lerp", numberParam(params, "damping", 0.12));
       const offsetY = numberParam(params, "offsetY", 0);
-      if (Math.abs(target.x - this.camera.x) > deadzoneX) {
-        this.camera.x += (target.x - this.camera.x) * lerp;
+      // Ease toward the deadzone edge, not the target centre. Easing toward the
+      // centre and stopping once back inside the zone made the camera start and
+      // stop every few frames while running, which shows up as animation stutter.
+      const gapX = target.x - this.camera.x;
+      if (Math.abs(gapX) > deadzoneX) {
+        this.camera.x += (gapX - Math.sign(gapX) * deadzoneX) * lerp;
       }
-      if (Math.abs(target.y + offsetY - this.camera.y) > deadzoneY) {
-        this.camera.y += (target.y + offsetY - this.camera.y) * lerp;
+      let desiredY = target.y + offsetY;
+      let zoneY = deadzoneY;
+      // Optional floor line: while the target is up on a ledge, aim lower so the
+      // ground (and hazards on it) stay in view. `floorMargin` pixels of the
+      // viewport are kept below `floorY`, but never at the cost of the target:
+      // its top always stays `floorTopMargin` pixels inside the view, so on
+      // short viewports the camera still follows the jump upward. This adjusts
+      // the follow target rather than pushing the camera afterwards, so there is
+      // a single easing and nothing fights the normal follow.
+      const floorY = numberParam(params, "floorY", 0);
+      if (floorY > 0) {
+        const halfH = this.viewport.height / 2 / (this.scene.camera.zoom || 1);
+        const floorMargin = numberParam(params, "floorMargin", 200);
+        const topMargin = numberParam(params, "floorTopMargin", 120);
+        const showFloor = floorY + floorMargin - halfH;
+        const keepTargetVisible = boxOf(target).top - topMargin + halfH;
+        const lowest = Math.min(showFloor, keepTargetVisible);
+        if (desiredY < lowest) {
+          desiredY = lowest;
+          zoneY = 0;
+        }
+      }
+      const gapY = desiredY - this.camera.y;
+      if (Math.abs(gapY) > zoneY) {
+        this.camera.y += (gapY - Math.sign(gapY) * zoneY) * lerp;
       }
       if (boolParam(params, "clampToWorld", true)) this.clampCamera();
       this.camera.zoom = this.scene.camera.zoom;
@@ -1736,8 +1926,14 @@ export class Runtime {
       if (!object.active) continue;
       const assignments = object.source.animations;
       if (!assignments || object.source.visual?.kind !== "sprite") continue;
-      const key = !object.grounded ? "jump" : Math.abs(object.vx) > 1 ? "run" : "idle";
-      const animationId = assignments[key as keyof typeof assignments] ?? assignments.idle;
+      const key = object.invulnMs > 0 && assignments.hurt
+        ? "hurt"
+        : !object.grounded
+          ? (object.vy < 0 ? "jump" : "fall")
+          : Math.abs(object.vx) > 1
+            ? "run"
+            : "idle";
+      const animationId = assignments[key as keyof typeof assignments] ?? (key === "fall" ? assignments.jump : undefined) ?? assignments.idle;
       if (!animationId) continue;
       const visual = object.source.visual;
       if (visual.kind !== "sprite") continue;
@@ -1755,7 +1951,13 @@ export class Runtime {
     }
   }
 
-  renderScene(): Scene {
+  /**
+   * World scene for the renderer at a fractional step `alpha` (0..1). Physics
+   * stays on the fixed step; interpolating only the drawn transform keeps motion
+   * smooth on displays faster than 60 Hz and removes the 60 Hz shiver.
+   */
+  renderScene(alpha = 1): Scene {
+    const t = Math.max(0, Math.min(1, alpha));
     return {
       ...this.scene,
       objects: this.objects
@@ -1765,19 +1967,33 @@ export class Runtime {
             object.source.visual?.kind === "sprite" && object.animationFrame !== undefined
               ? { ...object.source.visual, frame: object.animationFrame }
               : object.source.visual;
+          // A large jump means a teleport/respawn; never draw a streak across it.
+          const teleported = Math.abs(object.x - object.previousX) > 400 || Math.abs(object.y - object.previousY) > 400;
+          const x = teleported ? object.x : object.previousX + (object.x - object.previousX) * t;
+          const y = teleported ? object.y : object.previousY + (object.y - object.previousY) * t;
           return {
             ...object.source,
             visual,
             transform: {
               ...object.source.transform,
-              x: object.x,
-              y: object.y,
+              x,
+              y,
               rotation: object.rotation,
               scaleX: object.scaleX,
               scaleY: object.scaleY,
             },
           };
         }),
+    };
+  }
+
+  /** Interpolated camera for the same fractional step as `renderScene`. */
+  cameraView(alpha = 1): { x: number; y: number; zoom: number } {
+    const t = Math.max(0, Math.min(1, alpha));
+    return {
+      x: this.previousCamera.x + (this.camera.x - this.previousCamera.x) * t,
+      y: this.previousCamera.y + (this.camera.y - this.previousCamera.y) * t,
+      zoom: this.camera.zoom,
     };
   }
 

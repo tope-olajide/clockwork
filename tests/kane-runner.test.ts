@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import type { AiPlayResult } from "../shared/protocol/kane";
@@ -8,7 +8,7 @@ import { startKaneRun, toResult } from "../server/kane/runner";
 const fakeKane = join(process.cwd(), "scripts", "kane", "fake-kane.mjs");
 const evidenceRoot = ".data/kane-runner-tests";
 
-async function runFake(env: Record<string, string>): Promise<AiPlayResult> {
+async function runFake(env: Record<string, string>, extra: Partial<Parameters<typeof startKaneRun>[0]> = {}): Promise<AiPlayResult> {
   const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   for (const [key, value] of Object.entries(env)) process.env[key] = value;
   try {
@@ -16,6 +16,7 @@ async function runFake(env: Record<string, string>): Promise<AiPlayResult> {
       objective: "Runner fixture objective",
       url: "http://localhost:3000/s/fixture?ai=1&seed=1234",
       evidenceRoot,
+      ...extra,
     });
     for await (const event of run.events) {
       if (event.type === "run_end") return event.result;
@@ -103,4 +104,40 @@ test("an exit code alone never yields a verdict without a run_end", () => {
   assert.equal(toResult({ ...base, exitCode: 0, hasRunEnd: false }).status, "error");
   assert.equal(toResult({ ...base, exitCode: 1, hasRunEnd: false }).status, "failed");
   assert.equal(toResult({ ...base, exitCode: 0, hasRunEnd: true }).status, "passed");
+});
+
+test("a verdict that arrives before the process exits survives the cleanup kill", async () => {
+  // The captured failure: Kane emitted run_end, then kept running (upload,
+  // browser teardown) until Clockwork killed it and discarded the verdict.
+  const started = Date.now();
+  const result = await runFake({ KANE_FIXTURE_RESULT: "passed", KANE_FIXTURE_LINGER_MS: "5000" }, { exitGraceMs: 300 });
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.reasonCode, "Objective completed");
+  assert.doesNotMatch(result.summary, /without a run_end/);
+  assert.ok(Date.now() - started < 4000, "the lingering process should be stopped after the grace period");
+  const lifecycle = JSON.parse(readFileSync(join(evidenceRoot, result.runId, "lifecycle.json"), "utf8"));
+  assert.equal(lifecycle.killedAfterVerdict, true);
+  assert.equal(lifecycle.timedOut, false);
+  assert.ok(lifecycle.verdictAtMs !== null && lifecycle.verdictAtMs < lifecycle.exitedAtMs);
+});
+
+test("a wall-clock timeout that fires after the verdict does not override it", async () => {
+  // 30 s Kane budget minus 29.4 s allowance = a 0.6 s wall budget that expires
+  // while the fixture is still lingering after its run_end.
+  const result = await runFake(
+    { KANE_FIXTURE_RESULT: "failed", KANE_FIXTURE_LINGER_MS: "2000" },
+    { timeoutSeconds: 30, startupAllowanceSeconds: -29.4, exitGraceMs: 10_000 },
+  );
+
+  assert.equal(result.status, "failed");
+  assert.match(result.summary, /all-coins assertion failed/);
+});
+
+test("a run with no verdict still times out as cancelled", async () => {
+  const result = await runFake(
+    { KANE_FIXTURE_NO_RUN_END: "1", KANE_FIXTURE_EXIT: "0" },
+    { timeoutSeconds: 30, startupAllowanceSeconds: -29.98 },
+  );
+  assert.notEqual(result.status, "passed");
 });

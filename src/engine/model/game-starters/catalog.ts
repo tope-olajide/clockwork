@@ -8,6 +8,8 @@ export const GAME_STARTER_IDS = [
   "brick-breaker",
   "flappy-flyer",
   "platform-jumper",
+  "meadow-run",
+  "meadow-sandbox",
   "endless-runner",
   "arena-survival",
   "falling-objects",
@@ -24,6 +26,7 @@ export interface GameStarterSpec {
   blurb: string;
   mechanics: string;
   accent: string;
+  cover?: string;
 }
 
 export const GAME_STARTERS: GameStarterSpec[] = [
@@ -84,6 +87,24 @@ export const GAME_STARTERS: GameStarterSpec[] = [
     accent: "#a9b4ff",
   },
   {
+    id: "meadow-run",
+    name: "Clockwork Meadows",
+    category: "Platformer",
+    blurb: "A full side-scrolling stage: run the meadow, stomp dragons, light checkpoints, and reach the summit camp.",
+    mechanics: "A / D run, Space jump. Moving platforms, shards, lives, checkpoints, a boss-length stage and a real finish.",
+    accent: "#8fe3c0",
+    cover: "/platformer/cover.png",
+  },
+  {
+    id: "meadow-sandbox",
+    name: "Meadow Sandbox",
+    category: "Platformer",
+    blurb: "The Clockwork Meadows hero, art and parallax on a short, empty stage. A clean canvas to build on.",
+    mechanics: "A / D run, Space jump. One unbroken floor and three easy ledges; no coins, enemies, hazards or HUD yet.",
+    accent: "#8fe3c0",
+    cover: "/platformer/cover.png",
+  },
+  {
     id: "endless-runner",
     name: "Endless Runner",
     category: "Arcade",
@@ -127,6 +148,11 @@ export const GAME_STARTERS: GameStarterSpec[] = [
 
 export function isGameStarterId(value: string): value is GameStarterId {
   return (GAME_STARTER_IDS as readonly string[]).includes(value);
+}
+
+/** Starters built on the Clockwork Meadows art pack (seeded at creation). */
+export function usesMeadowArt(origin: TemplateOrigin): boolean {
+  return origin === "meadow-run" || origin === "meadow-sandbox";
 }
 
 /** New starters use primitive art, so the starter sprite upgrade must not run. */

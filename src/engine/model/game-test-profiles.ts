@@ -412,6 +412,72 @@ export const BUILT_IN_PROFILES: Partial<Record<TemplateOrigin, GameTestProfile>>
     scenarioIds: [],
   },
 
+  "meadow-run": {
+    version: 1,
+    controls: [
+      {
+        id: "move-left",
+        label: "MOVE LEFT",
+        action: "left",
+        mode: "hold",
+        description: "Moves Marlow left while held.",
+      },
+      {
+        id: "move-right",
+        label: "MOVE RIGHT",
+        action: "right",
+        mode: "hold",
+        description: "Moves Marlow right while held.",
+      },
+      {
+        id: "jump",
+        label: "JUMP",
+        action: "jump",
+        mode: "pulse",
+        description: "Jumps when grounded. The authored platformer controller reads the jump action.",
+      },
+    ],
+    observations: [
+      { id: "status", label: "STATUS", source: "status" },
+      { id: "score", label: "SCORE", source: "variable", key: "score" },
+      { id: "shards", label: "SHARDS", source: "variable", key: "shards" },
+      { id: "lives", label: "LIVES", source: "variable", key: "lives" },
+      { id: "health", label: "HEALTH", source: "variable", key: "health" },
+      { id: "marlow-x", label: "MARLOW X", source: "player", key: "x" },
+      { id: "marlow-y", label: "MARLOW Y", source: "player", key: "y" },
+      { id: "grounded", label: "GROUNDED", source: "player", key: "grounded" },
+      { id: "jumps", label: "JUMPS", source: "event-count", key: "jump" },
+      { id: "collected", label: "COLLECTED", source: "event-count", key: "collect" },
+      { id: "checkpoints", label: "CHECKPOINTS", source: "event-count", key: "checkpoint" },
+      { id: "stomps", label: "STOMPS", source: "event-count", key: "stomp" },
+      { id: "damage-events", label: "DAMAGE EVENTS", source: "event-count", key: "damage" },
+      { id: "shard-count", label: "SHARD OBJECTS", source: "tag-count", key: "shard" },
+      { id: "enemy-count", label: "ENEMIES", source: "tag-count", key: "enemy" },
+      { id: "goal-count", label: "SUMMIT", source: "tag-count", key: "goal" },
+    ],
+    objectives: [
+      {
+        id: "jump-registers",
+        title: "Jumping registers",
+        description: "An accepted JUMP pulse emits a jump event while the run stays live.",
+        assertionIds: ["jumps-increased", "jump-running"],
+      },
+      {
+        id: "collect-shard",
+        title: "Collecting a shard scores",
+        description: "A sun shard is collected, the shard counter increases and so does the score.",
+        assertionIds: ["collected-increased", "shards-increased", "score-increased"],
+      },
+      {
+        id: "stomp-dragon",
+        title: "Landing on a dragon defeats it",
+        description: "A stomp event fires, an enemy leaves the scene and the score increases.",
+        assertionIds: ["stomps-increased", "enemy-count-decreased", "score-increased"],
+      },
+    ],
+    scenarioIds: [],
+  },
+
   "endless-runner": {
     version: 1,
     controls: [

@@ -66,6 +66,7 @@ export function AiPlayHud({
 
   return (
     <div className="ai-play-hud" data-testid="ai-play-hud">
+      <div className="ai-hud-column">
       <section className="ai-hud-readout" aria-label="AI Play state" aria-live="polite" data-testid="ai-hud-state">
         <header><span className="ai-hud-dot" />AI PLAY</header>
         <dl>
@@ -79,7 +80,9 @@ export function AiPlayHud({
         </dl>
         <footer>{document.name} · snapshot player</footer>
       </section>
+      </div>
 
+      <div className="ai-hud-dock">
       <div className="ai-hud-controls" role="group" aria-label="AI Play controls">
         <button
           type="button"
@@ -111,6 +114,7 @@ export function AiPlayHud({
         <button type="button" className="ai-hud-button" data-testid="ai-hud-restart" onClick={restart}>
           RESTART
         </button>
+      </div>
       </div>
     </div>
   );

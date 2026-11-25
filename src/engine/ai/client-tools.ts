@@ -1,6 +1,6 @@
 import type { ToolResult } from "@shared/protocol";
 import type { GameObject, ProjectDocument, Scene, Visual } from "../model/schema";
-import { commandReference } from "./command-help";
+import { behaviorParamReference, commandReference, signatureFor } from "./command-help";
 import { captureViewportImage } from "./viewport-capture";
 import { gameTestProfileForDocument, profileScenarios } from "../model/game-test-profile";
 import { createDraft, estimateDraftCost } from "../model/game-test-draft";
@@ -174,7 +174,22 @@ export function executeClientTool(input: ToolExecInput): ExecutedTool {
   const fail = (error: string): ExecutedTool => ({ ok: false, error, revision, name, args });
 
   try {
-    if (name === "list_commands") return ok({ commands: commandReference() });
+    if (name === "list_commands") {
+      // Full objects ran to 16k chars and the transport keeps only the first
+      // 8k, which cut off variable/hud/behavior commands. Signatures are compact.
+      const prefixes = Array.isArray((args as any)?.prefixes)
+        ? ((args as any).prefixes as unknown[]).filter((p): p is string => typeof p === "string" && p.length > 0).map((p) => p.replace(/\.$/, ""))
+        : [];
+      const types = commandReference()
+        .map((help) => help.type)
+        .filter((type) => prefixes.length === 0 || prefixes.some((prefix) => type === prefix || type.startsWith(`${prefix}.`)));
+      const wantsBehaviors = prefixes.length === 0 || prefixes.some((prefix) => prefix === "behavior" || prefix === "object");
+      return ok({
+        commands: types.map((type) => signatureFor(type)).filter(Boolean),
+        ...(wantsBehaviors ? { behaviors: behaviorParamReference() } : {}),
+        note: "name?: means optional. apply_commands takes {type, args} with these args. A behavior is {id, type, enabled, params}; params use the names under `behaviors` (unset params take the default shown).",
+      });
+    }
     if (name === "query_project") return executeClientTool({ ...input, name: "search_entities" });
     if (name === "inspect_entity") return executeClientTool({ ...input, name: "get_object" });
     if (name === "get_project_summary") {

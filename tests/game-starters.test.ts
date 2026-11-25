@@ -20,7 +20,7 @@ test("catalog lists every starter exactly once", () => {
   }
 });
 
-test("every starter is a valid primitive-only document", () => {
+test("every starter is a valid document with its intended visual style", () => {
   for (const id of GAME_STARTER_IDS) {
     const parsed = projectDocumentSchema.parse(createGameStarterDocument(id, `Test ${id}`));
     assert.equal(parsed.templateOrigin, id);
@@ -33,6 +33,8 @@ test("every starter is a valid primitive-only document", () => {
       "brick-breaker": 0,
       "flappy-flyer": 720,
       "platform-jumper": 980,
+      "meadow-run": 1700,
+      "meadow-sandbox": 1700,
       "endless-runner": 1200,
       "arena-survival": 0,
       "falling-objects": 0,
@@ -41,15 +43,21 @@ test("every starter is a valid primitive-only document", () => {
     } as const;
     assert.equal(parsed.settings.gravity.y, expectedGravity[id]);
 
+    const spriteStarter = id === "meadow-run" || id === "meadow-sandbox";
     for (const scene of parsed.scenes) {
       for (const object of scene.objects) {
-        assert.notEqual(object.visual?.kind, "sprite");
-        assert.notEqual(object.visual?.kind, "tilemap");
+        if (spriteStarter) assert.ok(object.visual === undefined || object.visual.kind !== "tilemap");
+        else {
+          assert.notEqual(object.visual?.kind, "sprite");
+          assert.notEqual(object.visual?.kind, "tilemap");
+        }
       }
     }
     for (const prefab of parsed.prefabs) {
-      assert.notEqual(prefab.root.visual?.kind, "sprite");
-      for (const object of prefab.objects) assert.notEqual(object.visual?.kind, "sprite");
+      if (!spriteStarter) assert.notEqual(prefab.root.visual?.kind, "sprite");
+      for (const object of prefab.objects) {
+        if (!spriteStarter) assert.notEqual(object.visual?.kind, "sprite");
+      }
     }
 
     const behaviorTypes = new Set(BEHAVIOR_CATALOG.map((spec) => spec.type));

@@ -59,6 +59,168 @@ export const STARTER_ASSETS: StarterAssetSpec[] = [
   { id: "asset_starter_click_sfx", url: "/starter/audio/click.wav", name: "UI click", kind: "audio", mime: "audio/wav" },
 ];
 
+const heroSlices = Array.from({ length: 23 }, (_, index) => ({
+  x: (index % 8) * 200,
+  y: Math.floor(index / 8) * 235,
+  w: 200,
+  h: 235,
+}));
+
+const heroClips: AnimationClip[] = [
+  { id: "meadow-idle", name: "Idle", frameIndices: [0, 1, 2, 3, 4, 5], fps: 8, loop: true },
+  { id: "meadow-run", name: "Run", frameIndices: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15], fps: 13, loop: true },
+  { id: "meadow-jump", name: "Jump", frameIndices: [16, 17, 18, 19, 20, 21, 22], fps: 10, loop: false },
+  { id: "meadow-fall", name: "Fall", frameIndices: [22], fps: 1, loop: true },
+];
+
+const dragonSlices = Array.from({ length: 12 }, (_, index) => ({
+  x: (index % 3) * 144,
+  y: Math.floor(index / 3) * 128,
+  w: 144,
+  h: 128,
+}));
+
+const campfireSlices = Array.from({ length: 5 }, (_, index) => ({
+  x: index * 64,
+  y: 0,
+  w: 64,
+  h: 64,
+}));
+
+const platformerSfx = STARTER_ASSETS.filter((asset) => asset.kind === "audio");
+
+/** Original art pack for the Clockwork Meadows platformer starter. */
+export const PLATFORMER_ASSETS: StarterAssetSpec[] = [
+  {
+    id: "asset_meadow_hero",
+    url: "/platformer/hero-atlas.png",
+    name: "Meadow hero atlas",
+    kind: "image",
+    mime: "image/png",
+    width: 1600,
+    height: 705,
+    slices: heroSlices,
+    animations: heroClips,
+    tags: ["platformer", "hero"],
+  },
+  {
+    id: "asset_meadow_sky",
+    url: "/platformer/sky.jpg",
+    name: "Meadow sky",
+    kind: "image",
+    mime: "image/jpeg",
+    width: 2064,
+    height: 512,
+    tags: ["platformer", "background"],
+  },
+  {
+    id: "asset_meadow_mountain",
+    url: "/platformer/mountain.png",
+    name: "Meadow mountains",
+    kind: "image",
+    mime: "image/png",
+    width: 2064,
+    height: 512,
+    tags: ["platformer", "background"],
+  },
+  {
+    id: "asset_meadow_forest",
+    url: "/platformer/forests.png",
+    name: "Meadow forest",
+    kind: "image",
+    mime: "image/png",
+    width: 2064,
+    height: 512,
+    tags: ["platformer", "background"],
+  },
+  {
+    id: "asset_meadow_ground",
+    url: "/platformer/ground.png",
+    name: "Meadow ground",
+    kind: "image",
+    mime: "image/png",
+    width: 2928,
+    height: 352,
+    tags: ["platformer", "ground"],
+  },
+  {
+    id: "asset_meadow_spike",
+    url: "/platformer/spike.png",
+    name: "Stone spikes",
+    kind: "image",
+    mime: "image/png",
+    width: 410,
+    height: 371,
+    tags: ["platformer", "hazard"],
+  },
+  {
+    id: "asset_meadow_stone",
+    url: "/platformer/stone.png",
+    name: "Mossy boulder",
+    kind: "image",
+    mime: "image/png",
+    width: 847,
+    height: 768,
+    tags: ["platformer", "decoration"],
+  },
+  {
+    id: "asset_meadow_dragon",
+    url: "/platformer/flying_twin_headed_dragon-blue.png",
+    name: "Twin-headed dragon",
+    kind: "image",
+    mime: "image/png",
+    width: 432,
+    height: 512,
+    slices: dragonSlices,
+    animations: [
+      { id: "dragon-fly", name: "Fly", frameIndices: [0, 1, 2], fps: 8, loop: true },
+      { id: "dragon-walk", name: "Walk", frameIndices: [9, 10, 11], fps: 7, loop: true },
+    ],
+    tags: ["platformer", "enemy"],
+  },
+  {
+    id: "asset_meadow_checkpoint",
+    url: "/platformer/checkpoint-flag.png",
+    name: "Trail checkpoint flag",
+    kind: "image",
+    mime: "image/png",
+    width: 160,
+    height: 120,
+    // Frame 0: lowered (inactive). Frame 1: raised (activated).
+    slices: [
+      { x: 0, y: 0, w: 80, h: 120 },
+      { x: 80, y: 0, w: 80, h: 120 },
+    ],
+    tags: ["platformer", "checkpoint"],
+  },
+  {
+    id: "asset_meadow_campfire",
+    url: "/platformer/campfire.png",
+    name: "Campfire",
+    kind: "image",
+    mime: "image/png",
+    width: 320,
+    height: 64,
+    slices: campfireSlices,
+    animations: [{ id: "campfire-burn", name: "Burn", frameIndices: [0, 1, 2, 3, 4], fps: 10, loop: true }],
+    tags: ["platformer", "checkpoint"],
+  },
+  ...platformerSfx,
+];
+
+export const PLATFORMER_ASSET_IDS = {
+  hero: "asset_meadow_hero",
+  sky: "asset_meadow_sky",
+  mountain: "asset_meadow_mountain",
+  forest: "asset_meadow_forest",
+  ground: "asset_meadow_ground",
+  spike: "asset_meadow_spike",
+  stone: "asset_meadow_stone",
+  dragon: "asset_meadow_dragon",
+  campfire: "asset_meadow_campfire",
+  checkpointFlag: "asset_meadow_checkpoint",
+} as const;
+
 export const STARTER_ASSET_IDS = {
   player: "asset_starter_player_sheet",
   drone: "asset_starter_drone",

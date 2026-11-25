@@ -1,7 +1,7 @@
-import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type ColorSource } from "pixi.js";
-import { getTexture } from "./texture-cache";
+import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, TilingSprite, type ColorSource } from "pixi.js";
+import { getFrameTexture, getTexture } from "./texture-cache";
 import type { Asset } from "../model/schema";
-import type { GameObject, Layer, ProjectDocument, Scene } from "../model/schema";
+import type { GameObject, Layer, ProjectDocument, Scene, Visual } from "../model/schema";
 import type { CameraState } from "./camera";
 
 export interface ObjectBounds {
@@ -24,6 +24,9 @@ interface ObjectNode {
   kind: GameObject["visual"] extends undefined ? "rect" : string;
   signature: string;
   textureVersion: number;
+  /** Sprite visual currently drawn, kept so animation frames update in place. */
+  sprite: Sprite | TilingSprite | null;
+  frameKey: string;
   bounds: ObjectBounds;
 }
 
@@ -42,11 +45,23 @@ function colorToNumber(color: string): number {
   return Number.isFinite(parsed) ? parsed : 0xffffff;
 }
 
+/**
+ * Dimensions used to place an object's art. The art is centred on the object's
+ * transform; a body is a separate collision box offset from that centre. Using
+ * the body size here (as this used to) shifted sprites by half the difference
+ * between art and collider, which is what made characters sit inside the floor
+ * and spikes render off their hitboxes.
+ */
 export function objectDims(object: GameObject): { w: number; h: number } {
-  if (object.body) return { w: object.body.width, h: object.body.height };
   if (object.visual?.kind === "rect") return { w: object.visual.width, h: object.visual.height };
   if (object.visual?.kind === "shape") return { w: object.visual.width, h: object.visual.height };
-  if (object.visual?.kind === "sprite") return { w: object.visual.width ?? 32, h: object.visual.height ?? 32 };
+  if (object.visual?.kind === "sprite") {
+    return {
+      w: object.visual.width ?? object.visual.sourceRect?.w ?? 32,
+      h: object.visual.height ?? object.visual.sourceRect?.h ?? 32,
+    };
+  }
+  if (object.body) return { w: object.body.width, h: object.body.height };
   if (object.visual?.kind === "tilemap") {
     return { w: object.visual.cols * object.visual.tileSize, h: object.visual.rows * object.visual.tileSize };
   }
@@ -75,13 +90,20 @@ function boundsOf(object: GameObject): ObjectBounds {
 
 function signatureOf(object: GameObject): string {
   const visual = object.visual;
-  return JSON.stringify({
-    n: object.name,
-    v: visual,
-    d: objectDims(object),
-    t: [object.transform.rotation, object.transform.scaleX, object.transform.scaleY, object.transform.originX, object.transform.originY],
-    b: object.body ? [object.body.type] : null,
-  });
+  // Sprite visuals are summarised by hand: they change every animation frame,
+  // and JSON.stringify over every object every frame was measurable work.
+  const visualKey =
+    visual?.kind === "sprite"
+      ? `s|${visual.assetId}|${visual.width ?? ""}|${visual.height ?? ""}|${visual.tint ?? ""}|${visual.repeatX ? 1 : 0}${visual.repeatY ? 1 : 0}|${visual.tileOffsetX ?? 0}|${visual.tileOffsetY ?? 0}|${visual.sourceRect ? `${visual.sourceRect.x},${visual.sourceRect.y},${visual.sourceRect.w},${visual.sourceRect.h}` : ""}`
+      : JSON.stringify(visual ?? null);
+  const transform = object.transform;
+  return `${visualKey}|${objectDims(object).w}x${objectDims(object).h}|${transform.rotation}|${transform.scaleX}|${transform.scaleY}|${transform.originX}|${transform.originY}`;
+}
+
+function frameKeyOf(object: GameObject, textureVersion: number): string {
+  const visual = object.visual;
+  if (visual?.kind !== "sprite") return "";
+  return `${visual.frame ?? ""}:${textureVersion}`;
 }
 
 function makeRect(width: number, height: number, color: string, alpha = 1): Sprite {
@@ -97,7 +119,26 @@ function findAsset(document: ProjectDocument | null, assetId: string): Asset | u
   return document?.assets.find((asset) => asset.id === assetId);
 }
 
-function makeObjectVisual(object: GameObject, document: ProjectDocument | null = null): Container {
+interface BuiltVisual {
+  container: Container;
+  sprite: Sprite | TilingSprite | null;
+}
+
+/** Texture view for a sprite visual: explicit crop, atlas frame, or whole asset. */
+function spriteTexture(visual: Extract<Visual, { kind: "sprite" }>, asset: Asset | undefined): Texture | null {
+  if (visual.sourceRect && !visual.frame) {
+    return getFrameTexture(visual.assetId, visual.sourceRect);
+  }
+  const texture = getTexture(visual.assetId);
+  if (!texture) return null;
+  if (visual.frame !== undefined && asset?.slices?.[visual.frame]) {
+    const slice = asset.slices[visual.frame]!;
+    return getFrameTexture(visual.assetId, slice) ?? texture;
+  }
+  return texture;
+}
+
+function makeObjectVisual(object: GameObject, document: ProjectDocument | null = null): BuiltVisual {
   const visual = object.visual;
   if (visual?.kind === "text") {
     const text = new Text({
@@ -109,8 +150,10 @@ function makeObjectVisual(object: GameObject, document: ProjectDocument | null =
         align: visual.style.align,
       },
     });
-    text.anchor.set(0.5, 0.5);
-    return text;
+    // The object transform is the centre of the text box; keeping the local
+    // origin at the top-left (like every other visual) makes that true. The old
+    // 0.5 anchor plus a centred pivot drew text half a box up and to the left.
+    return { container: text, sprite: null };
   }
 
   const { w, h } = objectDims(object);
@@ -154,7 +197,7 @@ function makeObjectVisual(object: GameObject, document: ProjectDocument | null =
       }
       container.addChild(graphics);
     }
-    return container;
+    return { container, sprite: null };
   }
   if (visual?.kind === "rect") {
     const body = new Container();
@@ -166,30 +209,39 @@ function makeObjectVisual(object: GameObject, document: ProjectDocument | null =
     } else {
       body.addChild(makeRect(visual.width, visual.height, visual.color));
     }
-    return body;
+    return { container: body, sprite: null };
   }
   if (visual?.kind === "sprite") {
     const asset = findAsset(document, visual.assetId);
-    const texture = getTexture(visual.assetId);
     const body = new Container();
+    const texture = spriteTexture(visual, asset);
+    let rendered: Sprite | TilingSprite | null = null;
     if (texture) {
-      let frameTexture = texture;
-      if (visual.frame !== undefined && asset?.slices?.[visual.frame]) {
-        const slice = asset.slices[visual.frame]!;
-        frameTexture = new Texture({ source: texture.source, frame: new Rectangle(slice.x, slice.y, slice.w, slice.h) });
+      if (visual.repeatX || visual.repeatY) {
+        const tiled = new TilingSprite({
+          texture,
+          width: visual.width ?? w,
+          height: visual.height ?? h,
+        });
+        tiled.tilePosition.set(visual.tileOffsetX ?? 0, visual.tileOffsetY ?? 0);
+        if (visual.tint) tiled.tint = colorToNumber(visual.tint);
+        body.addChild(tiled);
+        rendered = tiled;
+      } else {
+        const sprite = new Sprite(texture);
+        if (visual.width) sprite.width = visual.width;
+        else if (!visual.frame && !visual.sourceRect) sprite.width = w;
+        if (visual.height) sprite.height = visual.height;
+        else if (!visual.frame && !visual.sourceRect) sprite.height = h;
+        if (visual.tint) sprite.tint = colorToNumber(visual.tint);
+        body.addChild(sprite);
+        rendered = sprite;
       }
-      const sprite = new Sprite(frameTexture);
-      if (visual.width) sprite.width = visual.width;
-      else if (!visual.frame) sprite.width = w;
-      if (visual.height) sprite.height = visual.height;
-      else if (!visual.frame) sprite.height = h;
-      if (visual.tint) sprite.tint = colorToNumber(visual.tint);
-      body.addChild(sprite);
     } else {
       body.addChild(makeRect(w, h, visual.tint ?? "#a9b4ff", 0.9));
       body.addChild(makeRect(w, h, "#0b0d12", 0.12));
     }
-    return body;
+    return { container: body, sprite: rendered };
   }
 
   const container = new Container();
@@ -240,7 +292,7 @@ function makeObjectVisual(object: GameObject, document: ProjectDocument | null =
     container.addChild(graphics);
   }
   if (container.children.length === 0 && graphics.parent === null) container.addChild(graphics);
-  return container;
+  return { container, sprite: null };
 }
 
 function applyObjectTransform(node: ObjectNode, object: GameObject): void {
@@ -292,6 +344,14 @@ export class SceneRenderer {
   }
 
   textureVersion = 0;
+
+  private updateSpriteFrame(node: ObjectNode, object: GameObject, document: ProjectDocument | null): void {
+    const visual = object.visual;
+    if (visual?.kind !== "sprite" || !node.sprite) return;
+    const texture = spriteTexture(visual, findAsset(document, visual.assetId));
+    if (!texture) return;
+    node.sprite.texture = texture;
+  }
 
   render(scene: Scene, document: ProjectDocument, textureVersion = 0): void {
     this.textureVersion = textureVersion;
@@ -347,20 +407,37 @@ export class SceneRenderer {
         let node = this.objectNodes.get(object.id);
         const signature = signatureOf(object);
         const textureSensitive = object.visual?.kind === "sprite" || object.visual?.kind === "tilemap";
+        const frameKey = frameKeyOf(object, textureVersion);
         if (!node) {
           const root = new Container();
-          const body = makeObjectVisual(object, document);
-          root.addChild(body as Container);
-          node = { root, body, kind: object.visual?.kind ?? "empty", signature, textureVersion, bounds: boundsOf(object) };
+          const built = makeObjectVisual(object, document);
+          root.addChild(built.container);
+          node = {
+            root,
+            body: built.container,
+            kind: object.visual?.kind ?? "empty",
+            signature,
+            textureVersion,
+            sprite: built.sprite,
+            frameKey,
+            bounds: boundsOf(object),
+          };
           this.objectNodes.set(object.id, node);
         } else if (node.signature !== signature || (textureSensitive && node.textureVersion !== textureVersion)) {
           node.root.removeChildren().forEach((child) => child.destroy({ children: true }));
-          const body = makeObjectVisual(object, document);
-          node.root.addChild(body as Container);
-          node.body = body;
+          const built = makeObjectVisual(object, document);
+          node.root.addChild(built.container);
+          node.body = built.container;
+          node.sprite = built.sprite;
           node.signature = signature;
           node.kind = object.visual?.kind ?? "empty";
           node.textureVersion = textureVersion;
+          node.frameKey = frameKey;
+        } else if (frameKey !== node.frameKey) {
+          // Animation frame change only: swap the texture in place instead of
+          // destroying and recreating the sprite every frame.
+          this.updateSpriteFrame(node, object, document);
+          node.frameKey = frameKey;
         }
         if (node.root.parent !== layerNode.root) layerNode.root.addChild(node.root);
         node.root.zIndex = z;

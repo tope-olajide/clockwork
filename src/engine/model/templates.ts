@@ -610,6 +610,8 @@ export function createProjectFromTemplate(template: Exclude<TemplateOrigin, "bri
     case "brick-breaker":
     case "flappy-flyer":
     case "platform-jumper":
+    case "meadow-run":
+    case "meadow-sandbox":
     case "endless-runner":
     case "arena-survival":
     case "falling-objects":
@@ -646,6 +648,10 @@ export function templateSummary(template: TemplateId): { label: string; blurb: s
       return { label: "Flappy Flyer", blurb: "Flap through moving gates and survive as long as you can.", accent: "#ffd47c" };
     case "platform-jumper":
       return { label: "Platform Jumper", blurb: "Collect five cores, dodge spikes, and reach the relay.", accent: "#a9b4ff" };
+    case "meadow-run":
+      return { label: "Clockwork Meadows", blurb: "A long side-scrolling stage with dragons, checkpoints and a summit finish.", accent: "#8fe3c0" };
+    case "meadow-sandbox":
+      return { label: "Meadow Sandbox", blurb: "The meadow hero and parallax on a short, empty stage to build on.", accent: "#8fe3c0" };
     case "endless-runner":
       return { label: "Endless Runner", blurb: "Jump or duck through an accelerating obstacle stream.", accent: "#ff856f" };
     case "arena-survival":

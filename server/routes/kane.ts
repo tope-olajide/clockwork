@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { streamText } from "hono/streaming";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AiPlayRequest, AiPlayResult, KaneCliStatus, KaneQaRequest } from "../../shared/protocol/kane";
 import { KANE_PHASE_LIMITS } from "../../shared/protocol/game-testing";
@@ -15,6 +15,14 @@ import { redactAiPlayResult } from "../../shared/protocol/redaction";
 import { PhaseSessionStore } from "../kane/phase-session";
 import { listReplayTests, resolveReplayTest } from "../kane/replay-tests";
 import { kaneCreditsExhausted, parseKaneCreditBalance } from "../kane/credits";
+import {
+  KANE_CHECK_LIMITS,
+  composeCheckObjective,
+  encodeCheckSteps,
+  judgeCheck,
+  validateCheckRequest,
+  type KaneCheckRequest,
+} from "../../shared/kane-check";
 
 export const kaneRoutes = new Hono();
 
@@ -109,7 +117,12 @@ function playerOrigin(c: any): string {
   return new URL(c.req.url).origin;
 }
 
-function startStream(c: any, run: ReturnType<typeof startKaneRun>, key: string) {
+function startStream(
+  c: any,
+  run: ReturnType<typeof startKaneRun>,
+  key: string,
+  finalize: (result: AiPlayResult) => AiPlayResult = (result) => result,
+) {
   c.header("Content-Type", "application/x-ndjson; charset=utf-8");
   c.header("Cache-Control", "no-cache");
   c.header("X-Kane-Run", run.runId);
@@ -119,7 +132,7 @@ function startStream(c: any, run: ReturnType<typeof startKaneRun>, key: string) 
     try {
       for await (const event of run.events) {
         const safeEvent = event.type === "run_end"
-          ? { ...event, result: redactAiPlayResult(event.result) }
+          ? { ...event, result: redactAiPlayResult(finalize(event.result)) }
           : event;
         await stream.write(JSON.stringify(safeEvent) + "\n");
         if (event.type === "run_end" || event.type === "error") {
@@ -164,27 +177,74 @@ kaneRoutes.post("/qa", async (c) => {
   if (noCredits) return noCredits;
   let body: KaneQaRequest;
   try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "Invalid JSON body." }, 400); }
-  const objective = String(body.objective ?? "").trim();
+  // A structured check replaces free text: the server writes the objective and
+  // judges the stored values, so the model can neither phrase nor grade it.
+  let check: KaneCheckRequest | undefined;
+  if (body.check !== undefined) {
+    const validated = validateCheckRequest(body.check);
+    if (!validated.ok) return c.json({ ok: false, error: `Invalid check: ${validated.error}`, code: "kane-check" }, 400);
+    check = validated.check;
+  }
+  const objective = check ? composeCheckObjective(check) : String(body.objective ?? "").trim();
   if (!objective) return c.json({ ok: false, error: "An objective is required." }, 400);
-  if (objective.length > 1_000) return c.json({ ok: false, error: "Kane objectives must be under 1,000 characters." }, 400);
+  if (objective.length > 2_000) return c.json({ ok: false, error: "Kane objectives must be under 2,000 characters." }, 400);
   const snapshotId = String(body.snapshotId ?? "");
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(snapshotId)) return c.json({ ok: false, error: "Engine QA must run against a snapshot." }, 400);
   const stored = getSnapshot(snapshotId);
   if (!stored) return c.json({ ok: false, error: "Snapshot not found or expired." }, 404);
+  const qaDocument = stored.payload.document as any;
+  let qaSceneId: string | undefined;
+  if (typeof body.sceneId === "string" && body.sceneId.trim()) {
+    qaSceneId = body.sceneId.trim();
+    const scenes: Array<{ id?: unknown }> = Array.isArray(qaDocument.scenes) ? qaDocument.scenes : [];
+    if (!scenes.some((scene) => scene.id === qaSceneId)) {
+      return c.json({ ok: false, error: `Scene not found in this project: ${qaSceneId}`, code: "kane-scene" }, 400);
+    }
+  }
+  const projectId = String(qaDocument.id ?? snapshotId);
+  // One Kane run per project: QA, AI Play and chat verification share this key.
+  const activeRunId = activeByProject.get(projectId);
+  if (activeRunId) {
+    return c.json({ ok: false, error: "Kane is already running for this project.", code: "kane-busy", runId: activeRunId }, 409);
+  }
   const origin = playerOrigin(c);
   const seed = Number(body.seed) || 1234;
+  const params = new URLSearchParams({ ai: "1", seed: String(seed) });
+  if (qaSceneId) params.set("scene", qaSceneId);
+  if (check) {
+    // Paused, frame-stepped Test Mode with one button per planned step.
+    params.set("testMode", "step");
+    params.set("maxAdvance", String(KANE_CHECK_LIMITS.maxFramesPerStep));
+    params.set("maxFrames", String(KANE_CHECK_LIMITS.maxTotalFrames));
+    if (check.steps.length) params.set("steps", encodeCheckSteps(check.steps));
+  }
   const run = startKaneRun({
     objective,
-    url: `${origin}/s/${encodeURIComponent(snapshotId)}?ai=1&seed=${seed}`,
-    projectId: String(stored.payload.document.id ?? ""),
+    url: `${origin}/s/${encodeURIComponent(snapshotId)}?${params.toString()}`,
+    projectId,
     snapshotId,
     headless: env.kaneHeadless,
     timeoutSeconds: env.kaneTimeoutSeconds,
-    maxSteps: env.kaneMaxSteps,
-    bugDetection: "continue",
+    // A check is a handful of clicks and reads; a low cap stops Kane wandering.
+    maxSteps: check ? Math.min(env.kaneMaxSteps, 6 + check.steps.length * 2 + check.readouts.length * 2) : env.kaneMaxSteps,
+    bugDetection: check ? "off" : "continue",
     evidenceRoot: env.kaneEvidenceDir,
   });
-  return startStream(c, run, `qa:${stored.payload.document.id ?? snapshotId}`);
+  const finalize = check
+    ? (result: AiPlayResult): AiPlayResult => {
+      const judged = judgeCheck(result, check);
+      const final = { ...result, status: judged.status, check: { kaneStatus: result.status, reason: judged.reason, outcomes: judged.outcomes } };
+      try {
+        const dir = join(process.cwd(), env.kaneEvidenceDir, result.runId);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "check.json"), JSON.stringify({ check, judged, kaneStatus: result.status }, null, 2));
+      } catch {
+        // The verdict is already in the stream; the audit copy is best-effort.
+      }
+      return final;
+    }
+    : undefined;
+  return startStream(c, run, projectId, finalize);
 });
 
 kaneRoutes.post("/ai-play", async (c) => {
@@ -399,10 +459,14 @@ kaneRoutes.get("/ai-play/objective/:snapshotId", (c) => {
   });
 });
 
-kaneRoutes.post("/ai-play/:runId/cancel", (c) => {
+function cancelRun(c: any) {
   const runId = c.req.param("runId");
   const run = activeRuns.get(runId);
   if (!run) return c.json({ ok: false, error: "Run is no longer active." }, 404);
   run.cancel();
   return c.json({ ok: true, cancelled: runId });
-});
+}
+
+kaneRoutes.post("/ai-play/:runId/cancel", cancelRun);
+// Generic alias so chat verification does not depend on an AI-Play-named route.
+kaneRoutes.post("/runs/:runId/cancel", cancelRun);

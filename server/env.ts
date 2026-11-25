@@ -25,6 +25,8 @@ const envSchema = z.object({
   CLOCKWORK_SECRET: z.string().optional(),
   CLOCKWORK_PUBLIC_URL: z.string().url().optional().or(z.literal("")),
   KANE_CLI: z.string().optional(),
+  // Kane's agent-execution budget (`--timeout`). The runner adds a browser
+  // startup allowance for the process wall clock; see server/kane/runner.ts.
   KANE_TIMEOUT_SECONDS: z.coerce.number().int().positive().max(900).default(180),
   KANE_MAX_STEPS: z.coerce.number().int().positive().max(100).default(40),
   KANE_HEADLESS: z.string().optional(),

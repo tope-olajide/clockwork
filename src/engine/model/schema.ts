@@ -12,6 +12,8 @@ export const TEMPLATE_ORIGINS = [
   "space-invaders",
   "asteroid-field",
   "platform-jumper",
+  "meadow-run",
+  "meadow-sandbox",
   "endless-runner",
   "arena-survival",
   "falling-objects",
@@ -89,6 +91,26 @@ export const visualSchema = z.discriminatedUnion("kind", [
     tint: z.string().optional(),
     width: z.number().positive().optional(),
     height: z.number().positive().optional(),
+    /** Repeat the texture instead of stretching it. */
+    repeatX: z.boolean().optional(),
+    repeatY: z.boolean().optional(),
+    /** Texture phase in pixels, useful for keeping adjacent ground pieces aligned. */
+    tileOffsetX: z.number().finite().optional(),
+    tileOffsetY: z.number().finite().optional(),
+    /**
+     * Source sub-rectangle of the asset texture, in asset pixels. Lets one atlas
+     * (for example a ground strip with transparent sky padding) be cropped to the
+     * art that should actually be drawn, so the visual origin matches the collider.
+     * Ignored when `frame` already selects an asset slice.
+     */
+    sourceRect: z
+      .object({
+        x: z.number().finite().nonnegative(),
+        y: z.number().finite().nonnegative(),
+        w: z.number().positive(),
+        h: z.number().positive(),
+      })
+      .optional(),
   }),
   z.object({
     kind: z.literal("rect"),
@@ -116,6 +138,7 @@ export const behaviorTypeSchema = z.enum([
   "platformer-controller",
   "top-down-controller",
   "patrol",
+  "stompable",
   "follow",
   "collectible",
   "hazard",
@@ -160,6 +183,8 @@ export const animationAssignmentsSchema = z.object({
   idle: z.string().optional(),
   run: z.string().optional(),
   jump: z.string().optional(),
+  fall: z.string().optional(),
+  hurt: z.string().optional(),
 });
 
 export const gameObjectSchema = z.object({

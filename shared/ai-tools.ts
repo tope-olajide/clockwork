@@ -165,8 +165,14 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "list_commands",
       description:
-        "List every project command with its argument names, types and required flags. Call this before apply_commands when you are not certain of a command's args.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
+        "List project commands as one-line signatures (name?: optional). Pass `prefixes` (e.g. [\"variable\",\"hud\",\"behavior\"]) to get only those. Call this before apply_commands when you are not certain of a command's args.",
+      parameters: {
+        type: "object",
+        properties: {
+          prefixes: { type: "array", items: { type: "string" }, description: "Optional command families: project, scene, layer, object, objects, prefab, rule, variable, hud, behavior, asset, tilemap" },
+        },
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -357,14 +363,52 @@ export const KANE_TOOL_DEFINITIONS: ToolDefinition[] = [
     type: "function",
     function: {
       name: "verify_with_kane",
-      description: "Run Kane CLI against an immutable snapshot of this project in a real browser and return the verdict, steps, duration and evidence. Use for engine QA; never claim a pass without run_end.status passed. Keep the objective to what the user asked (load the level, collect a coin, reach the goal) and do not add console-error or bundle checks that make the run time out.",
+      description: [
+        "Verify behaviour with a structured check. Use the control and readout ids in context.kane.testMode (or get_game_test_profile).",
+        "The check first runs free in the engine simulator with the same inputs. If an expectation fails there, Kane is NOT run and you get the simulator's values: fix the game or the check (e.g. more frames, a jump, move the coin) before calling again.",
+        "Only when the simulator agrees does Kane run once in a real browser (1-3 minutes), clicking one button per step in paused Test Mode and reading the readouts. Clockwork judges Kane's stored values, so status \"passed\" means both agree.",
+        "60 frames = 1 second. Example: {title:\"Coin raises score\", steps:[{control:\"move-right\",frames:90}], expect:[{readout:\"score\",equals:1},{readout:\"coin-count\",changed:true}]}.",
+        "Alternatively pass only `objective` (no steps/expect) when the user gives an exact Kane objective: it is sent to Kane verbatim against the real-time player. Never reword a user-supplied objective.",
+        "Follow the returned nextStep. Never call again with an identical check at the same revision.",
+      ].join(" "),
       parameters: {
         type: "object",
         properties: {
-          objective: { type: "string", description: "Plain-English verification objective under 1,000 characters" },
+          title: { type: "string", description: "What is being verified, in a few words" },
+          steps: {
+            type: "array",
+            description: "Up to 6 steps run in order. Empty means just read the starting state.",
+            items: {
+              type: "object",
+              properties: {
+                control: { type: "string", description: "Control id (hold controls stay down for the frames; press controls fire once then the game runs the frames), or \"wait\"" },
+                frames: { type: "number", description: "Frames for this step, 1-600" },
+                with: { type: "array", items: { type: "string" }, description: "Optional press controls fired at the start of the step, e.g. [\"jump\"] while moving" },
+              },
+              required: ["control", "frames"],
+              additionalProperties: false,
+            },
+          },
+          expect: {
+            type: "array",
+            description: "1-6 expectations on readouts after the steps",
+            items: {
+              type: "object",
+              properties: {
+                readout: { type: "string", description: "Readout id" },
+                equals: { type: ["string", "number", "boolean"], description: "Exact value" },
+                atLeast: { type: "number" },
+                atMost: { type: "number" },
+                changed: { type: "boolean", description: "true: must differ from the start; false: must stay the same" },
+              },
+              required: ["readout"],
+              additionalProperties: false,
+            },
+          },
+          objective: { type: "string", description: "Verbatim Kane objective, only when there is no structured expect (under 1,000 characters)" },
           sceneId: { type: "string", description: "Optional scene to start from" },
         },
-        required: ["objective"],
+        required: [],
         additionalProperties: false,
       },
     },

@@ -55,7 +55,8 @@ async function boot(): Promise<void> {
   }));
 
   const app = new Application();
-  await app.init({ background: project.settings.background, antialias: true, autoDensity: true, resolution: window.devicePixelRatio || 1 });
+  const resolution = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1)));
+  await app.init({ background: project.settings.background, antialias: true, autoDensity: true, resolution });
   app.canvas.style.width = "100%";
   app.canvas.style.height = "100%";
   app.canvas.style.display = "block";
@@ -147,7 +148,9 @@ async function boot(): Promise<void> {
     const width = window.innerWidth;
     const height = window.innerHeight;
     runtime.setViewport(width, height);
-    const scene = runtime.renderScene();
+    const alpha = runtime.status === "running" ? Math.max(0, Math.min(1, accumulator / FIXED_DT)) : 1;
+    const scene = runtime.renderScene(alpha);
+    const view = runtime.cameraView(alpha);
     const musicVolume = (project.settings.audio.masterVolume ?? 1) * (project.settings.audio.musicVolume ?? 1) * (scene.audio?.volume ?? 1);
     if (scene.audio?.musicAssetId) {
       void playSceneMusic(scene.audio.musicAssetId, musicVolume, scene.audio.loop ?? true);
@@ -156,9 +159,9 @@ async function boot(): Promise<void> {
       stopSceneMusic();
     }
     renderer.render(scene, project);
-    renderer.applyCamera(scene, runtime.camera);
-    renderer.root.position.set(width / 2 - runtime.camera.x * runtime.camera.zoom, height / 2 - runtime.camera.y * runtime.camera.zoom);
-    renderer.root.scale.set(runtime.camera.zoom);
+    renderer.applyCamera(scene, view);
+    renderer.root.position.set(width / 2 - view.x * view.zoom, height / 2 - view.y * view.zoom);
+    renderer.root.scale.set(view.zoom);
     frames += 1;
     if (now - fpsStarted >= 500) {
       fps = Math.round((frames * 1000) / (now - fpsStarted));

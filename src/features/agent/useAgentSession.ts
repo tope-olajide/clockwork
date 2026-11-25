@@ -12,8 +12,15 @@ import { titleForMessages } from "./chat/chat-utils";
 import { runHeadlessPlaytest, type PlaytestInput } from "../../engine/runtime/playtest";
 import { useAgentPresenceStore } from "../../engine/store/agent-presence";
 import { collectProjectAssets, createSnapshot } from "../../engine/io/snapshot";
-import { streamAiPlay, verifyWithKane } from "../../engine/ai/kane-api";
-import { aiPlayArgsFromToolCall } from "./kane-tool-args";
+import { cancelAiPlay, fetchKaneStatus, streamAiPlay, verifyWithKane } from "../../engine/ai/kane-api";
+import type { KaneCliStatus, KaneEvent } from "@shared/protocol/kane";
+import type { ProjectDocument } from "../../engine/model/schema";
+import { aiPlayArgsFromToolCall, verifyArgsFromToolCall } from "./kane-tool-args";
+import { KaneTurnBudget, runKaneCheck, smokeCheckArgs } from "./kane-check-session";
+import { controlSummary } from "../../engine/runtime/kane-check-runner";
+import { observationValue } from "../../engine/runtime/test-observations";
+import { TestController } from "../../engine/runtime/test-controller";
+import { changeAffectsGameplay, kaneCheckRequestMessage } from "./verification-offer";
 import { useTestPlanStore } from "../ai-play/test-plan-store";
 import { runApprovedPhase } from "../ai-play/phase-runner";
 import { buildPhaseContinuation, continuationChatMessage, phaseResultPayload } from "./phase-continuation";
@@ -27,7 +34,22 @@ export interface AgentToolCard {
   name: string;
   args: unknown;
   status: "running" | "done" | "error" | "canceled";
+  /** Live Kane progress while a verification run is in flight. */
+  progress?: KaneProgress;
   result?: ToolResult & { imageDataUrl?: string; changeSet?: ChangeSetSummary; preview?: boolean };
+}
+
+export interface KaneProgress {
+  message: string;
+  step?: number;
+  runId?: string;
+  startedAt: number;
+}
+
+/** Offered after an applied change that could alter gameplay. */
+export interface VerifyOffer {
+  id: string;
+  summary: string;
 }
 
 export interface DisplayMessage extends AgentChatMessage {
@@ -97,6 +119,26 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   const [pendingPreview, setPendingPreview] = useState<PendingPreview | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const agentTransactionIdsRef = useRef<string[]>([]);
+  const [kaneStatus, setKaneStatus] = useState<KaneCliStatus | null>(null);
+  const [verifyOffer, setVerifyOffer] = useState<VerifyOffer | null>(null);
+  // Run id of the Kane run this session started, so Stop can cancel it on the server.
+  const kaneRunIdRef = useRef<string | null>(null);
+  // Set when an applied change could alter gameplay during the current turn.
+  const gameplayChangeRef = useRef<string | null>(null);
+  // Kane/simulator budget for the current user message; replaced on every send.
+  const kaneBudgetRef = useRef(new KaneTurnBudget());
+  // True while the current user message itself asked for a Kane check.
+  const userAskedKaneRef = useRef(false);
+
+  const refreshKaneStatus = useCallback(async (force = false) => {
+    try {
+      setKaneStatus(await fetchKaneStatus(force));
+    } catch {
+      setKaneStatus(null);
+    }
+  }, []);
+
+  useEffect(() => { void refreshKaneStatus(); }, [refreshKaneStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,6 +234,11 @@ export function useAgentSession(args: UseAgentSessionArgs) {
   const stop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    // Aborting the fetch only drops the stream; the server-side Kane run keeps
+    // going unless it is cancelled by id.
+    const kaneRunId = kaneRunIdRef.current;
+    kaneRunIdRef.current = null;
+    if (kaneRunId) void cancelAiPlay(kaneRunId);
     setStatus("ready");
     setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m.toolCard?.status === "running" ? { ...m, toolCard: { ...m.toolCard, status: "canceled" } } : m)));
   }, []);
@@ -239,7 +286,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     }).catch(() => undefined);
   }, [args.projectId]);
 
-  const executeAgentTool = useCallback(async (name: string, callArgs: Record<string, unknown>, transactionId: string) => {
+  const executeAgentTool = useCallback(async (name: string, callArgs: Record<string, unknown>, transactionId: string, cardId?: string, signal?: AbortSignal) => {
     const store = useEngineStore.getState();
     const doc = store.document;
     const revision = doc?.revision ?? 0;
@@ -248,21 +295,132 @@ export function useAgentSession(args: UseAgentSessionArgs) {
 
     if (name === "verify_with_kane" || name === "run_ai_play") {
       if (!doc) return fail("No project open.");
+      // A Kane run after an edit is the verification; do not offer another one.
+      gameplayChangeRef.current = null;
+      const startedAt = Date.now();
+      const setStage = (message: string) => {
+        if (!cardId) return;
+        setMessages((prev) => prev.map((m) => m.toolCallId === cardId && m.toolCard?.status === "running"
+          ? { ...m, toolCard: { ...m.toolCard, progress: { startedAt, ...m.toolCard.progress, message } } }
+          : m));
+      };
+      const progressHandlers = {
+        signal,
+        onRunId: (runId: string) => {
+          kaneRunIdRef.current = runId;
+          setMessages((prev) => prev.map((m) => m.toolCallId === cardId && m.toolCard?.status === "running"
+            ? { ...m, toolCard: { ...m.toolCard, progress: { message: "Kane is starting its browser", startedAt, ...m.toolCard.progress, runId } } }
+            : m));
+        },
+        onEvent: (event: KaneEvent) => {
+          if (event.type !== "step") return;
+          const generic = !event.remark || /^Step \d+$/i.test(event.remark.trim());
+          setMessages((prev) => prev.map((m) => m.toolCallId === cardId && m.toolCard?.status === "running"
+            ? { ...m, toolCard: { ...m.toolCard, progress: { message: "Kane is working", startedAt, ...m.toolCard.progress, step: event.step, ...(generic ? {} : { message: event.remark }) } } }
+            : m));
+        },
+      };
+      // Free-text objective (no structured expectations): sent to Kane verbatim
+      // against the real-time player, exactly as the user or agent wrote it.
+      if (name === "verify_with_kane" && !Array.isArray(callArgs.expect) && typeof callArgs.objective === "string" && callArgs.objective.trim()) {
+        const unavailable = kaneUnavailableFor(kaneStatus);
+        if (unavailable) return fail(`Kane cannot run: ${unavailable} Next: report this to the user; do not call Kane tools again this message.`, "kane-unavailable");
+        if (kaneBudgetRef.current.kaneRunsLeft === 0) return fail("This message already used its Kane runs. Next: report the earlier results; do not call Kane again.", "kane-budget");
+        kaneBudgetRef.current.kaneRuns += 1;
+        try {
+          setStage("Preparing a snapshot of this project");
+          const assets = await collectProjectAssets(doc);
+          const snapshot = await createSnapshot(doc, { assets, ttlHours: 1 });
+          setStage("Kane is starting its browser");
+          const body = verifyArgsFromToolCall(callArgs, { snapshotId: snapshot.id, seed: 1234 });
+          const result = await verifyWithKane(body, progressHandlers);
+          kaneRunIdRef.current = null;
+          return ok({
+            target: "game-snapshot",
+            runId: result.runId,
+            status: result.status,
+            summary: result.summary,
+            finalState: result.finalState,
+            durationMs: result.durationMs,
+            steps: result.steps.filter((step) => step.status !== "running").slice(-8),
+            runtimeErrors: result.runtimeErrors,
+            evidenceUrl: result.evidenceUrl,
+            testUrl: result.testUrl,
+            snapshotId: snapshot.id,
+            objective: result.objective,
+            nextStep: result.status === "passed"
+              ? "Kane passed this objective. Report it with the stored values and evidence link. Do not run it again."
+              : result.status === "failed"
+                ? "Kane ran to completion and the assertion failed. Report the stored values and Kane's reason. Do not retry the same objective; do not reword it to make it pass."
+                : "Kane did not return a verdict. Report this as unknown, not as a pass. Do not retry automatically.",
+            runsLeftThisTurn: kaneBudgetRef.current.kaneRunsLeft,
+          });
+        } catch (error) {
+          kaneRunIdRef.current = null;
+          return fail(`${error instanceof Error ? error.message : "Kane run failed."} Next: report this; do not retry automatically.`);
+        }
+      }
+      if (name === "verify_with_kane") {
+        const outcome = await runKaneCheck(callArgs, {
+          document: doc,
+          profile: gameTestProfileForDocument(doc),
+          budget: kaneBudgetRef.current,
+          sceneId: typeof callArgs.sceneId === "string" ? callArgs.sceneId : store.activeSceneId ?? undefined,
+          seed: 1234,
+          kaneUnavailable: kaneUnavailableFor(kaneStatus),
+          onStage: setStage,
+          runKane: async (check, sceneId) => {
+            setStage("Preparing a snapshot of this project");
+            const assets = await collectProjectAssets(doc);
+            const snapshot = await createSnapshot(doc, { assets, ttlHours: 1 });
+            setStage("Kane is starting its browser");
+            try {
+              const result = await verifyWithKane({ snapshotId: snapshot.id, check, seed: 1234, ...(sceneId ? { sceneId } : {}) }, progressHandlers);
+              return { ...result, snapshotId: snapshot.id };
+            } finally {
+              kaneRunIdRef.current = null;
+            }
+          },
+        });
+        if (!outcome.ok) return { ...fail(`${outcome.error} Next: ${outcome.nextStep}`, outcome.code), data: { nextStep: outcome.nextStep } };
+        return ok(outcome.payload);
+      }
+      const updateProgress = (patch: Partial<KaneProgress>) => {
+        if (!cardId) return;
+        setMessages((prev) => prev.map((m) => m.toolCallId === cardId && m.toolCard?.status === "running"
+          ? { ...m, toolCard: { ...m.toolCard, progress: { message: "Starting Kane", startedAt, ...m.toolCard.progress, ...patch } } }
+          : m));
+      };
+      const handlers = {
+        signal,
+        onRunId: (runId: string) => {
+          kaneRunIdRef.current = runId;
+          updateProgress({ runId });
+        },
+        onEvent: (event: KaneEvent) => {
+          if (event.type === "step") {
+            // Kane opens each step with a bare "Step N" remark; keep the last
+            // descriptive remark instead of showing "Step 4 · Step 3".
+            const generic = !event.remark || /^Step \d+$/i.test(event.remark.trim());
+            updateProgress(generic ? { step: event.step } : { step: event.step, message: event.remark });
+          }
+          else if (event.type === "warning") updateProgress({ message: event.message });
+        },
+      };
+      updateProgress({ message: "Preparing a snapshot of this project" });
       try {
         const assets = await collectProjectAssets(doc);
         const snapshot = await createSnapshot(doc, { assets, ttlHours: 1 });
-        const result = name === "verify_with_kane"
-          ? await verifyWithKane({
-            snapshotId: snapshot.id,
-            objective: String(callArgs.objective ?? "Verify the current project in the snapshot player."),
-            seed: 1234,
-          })
-          : await streamAiPlay(aiPlayArgsFromToolCall(callArgs, {
-            snapshotId: snapshot.id,
-            projectId: args.projectId,
-            seed: 1234,
-          }));
+        updateProgress({ message: "Starting Kane" });
+        const result = await streamAiPlay(aiPlayArgsFromToolCall(callArgs, {
+          snapshotId: snapshot.id,
+          projectId: args.projectId,
+          seed: 1234,
+        }), handlers);
+        kaneRunIdRef.current = null;
         return ok({
+          target: "game-snapshot",
+          runId: result.runId,
           status: result.status,
           summary: result.summary,
           finalState: result.finalState,
@@ -276,6 +434,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           objective: result.objective,
         });
       } catch (error) {
+        kaneRunIdRef.current = null;
         return fail(error instanceof Error ? error.message : "Kane run failed.");
       }
     }
@@ -383,6 +542,10 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       return ok({ preview: true, destructive, changeSet: result.changeSet, revision: result.revision }, { changeSet: result.changeSet, preview: true });
     }
 
+    if ((name === "apply_commands" || name === "preview_commands") && !Array.isArray(callArgs.commands)) {
+      return fail(`${name} needs "commands" as an array of {type, args} objects; it received ${typeof callArgs.commands}. Nothing was changed.`);
+    }
+
     if (name === "apply_commands") {
       if (!doc) return fail("No project open.");
       const input = callArgs as unknown as ApplyCommandsArgs;
@@ -408,6 +571,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       const applied = applyCommandsInStore(store.dispatch as any, () => useEngineStore.getState().document, input, transactionId);
       if (!applied.ok) return { ok: false, error: applied.message, code: applied.code, revision: applied.revision ?? doc.revision, name, args: callArgs, data: applied };
       agentTransactionIdsRef.current.push(transactionId);
+      if (changeAffectsGameplay(applied.changeSet)) gameplayChangeRef.current = input.summary || applied.changeSet?.label || "the change";
       useAgentPresenceStore.getState().setGhost(null);
       if (applied.changedIds?.length) {
         useAgentPresenceStore.getState().setPresence({ objectIds: applied.changedIds, sceneId: store.activeSceneId, label: input.summary || "Agent change" });
@@ -427,7 +591,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       return executed as any;
     }
     return fail("No project open.");
-  }, [args, capabilities.vision, mode]);
+  }, [args, capabilities.vision, kaneStatus, mode]);
 
   const applyPendingPreview = useCallback(() => {
     if (!pendingPreview) return;
@@ -448,6 +612,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
       return;
     }
     agentTransactionIdsRef.current.push(pendingPreview.transactionId);
+    if (kaneStatus?.installed && kaneStatus.authenticated && changeAffectsGameplay(applied.changeSet)) setVerifyOffer({ id: nanoid(), summary: pendingPreview.summary });
     setMessages((prev) => [...prev, { id: nanoid(), role: "assistant", content: `Applied: ${pendingPreview.summary} (r${applied.revision}, 1 undo entry).`, createdAt: new Date().toISOString() }]);
     useAgentPresenceStore.getState().setGhost(null);
     if (applied.changedIds?.length) {
@@ -455,7 +620,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     }
     setPendingPreview(null);
     setError(null);
-  }, [pendingPreview]);
+  }, [kaneStatus, pendingPreview]);
 
   const discardPendingPreview = useCallback(() => {
     if (pendingPreview) setMessages((prev) => [...prev, { id: nanoid(), role: "assistant", content: `Discarded preview: ${pendingPreview.summary}.`, createdAt: new Date().toISOString() }]);
@@ -463,19 +628,55 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     setPendingPreview(null);
   }, [pendingPreview]);
 
+  // Default policy is Ask: offer a button after a gameplay-changing edit, never run unasked.
+  const offerVerification = useCallback(() => {
+    const summary = gameplayChangeRef.current;
+    gameplayChangeRef.current = null;
+    if (!summary) return;
+    // The user already asked for Kane in this message; the agent owns that call.
+    if (userAskedKaneRef.current) return;
+    if (!kaneStatus?.installed || !kaneStatus.authenticated) return;
+    setVerifyOffer({ id: nanoid(), summary });
+  }, [kaneStatus]);
+
   /**
    * Runs one model turn against an explicit conversation. `send` builds a
    * conversation from a new user message; `continueWithPhaseResult` builds one
    * from a panel-started phase result appended as a typed tool message. Both
    * share the loop so the agent explains either source the same way.
    */
-  const runTurn = useCallback(async (initialConversation: AgentChatMessage[], abort: AbortController) => {
+  const runTurn = useCallback(async (initialConversation: AgentChatMessage[], abort: AbortController, options: { expectKane?: boolean } = {}) => {
     try {
       let conversation: AgentChatMessage[] = initialConversation;
       const turnTransactionId = nanoid();
       let replanCount = 0;
-      for (let step = 0; step < 8; step++) {
+      // A user who asked for a Kane check gets one nudge if the model replies
+      // without calling the tool, instead of a reply that only promises a run.
+      let kaneCalled = false;
+      // Up to 3 reminders per message, never two in a row: each one must be
+      // followed by a real tool call before another is allowed.
+      let nudges = 0;
+      let lastStepWasNudge = false;
+      userAskedKaneRef.current = Boolean(options.expectKane) || /\bkane\b/i.test(latestUserText(initialConversation));
+      const askedKane = userAskedKaneRef.current;
+      // Model steps per user message. Eight ran out mid-task: an edit, a retry,
+      // a preflight and a few lookups used them all and the turn ended without
+      // the Kane check the user asked for. The last KANE_RESERVE steps are kept
+      // for verification when the user asked for Kane.
+      const MAX_STEPS = 12;
+      const KANE_RESERVE = 3;
+      let reserveNoteSent = false;
+      for (let step = 0; step < MAX_STEPS; step++) {
         if (abort.signal.aborted) return;
+        if (askedKane && !kaneCalled && !reserveNoteSent && step >= MAX_STEPS - KANE_RESERVE) {
+          reserveNoteSent = true;
+          conversation = [...conversation, {
+            id: nanoid(),
+            role: "user",
+            content: `Only ${MAX_STEPS - step} steps remain for this message. Stop editing and inspecting now: call verify_with_kane with a check built from context.kane.testMode, then report the result.`,
+            createdAt: new Date().toISOString(),
+          }];
+        }
         setStatus("thinking");
         const fresh = useEngineStore.getState();
         const currentDoc = fresh.document;
@@ -493,6 +694,14 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           camera: args.camera,
           viewportSize: args.viewportSize,
           includeViewportCapture: capabilities.vision,
+          kane: {
+            installed: Boolean(kaneStatus?.installed),
+            authenticated: Boolean(kaneStatus?.authenticated),
+            ...(typeof kaneStatus?.credits === "number" ? { credits: kaneStatus.credits } : {}),
+            ...(kaneUnavailableFor(kaneStatus) ? { reason: kaneUnavailableFor(kaneStatus)! } : {}),
+            ...(() => { try { return { testMode: testModeContext(currentDoc, fresh.activeSceneId) }; } catch { return {}; } })(),
+            runsLeftThisTurn: kaneBudgetRef.current.kaneRunsLeft,
+          },
         });
 
         const assistantId = nanoid();
@@ -524,6 +733,24 @@ export function useAgentSession(args: UseAgentSessionArgs) {
         const assistantMsg: AgentChatMessage = { id: assistantId, role: "assistant", content: assistantText, createdAt: new Date().toISOString() };
         conversation = [...conversation, assistantMsg];
 
+        // A reply that only announces its next action ("Let me see…", "I need
+        // the schemas…") and then stops is the main way the agent stalls. Give it
+        // exactly one nudge per user message to actually make the call.
+        const wantsKane = (options.expectKane || /\bkane\b/i.test(latestUserText(initialConversation))) && !kaneCalled;
+        const announcedAction = (mode === "build" || mode === "plan") && ANNOUNCED_ACTION.test(assistantText);
+        const emptyStep = !assistantText.trim();
+        if (toolCalls.length === 0 && nudges < 3 && !lastStepWasNudge && (wantsKane || announcedAction || emptyStep) && step < MAX_STEPS - 1) {
+          nudges += 1;
+          lastStepWasNudge = true;
+          const note = wantsKane
+            ? "You have not called verify_with_kane yet. Call it now with a check built from context.kane.testMode (finish any edit the request needs first), or say in one sentence why it cannot be checked."
+            : emptyStep
+              ? "Your last reply was empty. Continue the task: make the next tool call now."
+              : "You described your next step but did not take it. Call the tool now (e.g. list_commands with prefixes, then apply_commands). Do not reply with a plan.";
+          conversation = [...conversation, { id: nanoid(), role: "user", content: note, createdAt: new Date().toISOString() }];
+          continue;
+        }
+
         if (toolCalls.length === 0) {
           if (!assistantText.trim()) {
             setMessages((prev) => [...prev, {
@@ -533,17 +760,34 @@ export function useAgentSession(args: UseAgentSessionArgs) {
               createdAt: new Date().toISOString(),
             }]);
           }
+          offerVerification();
           setStatus("ready");
           return;
         }
 
+        lastStepWasNudge = false;
         for (const call of toolCalls) {
           if (abort.signal.aborted) return;
+          if (call.name === "verify_with_kane") kaneCalled = true;
           setStatus("tool");
           const cardId = nanoid();
           const card: AgentToolCard = { id: call.callId || cardId, name: call.name, args: call.args, status: "running" };
           setMessages((prev) => [...prev, { id: nanoid(), role: "tool", content: "", createdAt: new Date().toISOString(), toolCallId: card.id, toolName: call.name, toolArgs: call.args, toolCard: card }]);
-          const executed: any = await executeAgentTool(call.name, (call.args as Record<string, unknown>) ?? {}, turnTransactionId);
+          // A throwing tool used to leave its card on "working" forever and end
+          // the turn; it now returns a normal error the model can fix.
+          const brokenArgs = (call.args as any)?._invalidJson === true;
+          const executed: any = brokenArgs
+            ? {
+              ok: false,
+              error: (call.args as any)._truncated
+                ? `Your ${call.name} call was cut off at the model's output limit (${(call.args as any)._length} chars sent), so nothing ran. Send the same change as smaller calls: at most 3 object.create commands per apply_commands, and keep visuals minimal.`
+                : `Your ${call.name} arguments were not valid JSON, so nothing ran. Send them again as a JSON object.`,
+              revision: useEngineStore.getState().document?.revision ?? 0,
+            }
+            : await executeAgentTool(call.name, normalizeToolArgs(call.args), turnTransactionId, card.id, abort.signal)
+            .catch((error: unknown) => ({ ok: false, error: `Tool ${call.name} failed: ${error instanceof Error ? error.message : String(error)}. Fix the arguments and call it again.`, revision: useEngineStore.getState().document?.revision ?? 0 }));
+          // Stop already marked the card canceled; never overwrite it with a result.
+          if (abort.signal.aborted) return;
           const toolResult: ToolResult & { imageDataUrl?: string; changeSet?: ChangeSetSummary; preview?: boolean } = {
             ok: executed.ok,
             data: executed.data,
@@ -579,6 +823,17 @@ export function useAgentSession(args: UseAgentSessionArgs) {
           }
         }
       }
+      // The step budget ran out. Say so instead of ending silently, and be
+      // explicit when the Kane check the user asked for never ran.
+      setMessages((prev) => [...prev, {
+        id: nanoid(),
+        role: "assistant",
+        content: askedKane && !kaneCalled
+          ? `I used all ${MAX_STEPS} steps for this message before running the Kane check you asked for. Send "verify with Kane" to run it now.`
+          : `I used all ${MAX_STEPS} steps for this message. Send "continue" to pick up where I stopped.`,
+        createdAt: new Date().toISOString(),
+      }]);
+      offerVerification();
       setStatus("ready");
     } catch (e) {
       if ((e as Error).name === "AbortError") {
@@ -598,9 +853,9 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
     }
-  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, executeAgentTool, mode]);
+  }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModelId, executeAgentTool, kaneStatus, mode, offerVerification]);
 
-  const send = useCallback(async (text: string, attachments?: ChatAttachment[], replaceUserId?: string) => {
+  const send = useCallback(async (text: string, attachments?: ChatAttachment[], replaceUserId?: string, options: { expectKane?: boolean } = {}) => {
     const trimmed = text.trim();
     if (!trimmed && !attachments?.length) return;
     const store = useEngineStore.getState();
@@ -640,6 +895,9 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     }
 
     setError(null);
+    setVerifyOffer(null);
+    gameplayChangeRef.current = null;
+    kaneBudgetRef.current = new KaneTurnBudget();
     useAgentPresenceStore.getState().clearPresence();
     const replaceIndex = replaceUserId ? messages.findIndex((message) => message.id === replaceUserId) : -1;
     const baseMessages = replaceIndex >= 0 ? messages.slice(0, replaceIndex) : messages;
@@ -657,7 +915,7 @@ export function useAgentSession(args: UseAgentSessionArgs) {
 
     const initialConversation: AgentChatMessage[] = [...baseMessages.filter((m) => !m.streaming), userMsg].map(({ streaming, toolCard, ...m }) => m);
 
-    await runTurn(initialConversation, abort);
+    await runTurn(initialConversation, abort, options);
   }, [args.camera, args.lockedSelectionId, args.projectId, args.tab, args.tool, args.viewportSize, capabilities.vision, effectiveModel, effectiveModelId, executeAgentTool, messages, mock, mode, providerConfigured, canUseTools, runTurn]);
 
   /**
@@ -716,6 +974,49 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     abortRef.current = abort;
     await runTurn(conversation, abort);
   }, [messages, mock, effectiveModel, providerConfigured, runTurn]);
+
+  /**
+   * Test with Kane without the model choosing anything: runs the check (the
+   * built-in smoke check by default) through the same tool executor, then, if
+   * a tool-capable model is available, hands the typed result to the agent to
+   * explain — the same continuation shape a panel-started phase uses.
+   */
+  const runKaneCheckDirect = useCallback(async (checkArgs?: Record<string, unknown>) => {
+    const doc = useEngineStore.getState().document;
+    if (!doc) return;
+    setError(null);
+    setVerifyOffer(null);
+    kaneBudgetRef.current = new KaneTurnBudget();
+    const callArgs = checkArgs ?? smokeCheckArgs(gameTestProfileForDocument(doc));
+    const toolCallId = `kane-direct-${nanoid(8)}`;
+    const card: AgentToolCard = { id: toolCallId, name: "verify_with_kane", args: callArgs, status: "running", progress: { message: "Rehearsing in the engine simulator", startedAt: Date.now() } };
+    const base = messages.filter((message) => !message.streaming);
+    setMessages([...base, { id: nanoid(), role: "tool", content: "", createdAt: new Date().toISOString(), toolCallId, toolName: card.name, toolArgs: callArgs, toolCard: card }]);
+    const abort = new AbortController();
+    abortRef.current = abort;
+    setStatus("tool");
+    const executed: any = await executeAgentTool("verify_with_kane", callArgs, nanoid(), toolCallId, abort.signal);
+    if (abort.signal.aborted) return;
+    const toolResult: ToolResult = { ok: executed.ok, data: executed.data, error: executed.error, revision: executed.revision ?? doc.revision };
+    setMessages((prev) => prev.map((m) => m.toolCallId === toolCallId ? { ...m, toolCard: { ...card, status: executed.ok ? "done" : "error", result: toolResult }, toolResult, content: JSON.stringify(toolResult) } : m));
+    const modelReady = mock || (Boolean(effectiveModel) && providerConfigured && canUseTools);
+    if (!modelReady) {
+      setStatus("ready");
+      if (abortRef.current === abort) abortRef.current = null;
+      return;
+    }
+    const toolMessage: AgentChatMessage = {
+      id: nanoid(),
+      role: "tool",
+      content: JSON.stringify(toolResult),
+      createdAt: new Date().toISOString(),
+      toolCallId,
+      toolName: "verify_with_kane",
+      toolArgs: { ...callArgs, source: "test-with-kane-button" },
+      toolResult,
+    };
+    await runTurn([...base.map(({ streaming, toolCard, ...m }) => m), toolMessage], abort);
+  }, [canUseTools, effectiveModel, executeAgentTool, messages, mock, providerConfigured, runTurn]);
 
   const isBusy = status === "thinking" || status === "streaming" || status === "tool";
 
@@ -778,7 +1079,67 @@ export function useAgentSession(args: UseAgentSessionArgs) {
     pendingPreview,
     applyPendingPreview,
     discardPendingPreview,
-  }), [messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, continueWithPhaseResult, stop, retry, regenerate, newChat, sessionId, sessions, openChat, deleteChatSession, renameChatSession, refreshAiMeta, pendingPreview, applyPendingPreview, discardPendingPreview]);
+    kaneStatus,
+    refreshKaneStatus,
+    verifyOffer,
+    dismissVerifyOffer: () => setVerifyOffer(null),
+    runKaneCheckDirect,
+    requestKaneCheck: (description: string) => send(kaneCheckRequestMessage(description), undefined, undefined, { expectKane: true }),
+  }), [kaneStatus, refreshKaneStatus, verifyOffer, runKaneCheckDirect, messages, status, mode, setMode, error, selectedModelId, setSelectedModelId, effectiveModelId, effectiveModel, models, providers, aiSettings, mock, capabilities, canBuildPlan, modelLabel, isBusy, send, continueWithPhaseResult, stop, retry, regenerate, newChat, sessionId, sessions, openChat, deleteChatSession, renameChatSession, refreshAiMeta, pendingPreview, applyPendingPreview, discardPendingPreview]);
+}
+
+/** Text that promises an action without taking it. */
+const ANNOUNCED_ACTION = /\b(let me|i'll|i will|i need (to|the)|next,? i|now i|i'm going to|first,? i|re-?running|re-?trying|running (it|the \w+) again|trying again|re-?checking|re-?applying)\b/i;
+
+/**
+ * Models often send nested arrays as JSON strings (`commands: "[{...}]"`).
+ * Parse those once here so every tool sees real arrays and objects.
+ */
+export function normalizeToolArgs(raw: unknown): Record<string, unknown> {
+  let args: unknown = raw;
+  if (typeof args === "string") {
+    try { args = JSON.parse(args); } catch { return {}; }
+  }
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {};
+  const out: Record<string, unknown> = { ...(args as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(out)) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (!(trimmed.startsWith("[") || trimmed.startsWith("{"))) continue;
+    try { out[key] = JSON.parse(trimmed); } catch { /* leave as text */ }
+  }
+  return out;
+}
+
+function latestUserText(conversation: AgentChatMessage[]): string {
+  for (let index = conversation.length - 1; index >= 0; index -= 1) {
+    if (conversation[index]?.role === "user") return conversation[index]!.content ?? "";
+  }
+  return "";
+}
+
+/** Why a Kane run cannot start, or null when it can. */
+export function kaneUnavailableFor(status: KaneCliStatus | null): string | null {
+  if (!status) return "Kane CLI status is unknown (the server did not answer).";
+  if (!status.installed) return status.reason ?? "Kane CLI is not installed.";
+  if (!status.authenticated) return status.reason ?? "Kane CLI is not signed in.";
+  if (status.reason && /credit/i.test(status.reason)) return status.reason;
+  return null;
+}
+
+/** Controls and frame-zero readouts the agent can name in a verify_with_kane check. */
+function testModeContext(document: ProjectDocument, sceneId: string | null) {
+  const profile = gameTestProfileForDocument(document);
+  const scene = sceneId && document.scenes.some((candidate) => candidate.id === sceneId) ? sceneId : document.startSceneId;
+  const controller = new TestController(document, { seed: 1234, sceneId: scene });
+  return {
+    controls: controlSummary(profile),
+    readouts: profile.observations.map((observation) => ({
+      id: observation.id,
+      label: observation.label,
+      start: String(observationValue(controller, observation) ?? "none"),
+    })),
+  };
 }
 
 function toSummary(record: ChatRecord): ChatSessionSummary {

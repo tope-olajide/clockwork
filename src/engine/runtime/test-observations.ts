@@ -26,7 +26,9 @@ export function observationValue(
     case "player": {
       const player = controller.runtime.player();
       if (!player) return null;
-      return (player as unknown as Record<string, string | number | boolean>)[observation.key ?? ""] ?? null;
+      const value = (player as unknown as Record<string, string | number | boolean>)[observation.key ?? ""] ?? null;
+      // Browser agents read these off the page; long float tails are easy to misread.
+      return typeof value === "number" ? Math.round(value * 100) / 100 : value;
     }
     default:
       return null;

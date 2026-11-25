@@ -62,6 +62,8 @@ export interface ContextPacket {
       gravity: { x: number; y: number };
       background: string;
       audio?: { musicVolume?: number; sfxVolume?: number; masterVolume?: number };
+      /** HUD widgets (project-level, so scene lookups never show them). */
+      hud?: Array<{ id: string; variable: string; label: string; corner: string }>;
     };
   };
   editor: {
@@ -110,6 +112,21 @@ export interface ContextPacket {
   };
   availableCommands: string[];
   warnings: string[];
+  /** Kane readiness, so the agent never calls a verification tool that cannot run. */
+  kane?: {
+    installed: boolean;
+    authenticated: boolean;
+    credits?: number;
+    /** Why Kane tools cannot run right now, when they cannot. */
+    reason?: string;
+    /** Vocabulary for verify_with_kane checks, with frame-zero readout values. */
+    testMode?: {
+      controls: Array<{ id: string; label: string; mode: "hold" | "pulse" }>;
+      readouts: Array<{ id: string; label: string; start: string }>;
+    };
+    /** Kane runs left for the current user message. */
+    runsLeftThisTurn?: number;
+  };
 }
 
 export const SLICE6_READ_TOOLS = [

@@ -14,6 +14,7 @@
     "typecheck": "tsc -b tsconfig.json tsconfig.node.json",
     "check:repo": "node scripts/check-repo.mjs",
     "test": "node --import tsx --test tests/*.test.ts",
+    "test:hud": "node --import tsx scripts/kane/hud-overlap-check.mts",
     "smoke:phase": "node --import tsx scripts/kane/phase-smoke.mts",
     "kane:engine-e2e": "node scripts/kane/engine-e2e.mjs",
     "kane:engine-e2e:dev": "node scripts/kane/engine-e2e-dev.mjs",

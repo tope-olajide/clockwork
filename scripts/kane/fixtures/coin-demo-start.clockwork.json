@@ -1,0 +1,712 @@
+{
+  "format": "clockwork-project",
+  "version": 1,
+  "exportedAt": "2026-11-24T17:01:50.839Z",
+  "project": {
+    "schemaVersion": 1,
+    "id": "prj_Nq3j0wo443",
+    "name": "Coin Demo",
+    "revision": 0,
+    "createdAt": "2026-11-24T17:01:50.834Z",
+    "updatedAt": "2026-11-24T17:01:50.834Z",
+    "templateOrigin": "platformer",
+    "settings": {
+      "width": 1280,
+      "height": 720,
+      "pixelArt": false,
+      "gravity": {
+        "x": 0,
+        "y": 980
+      },
+      "background": "#10162a",
+      "inputMap": {
+        "left": [
+          "ArrowLeft",
+          "KeyA"
+        ],
+        "right": [
+          "ArrowRight",
+          "KeyD"
+        ],
+        "up": [
+          "ArrowUp",
+          "KeyW"
+        ],
+        "down": [
+          "ArrowDown",
+          "KeyS"
+        ],
+        "jump": [
+          "Space",
+          "KeyW"
+        ],
+        "action": [
+          "KeyE",
+          "Enter"
+        ]
+      },
+      "audio": {
+        "masterVolume": 0.8,
+        "musicVolume": 0.6,
+        "sfxVolume": 0.8
+      },
+      "ui": {
+        "hud": [],
+        "accent": "#ff856f",
+        "font": "inter",
+        "message": {
+          "color": "#f1f0ed",
+          "background": "rgba(11, 13, 18, 0.72)",
+          "fontSize": 20
+        }
+      }
+    },
+    "startSceneId": "scn_PwMyuggIOy",
+    "scenes": [
+      {
+        "id": "scn_PwMyuggIOy",
+        "name": "Dusk Run",
+        "kind": "level",
+        "size": {
+          "w": 2400,
+          "h": 1000
+        },
+        "background": {
+          "color": "#10162a"
+        },
+        "camera": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "layers": [
+          {
+            "id": "lyr_SfNxVkipEP",
+            "name": "Sky",
+            "order": 0,
+            "visible": true,
+            "locked": false,
+            "opacity": 1,
+            "parallax": {
+              "x": 0.05,
+              "y": 0.05
+            }
+          },
+          {
+            "id": "lyr_kRwyqT5XNB",
+            "name": "Far",
+            "order": 1,
+            "visible": true,
+            "locked": false,
+            "opacity": 1,
+            "parallax": {
+              "x": 0.3,
+              "y": 0.2
+            }
+          },
+          {
+            "id": "lyr_9IOyA7MRuE",
+            "name": "Play",
+            "order": 2,
+            "visible": true,
+            "locked": false,
+            "opacity": 1,
+            "parallax": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          {
+            "id": "lyr_9kb19gqeLg",
+            "name": "UI",
+            "order": 3,
+            "visible": true,
+            "locked": false,
+            "opacity": 1,
+            "parallax": {
+              "x": 0,
+              "y": 0
+            }
+          }
+        ],
+        "objects": [
+          {
+            "id": "obj_JEejeSVzTq",
+            "name": "Sky gradient",
+            "layerId": "lyr_SfNxVkipEP",
+            "transform": {
+              "x": 1200,
+              "y": 500,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 2400,
+              "height": 1000,
+              "color": "#10162a"
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "sky"
+            ]
+          },
+          {
+            "id": "obj_pzOlM_CKbC",
+            "name": "Moon",
+            "layerId": "lyr_SfNxVkipEP",
+            "transform": {
+              "x": 1840,
+              "y": 150,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 128,
+              "height": 128,
+              "color": "#f6e7c8"
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "moon"
+            ]
+          },
+          {
+            "id": "obj_7r_mixbXa7",
+            "name": "Ridge",
+            "layerId": "lyr_kRwyqT5XNB",
+            "transform": {
+              "x": 900,
+              "y": 560,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 1900,
+              "height": 475,
+              "color": "#1e263d"
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": []
+          },
+          {
+            "id": "obj_jVOvSn9qGc",
+            "name": "Ridge detail",
+            "layerId": "lyr_kRwyqT5XNB",
+            "transform": {
+              "x": 1480,
+              "y": 690,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 1400,
+              "height": 350,
+              "color": "#252f4a"
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": []
+          },
+          {
+            "id": "obj_QoAwEEAJPi",
+            "name": "Ridge foreground",
+            "layerId": "lyr_kRwyqT5XNB",
+            "transform": {
+              "x": 1700,
+              "y": 630,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 1600,
+              "height": 400,
+              "color": "#2b3654"
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": []
+          },
+          {
+            "id": "obj_GCKkjH6TOg",
+            "name": "Ground",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 1100,
+              "y": 872,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 2200,
+              "height": 100,
+              "color": "#29314b"
+            },
+            "body": {
+              "type": "static",
+              "width": 2200,
+              "height": 100,
+              "offsetX": 0,
+              "offsetY": 0,
+              "gravityScale": 1,
+              "collideWorldBounds": false,
+              "oneWay": false
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "ground"
+            ]
+          },
+          {
+            "id": "obj_IQSusavWH4",
+            "name": "Ledge A",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 620,
+              "y": 690,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 260,
+              "height": 28,
+              "color": "#384562"
+            },
+            "body": {
+              "type": "static",
+              "width": 260,
+              "height": 28,
+              "offsetX": 0,
+              "offsetY": 0,
+              "gravityScale": 1,
+              "collideWorldBounds": false,
+              "oneWay": false
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "ground"
+            ]
+          },
+          {
+            "id": "obj_1uSVnIVW0V",
+            "name": "Ledge B",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 1080,
+              "y": 560,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 240,
+              "height": 28,
+              "color": "#384562"
+            },
+            "body": {
+              "type": "static",
+              "width": 240,
+              "height": 28,
+              "offsetX": 0,
+              "offsetY": 0,
+              "gravityScale": 1,
+              "collideWorldBounds": false,
+              "oneWay": false
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "ground"
+            ]
+          },
+          {
+            "id": "obj_YaoGYDz_5X",
+            "name": "Ledge C",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 1530,
+              "y": 675,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 230,
+              "height": 28,
+              "color": "#384562"
+            },
+            "body": {
+              "type": "static",
+              "width": 230,
+              "height": 28,
+              "offsetX": 0,
+              "offsetY": 0,
+              "gravityScale": 1,
+              "collideWorldBounds": false,
+              "oneWay": false
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "ground"
+            ]
+          },
+          {
+            "id": "obj_a744fl3Atq",
+            "name": "Player",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 160,
+              "y": 710,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 34,
+              "height": 52,
+              "color": "#ff856f"
+            },
+            "body": {
+              "type": "dynamic",
+              "width": 34,
+              "height": 52,
+              "offsetX": 0,
+              "offsetY": 0,
+              "gravityScale": 1,
+              "collideWorldBounds": true,
+              "oneWay": false
+            },
+            "behaviors": [
+              {
+                "id": "bhv_4zytSex1lt",
+                "type": "platformer-controller",
+                "enabled": true,
+                "params": {
+                  "speed": 280,
+                  "jump": 640
+                }
+              },
+              {
+                "id": "bhv_zG4MsnGI8q",
+                "type": "camera-follow",
+                "enabled": true,
+                "params": {
+                  "damping": 0.12,
+                  "offsetY": -40
+                }
+              }
+            ],
+            "properties": {},
+            "tags": [
+              "player"
+            ]
+          },
+          {
+            "id": "obj_C3BULRh58k",
+            "name": "Spark hazard",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 1370,
+              "y": 800,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 44,
+              "height": 44,
+              "color": "#ffb45c"
+            },
+            "body": {
+              "type": "static",
+              "width": 44,
+              "height": 44,
+              "offsetX": 0,
+              "offsetY": 0,
+              "gravityScale": 1,
+              "collideWorldBounds": false,
+              "oneWay": false
+            },
+            "behaviors": [
+              {
+                "id": "bhv_YCJRDGK7Dn",
+                "type": "hazard",
+                "enabled": true,
+                "params": {
+                  "respawn": true
+                }
+              }
+            ],
+            "properties": {},
+            "tags": [
+              "hazard"
+            ]
+          },
+          {
+            "id": "obj_kDLedxupNl",
+            "name": "Checkpoint",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 1130,
+              "y": 790,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 20,
+              "height": 62,
+              "color": "#8fe3c0"
+            },
+            "behaviors": [
+              {
+                "id": "bhv_q_Fsc16QeU",
+                "type": "checkpoint",
+                "enabled": true,
+                "params": {}
+              }
+            ],
+            "properties": {},
+            "tags": [
+              "checkpoint"
+            ]
+          },
+          {
+            "id": "obj_-H3ZcVKFiy",
+            "name": "Relay",
+            "layerId": "lyr_9IOyA7MRuE",
+            "transform": {
+              "x": 2070,
+              "y": 760,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "rect",
+              "width": 44,
+              "height": 124,
+              "color": "#a9b4ff",
+              "stroke": "#e2e6ff"
+            },
+            "behaviors": [
+              {
+                "id": "bhv_CYNXe1XHDL",
+                "type": "checkpoint",
+                "enabled": true,
+                "params": {}
+              }
+            ],
+            "properties": {},
+            "tags": [
+              "goal"
+            ]
+          },
+          {
+            "id": "obj_k3Dw23dKCT",
+            "name": "Hint",
+            "layerId": "lyr_9kb19gqeLg",
+            "transform": {
+              "x": 1560,
+              "y": 86,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "text",
+              "text": "A / D  move    Space  jump",
+              "style": {
+                "font": "inter",
+                "size": 18,
+                "color": "#aab0c6",
+                "align": "right"
+              }
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "ui"
+            ]
+          }
+        ],
+        "rules": [
+          {
+            "id": "rul_lose",
+            "name": "Lose when time runs out",
+            "enabled": true,
+            "once": true,
+            "when": [
+              {
+                "kind": "variable",
+                "name": "lives",
+                "op": "<=",
+                "value": 0
+              }
+            ],
+            "do": [
+              {
+                "kind": "show-message",
+                "text": "Out of lives. Try again.",
+                "durationMs": 2200
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "scn_M-pfvrdH4e",
+        "name": "Win",
+        "kind": "level",
+        "size": {
+          "w": 1280,
+          "h": 720
+        },
+        "background": {
+          "color": "#10162a"
+        },
+        "camera": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "layers": [
+          {
+            "id": "lyr_YHH1PinMP2",
+            "name": "Win",
+            "order": 0,
+            "visible": true,
+            "locked": false,
+            "opacity": 1,
+            "parallax": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        ],
+        "objects": [
+          {
+            "id": "obj__mhEGJFrmT",
+            "name": "Win message",
+            "layerId": "lyr_YHH1PinMP2",
+            "transform": {
+              "x": 640,
+              "y": 360,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "originX": 0.5,
+              "originY": 0.5
+            },
+            "visual": {
+              "kind": "text",
+              "text": "All cores recovered. You win!",
+              "style": {
+                "font": "inter",
+                "size": 32,
+                "color": "#f1f0ed",
+                "align": "center"
+              }
+            },
+            "behaviors": [],
+            "properties": {},
+            "tags": [
+              "ui"
+            ]
+          }
+        ],
+        "rules": [
+          {
+            "id": "rul_win_message",
+            "name": "Show win message",
+            "enabled": true,
+            "once": true,
+            "when": [
+              {
+                "kind": "scene-start"
+              }
+            ],
+            "do": [
+              {
+                "kind": "show-message",
+                "text": "All cores recovered. You win!",
+                "durationMs": 2200
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "assets": [],
+    "prefabs": [],
+    "variables": [
+      {
+        "id": "var_won",
+        "name": "won",
+        "type": "boolean",
+        "initial": false,
+        "description": "Set when the relay is reached."
+      },
+      {
+        "id": "var_lives",
+        "name": "lives",
+        "type": "number",
+        "initial": 3,
+        "description": "Lives remaining."
+      }
+    ]
+  },
+  "assets": []
+}

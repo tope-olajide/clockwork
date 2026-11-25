@@ -29,7 +29,7 @@ pnpm check:repo
 
 ## What is implemented
 
-- **Projects:** create from Blank, one of 12 genre starters, one of 3 classic templates, or a written brief; search/filter/sort; rename, duplicate, archive, export and import `.clockwork.json`; damaged-project recovery.
+- **Projects:** create from Blank, one of 13 genre starters, one of 3 classic templates, or a written brief; search/filter/sort; rename, duplicate, archive, export and import `.clockwork.json`; damaged-project recovery.
 - **Editor:** PixiJS viewport with selection, multi-select, marquee, move/scale/rotate, snapping, pan/zoom, layers, hierarchy drag/reparent, inspector and undo/redo.
 - **Assets:** seeded starter art/audio, import, search/filter, rename, manual slicing, animation clips, and tilemap paint/erase/fill/pick.
 - **Gameplay authoring:** 57 commands, 26 behaviour types, variables, five rule conditions, eight rule actions, prefabs with overrides and detach, input bindings, gravity, HUD and scene audio.
@@ -39,13 +39,13 @@ pnpm check:repo
 
 ### Built-in starting points
 
-The New Project dialog offers **12 genre starters**, **3 classic templates**, and **Blank**:
+The New Project dialog offers **13 genre starters**, **3 classic templates**, and **Blank**:
 
-- Genre starters: Space Shooter, Space Invaders, Asteroid Field, Ping Pong, Brick Breaker, Flappy Flyer, Platform Jumper, Endless Runner, Arena Survival, Falling Objects, Maze Escape, Snake.
+- Genre starters: Space Shooter, Space Invaders, Asteroid Field, Ping Pong, Brick Breaker, Flappy Flyer, Platform Jumper, Clockwork Meadows, Meadow Sandbox, Endless Runner, Arena Survival, Falling Objects, Maze Escape, Snake.
 - Classic templates: Platformer, Top-down, Puzzle.
 - Blank: one empty scene and layer.
 
-Each starter is a real generated document with a scene, objects, behaviours, rules and HUD data. The 12 genre starters also have game-test profiles; the three classic templates do not.
+Each starter is a real generated document with a scene, objects, behaviours, rules and HUD data. The 13 genre starters also have game-test profiles; the three classic templates do not.
 
 ## Kane CLI integration
 
