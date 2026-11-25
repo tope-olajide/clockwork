@@ -55,7 +55,10 @@ export function brickBreakerTemplate(name: string): ProjectDocument {
     name: "Paddle",
     layerId: play.id,
     x: width / 2,
-    y: height - 58,
+    // 180px up from the bottom edge: Test Mode and AI Play dock their control
+    // buttons along the bottom-centre of the view (about 130px tall), and at
+    // height - 58 the paddle sat underneath them and could not be seen.
+    y: height - 180,
     width: 124,
     height: 18,
     color: cyan,
@@ -69,7 +72,8 @@ export function brickBreakerTemplate(name: string): ProjectDocument {
     name: "Ball",
     layerId: play.id,
     x: width / 2,
-    y: height - 82,
+    // Resting on the paddle (the ball's attach offset is -24).
+    y: height - 204,
     width: 18,
     height: 18,
     color: "#fff5d8",

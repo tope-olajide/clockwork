@@ -257,6 +257,7 @@ export class Runtime {
     const player = this.player();
     this.checkpoint = player ? { x: player.x, y: player.y } : { x: 0, y: 0 };
     this.camera = { x: player?.x ?? this.scene.camera.x, y: player?.y ?? this.scene.camera.y, zoom: this.scene.camera.zoom };
+    this.camera.zoom = this.effectiveZoom();
     this.clampCamera();
     this.previousCamera = { ...this.camera };
     this.frame = 0;
@@ -1855,14 +1856,39 @@ export class Runtime {
   setViewport(width: number, height: number): void {
     if (width <= 0 || height <= 0) return;
     this.viewport = { width, height };
+    this.camera.zoom = this.effectiveZoom();
     this.clampCamera();
+    // A fixed-screen camera never moves, so there is nothing to interpolate.
+    if (this.isFixedScreen()) this.previousCamera = { ...this.camera };
+  }
+
+  /** No object drives the camera: a single-screen game such as Brick Breaker. */
+  private isFixedScreen(): boolean {
+    return !this.objects.some((object) => object.active && behaviorOf(object.source, "camera-follow"));
+  }
+
+  /**
+   * Fixed-screen games shrink to fit a view smaller than the playfield, so the
+   * whole field stays visible. A 768px-tall Brick Breaker in a 620px view used
+   * to lose its bottom edge, paddle included. Never scales up, and scrolling
+   * games keep the authored zoom because the camera follows the player.
+   */
+  private effectiveZoom(): number {
+    const base = this.scene.camera.zoom || 1;
+    if (!this.isFixedScreen()) return base;
+    const fit = Math.min(1, this.viewport.width / (this.scene.size.w * base), this.viewport.height / (this.scene.size.h * base));
+    return base * fit;
   }
 
   private clampCamera(): void {
-    const halfW = this.viewport.width / 2;
-    const halfH = this.viewport.height / 2;
-    this.camera.x = Math.max(halfW, Math.min(this.scene.size.w - halfW, this.camera.x));
-    this.camera.y = Math.max(halfH, Math.min(this.scene.size.h - halfH, this.camera.y));
+    const zoom = this.camera.zoom || 1;
+    const halfW = this.viewport.width / 2 / zoom;
+    const halfH = this.viewport.height / 2 / zoom;
+    const { w, h } = this.scene.size;
+    // When the view is wider or taller than the world, centre the world on
+    // that axis instead of pinning it to the top-left corner.
+    this.camera.x = halfW * 2 >= w ? w / 2 : Math.max(halfW, Math.min(w - halfW, this.camera.x));
+    this.camera.y = halfH * 2 >= h ? h / 2 : Math.max(halfH, Math.min(h - halfH, this.camera.y));
   }
 
   private updateCamera(): void {
