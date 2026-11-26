@@ -202,7 +202,7 @@ K2–K4 require a configured tool-capable model for the agent portion. AI Play (
 
 ## 9. What Kane caught and proved
 
-A row only claims what `run_end.status === "passed"` plus stored `final_state` and the evidence pack support. Full narratives, screenshots and NDJSON paths are in `docs/kane-proof.md`; this is the short ledger.
+A row only claims what `run_end.status === "passed"` plus stored `final_state` and the evidence pack support. Summaries, run IDs and durations are in `docs/kane-proof.md`; this is the short ledger.
 
 ### Caught — product defects Kane surfaced
 
@@ -226,6 +226,6 @@ A row only claims what `run_end.status === "passed"` plus stored `final_state` a
 
 ### Not credited to the product
 
-- K2's three post-fix runs that ended with "browser target stopped running during screenshot capture" are an `environment_issue/platform_failure`; the objective is recorded as environment-blocked rather than passed or failed-as-product. Its defect half (Build accepted under "No model") is credited from the first run and its fix is verified separately.
+- K2's three earlier post-fix runs that ended with "browser target stopped running during screenshot capture" are classified as an environment issue, not a product failure; the full narrative lives in the honest-limits note in [`kane-proof.md`](kane-proof.md). The objective was hardened and K2 passed in session `bded0577` on 2026-11-26 (`Air jumps 0 → 1 → 0`).
 - K5 attempt 1 failed on Kane's own final-verification assertion with `final_state: {}` and did not name the inaccessible coin; the embedded `Core A` was identified by Clockwork's deterministic repair, and the three-coin passing attempt proves the move mattered.
 - Fixture-driven runs (`scripts/kane/fake-kane.mjs`, `KANE_FIXTURE_NO_RUN_END=1`) test the client contract only and are never counted as Kane evidence.

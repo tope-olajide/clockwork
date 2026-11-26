@@ -139,7 +139,7 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 | K3a repair + play win | agent Build prompt, applied change, Play, click-to-steer | Passed 282.1 s / 60.1 credits | Verified |
 | K3b undo/redo | agent edit + counters | Passed 218.9 s / 59.29 credits | Verified |
 | K4 in-app verification card | `verify_with_kane` tool + result card | Passed 65.2 s in-app; 206.7 s terminal rerun | Verified |
-| K2 defect discovery | Build with no model | Defect fixed; three reruns died in Kane's own browser during screenshot capture | Environment-blocked, not a passed run |
+| K2 defect discovery + agent double jump | Build with no model; agent edit, Play, Undo | Both defects fixed; run `bded0577` passed (Air jumps `0 → 1 → 0`) | Verified, real Kane pass |
 | Chat agent closed loop (agent → Kane → agent) | `verify_with_kane` in the agent loop; Meadow Sandbox starter | Run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (2026-11-25): the user asked the in-app agent to add coins tagged `coin`, +1 score per coin and a SCORE HUD, then verify with Kane. The agent applied 6 coins, a score variable and a Score HUD widget, ran a headless preflight, then called `verify_with_kane`. The check ran in the engine simulator, then once in a real browser. **PASSED** at project revision 9: SCORE 0 → 1, COIN COUNT 6 → 5, COLLECTED 0 → 1, PLAYER X 240 → 473.67 after holding MOVE RIGHT for 45 frames. Simulator and browser agreed on every readout. Evidence: `/api/kane/runs/a20a4b28-5387-4849-a978-a5ca5aa499c3/evidence` (local server). The user had to send a follow-up message before Kane ran because the agent used its 8-step budget. The budget is now 12 steps with the last 3 reserved for a requested Kane check, and the agent sees HUD widgets | Verified |
 | Agent-driven approved phase | `run_kane_test_phase` on Space Shooter | Run `b967bbdd`: PASSED, 79.7 s, shots-fired 3, projectiles 3, accepted inputs 1, 45 frames | Verified |
 | Saved engine E2E | `.testmuai/tests/engine-template-e2e_test.md` + `scripts/kane/engine-e2e.mjs` | Passed 2026-11-24: 1/1 steps, 286 s, session `aceb577f-0a26-456e-a2d7-944652113935`; final `lives: 3`, Object Y `780`, back on `/project/.../scene/...` | Verified |
@@ -165,7 +165,6 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 
 - **Phase state persistence.** Phase results and idempotency state are in memory (`server/kane/phase-session.ts`) and are cleared on server restart.
 - **Phase replay speedup.** Saved-test replay is wired into the phase runner, but no phase replay speedup has been measured.
-- **K2.** Environment-blocked: the defect it caught is fixed, and its three reruns died in Kane's browser. It is not recorded as a pass.
 - **Prompt presets.** Implemented; no real-model golden run recorded.
 - **Provider settings.** Key persistence across restart and custom-provider chat have no recorded run.
 - **From-brief project creation.** No recorded real-model brief run.
@@ -183,7 +182,7 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 
 | Artifact | What it records |
 |---|---|
-| `docs/kane-proof.md` | Dated Kane runs with objectives, durations, credits, findings, evidence paths, and negative controls |
+| `docs/kane-proof.md` | Condensed Kane evidence: proven flows with run IDs and durations, defects caught, and honest limits |
 | `docs/known-issues.md` | Maintained limitation ledger; source for the items in section 8 |
 | `docs/demo-readiness.md` / `docs/demo-readiness-evidence.md` | Demo script and browser-observed behavior |
 | `docs/ai-play.md` | AI Play design, consent, evidence, repair policy, limits |

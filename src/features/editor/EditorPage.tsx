@@ -102,6 +102,7 @@ export function EditorPage() {
   const saveState = useEngineStore((state) => state.saveState);
   const storageError = useEngineStore((state) => state.storageError);
   const isLoading = useEngineStore((state) => state.isLoading);
+  const activeProjectId = useEngineStore((state) => state.activeProjectId);
   const loadProject = useEngineStore((state) => state.loadProject);
   const dispatch = useEngineStore((state) => state.dispatch);
   const undo = useEngineStore((state) => state.undo);
@@ -143,8 +144,10 @@ export function EditorPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    void loadProject(projectId);
-  }, [projectId, loadProject]);
+    // Re-loading an already open project would reset undo history, so returning
+    // from Play (which remounts this page) must not clear it.
+    if (activeProjectId !== projectId || !current) void loadProject(projectId);
+  }, [activeProjectId, current, projectId, loadProject]);
 
   useEffect(() => {
     if (!current || !sceneId) return;

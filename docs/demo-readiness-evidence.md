@@ -9,7 +9,7 @@ record.
 
 - **Outcome:** real Kane CLI runs passed through both the agent path and the review panel.
 - **Agent-driven phase:** `b967bbdd` passed (Space Shooter, 79.7 s, shots-fired 3, projectiles 3, accepted inputs 1, 45 frames). Phase 3 below.
-- **Approved through the panel:** `98e21783` (94.7 s) and `ea1bb3b3` (78.1 s) passed with the same observations and an evidence bundle. Details in `docs/kane-proof.md`, Phase 7.
+- **Approved through the panel:** `98e21783` (94.7 s) and `ea1bb3b3` (78.1 s) passed with the same observations and an evidence bundle. Details below, and summarised in `docs/kane-proof.md`.
 - **Chat closed loop:** run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (Meadow Sandbox coins and score HUD) passed in the simulator and in a real browser. Details in `docs/kane-proof.md`.
 - **Not proven:** replay from cache (no run showed `replay_decisions > 0`). Phase state on the server is in memory and clears on restart.
 - The earlier attempts that timed out, hit a step budget or ended inconclusive stay below as the build record. Each one led to a fix.
@@ -235,8 +235,8 @@ kill-chain follow-up (Phase 4: timeout and step-budget inconclusives, one
 Kane-passed run with destroyed 1 / score 100 proven in-game but
 key-mismatch inconclusive); the replay path (Phase 6: one-shot authored
 fail, two testmd authoring passes with identical 3/3/1/45 observations);
-engine QA in `docs/kane-proof.md` (K1/K3a/K3b/K4/K5 real passes, K2
-recorded as environment-blocked, negative control fail → fix → pass).
+engine QA in `docs/kane-proof.md` (K1–K5 real passes, negative control
+fail → fix → pass).
 
 **Not live-tested:** replay-from-cache (no run ever showed
 `replay_decisions > 0`, so no replay speedup is claimed); the panel-to-agent

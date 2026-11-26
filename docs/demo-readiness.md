@@ -102,7 +102,7 @@ input, 45 frames, shots-fired 3, projectiles 3, evidence + Test Manager links in
 **Gate:** the second action is demonstrably driven by the first result, or a failure
 is honestly classified. One phase alone is not enough. (No second typed pass came
 from this phase. Later approved phases `98e21783` and `ea1bb3b3` did pass; see
-`docs/kane-proof.md`, Phase 7.)
+`docs/kane-proof.md` and `docs/demo-readiness-evidence.md`.)
 
 **Completed:** four `shoot-destroys-raider` attempts through the agent path —
 timeout, step-budget failure, Kane-passed-but-key-mismatch inconclusive

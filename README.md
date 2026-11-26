@@ -88,7 +88,7 @@ That run exposed two agent problems, now fixed. The user had to send a follow-up
 ### What Kane has caught and confirmed
 
 - Engine QA runs K1, K3a, K3b, K4 and K5 passed against the real editor.
-- K2 caught a real product defect, and the fix is in. Its three reruns died in Kane's own browser during screenshot capture, so K2 is recorded as environment-blocked, not as passed.
+- K2 caught two real defects: Build accepting a request with no model configured, and undo history being wiped when returning from Play. Both are fixed, and K2 passed afterwards (`bded0577`: Air jumps 0 → 1, a second mid-air jump, then back to 0 with one Undo).
 - A seeded uncollectible coin made AI Play fail with evidence (`87f6f320...`). The deterministic repair moved the coin, and the rerun passed (`646cff5f...`, STATUS WON, coins 3). The seeded defect is deliberate demo data.
 
 ### Run the saved engine E2E
@@ -173,8 +173,7 @@ The document model, command registry, renderer, runtime and persistence are sepa
 - Kane checks gameplay readouts and inputs. The only automatic repair is the deterministic embedded-collectible policy used by AI Play.
 - Phase results and idempotency state on the server are held in memory and are cleared when the server restarts.
 - Phase replay from a saved test is wired in (`POST /api/kane/phase` accepts `replayTestKey`), but no phase replay speedup has been measured yet. The engine E2E replayed 1/1 steps in 89 s.
-- K2 is environment-blocked (see above).
 
 ## Test status
 
-176 tests across 27 test files pass (`pnpm test`). Type-check and `pnpm check:repo` pass.
+176 tests across 27 test files pass (`pnpm test`), `pnpm typecheck` passes, and `pnpm check:repo` passes. Kane runs are recorded evidence, not CI; what is not covered is listed in [`docs/known-issues.md`](docs/known-issues.md).

@@ -2,25 +2,25 @@
 
 An honest record of what is not covered, not measured or constrained by design. Entries are removed only when the issue is fixed and verified. Real Kane runs are listed in [`kane-proof.md`](kane-proof.md).
 
-**Last updated:** 2026-11-25
+**Last updated:** 2026-11-26
 
 ## Current status
 
 - 176 tests across 27 test files pass (`pnpm test`). Type-check and `pnpm check:repo` pass.
 - The approved-phase Kane flow is live-proven (runs `98e21783`, `ea1bb3b3`, `b967bbdd`). The review panel's result feeds the agent loop through `agent.continueWithPhaseResult`.
 - The chat agent closed loop is proven on a Meadow Sandbox project (run `a20a4b28-5387-4849-a978-a5ca5aa499c3`, 2026-11-25): the agent added coins, a score variable and a Score HUD, then `verify_with_kane` passed in the simulator and in a real browser.
-- Engine QA K1, K3a, K3b, K4 and K5 passed. The saved engine E2E passed twice (286 s authored, 89 s cold-start replay).
+- Engine QA K1–K5 all passed. K2 passed last (2026-11-26, session `bded0577`). The saved engine E2E passed authored (286 s), replayed from cold start (89 s) and was re-confirmed replayed 1/1 (164 s).
 
 ## Kane and AI Testing
 
 - **Phase state is in memory.** Phase results and idempotency state live in a `Map` in `server/kane/phase-session.ts` and are cleared on server restart. The client keeps results in `localStorage`, but the server cannot replay a typed phase result after a restart.
 - **No measured phase replay speedup.** `POST /api/kane/phase` accepts `replayTestKey` and replays a recorded `_test.md` with healing disabled, but no phase replay timing has been recorded. The engine E2E replayed 1/1 steps in 89 s. `KANE_AI_PLAY_TEST` (the AI Play replay path) is contract-verified only.
-- **K2 is environment-blocked.** K2 caught a real defect (Build accepted with no model). The fix is in. Its three reruns died in Kane's own browser during screenshot capture, so K2 is recorded as environment-blocked, not as passed.
+- **K2's earlier post-fix runs never reached a verdict.** Three runs died in Kane's own browser, and that history is kept in `kane-proof.md`. A hardened objective passed on 2026-11-26 (session `bded0577`) after K2 exposed a second defect: undo history was cleared when returning from Play.
 - **Kane Chrome sessions are flaky on this machine.** A stale browser held CDP port 9222 (`connect_over_cdp ... ETIMEDOUT`), and a later run lost its page mid-step. Neither is a product result.
 - **Phase stream retry is not browser-proven.** `streamKanePhase` retries the same approved request every 5 s (up to 18 attempts) because long streams can outlive the Vite dev proxy. The runs after the fix finished in one connection, so the retry has not fired live.
 - **Model plan drafting is not claimed.** The live panel run used a deterministic seeded draft with the mock planner. Approval, execution, verdict and evidence were exercised, not model authorship.
 - **Auto-fix covers one defect class.** The AI Play repair moves an embedded collectible. Other failures are reported, not repaired. The independent negative control (runs `b050f47c-…`, `52baa697-…`) used a deterministic repair too, so model-driven diagnosis is evidenced only by K5's product repair and the K3a agent run.
-- **Kane time and cost.** AI Play is capped at `min(KANE_TIMEOUT_SECONDS, 140)` s plus 5 s grace. A real AI Play attempt costs about 22–24 credits at 80–95 s, and engine-QA runs cost 38–63 credits. Engine QA needs `KANE_TIMEOUT_SECONDS=300` here.
+- **Kane time and cost.** AI Play is capped at `min(KANE_TIMEOUT_SECONDS, 140)` s plus 5 s grace. A real AI Play attempt runs 80–95 s and consumes Kane credits; engine-QA runs are longer. Engine QA needs `KANE_TIMEOUT_SECONDS=300` here.
 - **Starter coverage by Kane is partial.** Platform Jumper (saved engine E2E), Asteroid Field (play/restart, editor tuning) and Space Invaders (creation, HUD, fast restart) have passing runs. There is no clean automated scoring or win proof for Space Shooter, and console cleanliness was not verified (a `/favicon.ico` 404 was recorded). Asteroid splitting and scoring, win and loss paths for the other starters, and editor-to-Play tuning for Space Invaders are not covered.
 - **No visual judging.** Kane runs use `--assertion-mode dom`. There is no pixel or screenshot comparison.
 
@@ -73,7 +73,7 @@ An honest record of what is not covered, not measured or constrained by design. 
 - Manual editing, Play, save, share and export work with no model, key or Kane. AI features need a provider key (environment, vault or session). `AI_MOCK=1` is a development fixture.
 - AI Play needs a logged-in Kane CLI and consumes Kane and provider credits. It asks for consent before the first run. Without Kane it is disabled and manual Play still works.
 - Custom providers must pass the SSRF-safe base-URL and connection check. A local provider is the only HTTP exception.
-- Undo history is session-scoped and does not survive reload.
+- Undo history is session-scoped: it now survives a Play round-trip but not a page reload.
 - The `Neon Runner` demo contains one uncollectible coin on purpose, for the AI Play fail → fix → pass demo. `?demoReset=1` restores it. The negative control uses a separate compact fixture with an unsatisfiable win rule.
 - The "Meadow Sandbox" starter has no built-in game-test profile on purpose, so Test Mode uses a derived one (see `FEATURE_VERIFICATION.md`).
 

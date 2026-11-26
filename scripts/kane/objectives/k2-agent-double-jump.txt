@@ -1,1 +1,8 @@
-Open the Neon Runner demo project. Select the player object. Open the agent and ask: "Give the player a double jump." Wait for the change summary. Verify the inspector shows that double jump is enabled. Press Play, press Space twice, and verify the player leaves the ground twice. Stop Play, press Undo once, and verify the double jump setting is off again.
+The browser was opened at /?demoReset=1, which recreates the Neon Runner demo and opens it. Stay in this one browser session from start to finish; do not reload or reset again. If the projects list is showing instead of the editor, open the Neon Runner demo project.
+Select the player object in the hierarchy. Open the agent drawer and switch it to Build mode before sending anything; Ask is read-only and cannot apply changes.
+Send exactly: "Give the player a double jump."
+If a prompt reading "Verify it with Kane?" or "Verify the change with Kane?" appears, click Dismiss and keep the agent drawer open. Do not start a Kane check and do not close the drawer.
+Wait until the change summary in the chat says the change was applied.
+Select the player object and confirm in the inspector that Air jumps was 0 before the change and now shows 1, i.e. one extra jump while airborne.
+Press Play. Click once inside the game stage so it has keyboard focus, press Space, wait about half a second, then press Space again while the player is still in the air, and confirm the player rises a second time instead of falling straight back to the platform.
+Stop Play. Press Undo once and confirm Air jumps is back to 0.

@@ -123,11 +123,13 @@ test("a verdict that arrives before the process exits survives the cleanup kill"
 });
 
 test("a wall-clock timeout that fires after the verdict does not override it", async () => {
-  // 30 s Kane budget minus 29.4 s allowance = a 0.6 s wall budget that expires
-  // while the fixture is still lingering after its run_end.
+  // 30 s Kane budget minus 26 s allowance = a 4 s wall budget that expires while
+  // the fixture is still lingering after its run_end. The margin has to clear the
+  // fixture's own startup on a loaded machine; at 0.6 s the verdict sometimes
+  // arrives after the budget and the run is reported as cancelled instead.
   const result = await runFake(
-    { KANE_FIXTURE_RESULT: "failed", KANE_FIXTURE_LINGER_MS: "2000" },
-    { timeoutSeconds: 30, startupAllowanceSeconds: -29.4, exitGraceMs: 10_000 },
+    { KANE_FIXTURE_RESULT: "failed", KANE_FIXTURE_LINGER_MS: "8000" },
+    { timeoutSeconds: 30, startupAllowanceSeconds: -26, exitGraceMs: 10_000 },
   );
 
   assert.equal(result.status, "failed");

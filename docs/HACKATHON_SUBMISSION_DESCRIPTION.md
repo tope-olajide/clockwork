@@ -80,13 +80,13 @@ The run also showed two agent faults, both fixed. The user had to send a follow-
 - Saved-test replay for phases is wired in, but no phase replay speedup has been measured yet.
 - Kane limits depend on the path. Defaults are 180 s and 40 steps. `verify_with_kane` takes 180 s by default and min(40, 6 + 2 per step + 2 per readout) steps. AI Play takes at most 140 s and 8 steps. An approved phase takes at most 600 s and 12 steps, with at most 3 phases.
 - The saved engine E2E is a terminal command, not a CI service.
-- Engine QA run K2 is environment-blocked (see below).
+- Engine QA run K2 passed on 2026-11-26 after the undo-history fix it exposed (see below).
 
 ---
 
 ## What was verified, and how
 
-Clockwork's own editor was tested by Kane as an end-user would use it. Kane opened projects, skipped the tour, used the View menu, selected objects in the hierarchy, read inspector values, pressed arrow keys, undid and redid edits, reloaded to confirm persistence, drove the agent to apply a repair, clicked to steer a player to a win, and invoked the in-app verification card. Those runs found real defects — a non-collapsible inspector, unsafe hierarchy rows, a missing duration on the verification card, and Build accepting a request with no model configured. All were fixed; the first three were rechecked by passing runs, and the no-model fix was verified at the API level plus by later agent runs on the same path. Runs K1, K3a, K3b, K4 and K5 passed against the real editor. K2 caught a real product defect and the fix is in; its three reruns died in Kane's own browser during screenshot capture, so K2 is recorded as environment-blocked, not as passed.
+Clockwork's own editor was tested by Kane as an end-user would use it. Kane opened projects, skipped the tour, used the View menu, selected objects in the hierarchy, read inspector values, pressed arrow keys, undid and redid edits, reloaded to confirm persistence, drove the agent to apply a repair, clicked to steer a player to a win, and invoked the in-app verification card. Those runs found real defects — a non-collapsible inspector, unsafe hierarchy rows, a missing duration on the verification card, Build accepting a request with no model configured, and undo history lost after Play. All were fixed; the first three were rechecked by passing runs, and the no-model fix was verified at the API level plus by later agent runs on the same path. Runs K1, K2, K3a, K3b, K4 and K5 passed against the real editor. K2 caught two product defects on the agent path: Build accepting a request with no model configured, and undo history being cleared when returning from Play. Both are fixed, and K2 then passed in session `bded0577` (Air jumps 0 → 1, a second mid-air jump in Play, and one Undo back to 0).
 
 The AI Play loop was demonstrated on a deliberately seeded defect: a coin embedded inside a solid body. The first run failed with evidence; the deterministic repair moved the coin, the same seed was replayed, and the second run passed. Both evidence packs are recorded in the repository.
 
