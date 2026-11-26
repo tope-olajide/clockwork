@@ -1,0 +1,4 @@
+Open the projects page and create a new project from the Space Shooter game starter. Name it Kane Shooter and press Create, then wait for the editor to open the new scene. Do not use the Neon Runner demo.
+Press Play and wait for the stage to load. Read the HUD: SCORE, HULL and TIME.
+Do not press R yet. Wait until the game reports LOST (the hull bar is empty and the status reads LOST). Report the status and SCORE at that moment.
+Press R once. While Play is still running, confirm the game is no longer LOST, SCORE reads 0 and the hull bar is full again. Report the status and SCORE after the restart.

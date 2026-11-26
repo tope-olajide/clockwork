@@ -1,0 +1,4 @@
+Open the projects page and create a new project from the Space Invaders game starter. Name it Kane Invaders and press Create, then wait for the editor to open the new scene. Do not use the Neon Runner demo.
+Press Play and wait for the stage to load. Press Escape once to pause the game, then read the frozen HUD and report SCORE, SHIPS and INVADERS; the expected starting values are SCORE 0, SHIPS 3 and INVADERS 24.
+Press Escape again to resume. Click once inside the game stage, press D once, then press Space twice, and report whether a shot appeared. Do not claim that the ship moved unless movement is clearly visible.
+Press R once to restart, then press Escape once to pause again. Read the frozen HUD and report SCORE, SHIPS and INVADERS; the expected values are still 0, 3 and 24. Report those numbers before doing anything else.

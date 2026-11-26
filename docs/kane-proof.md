@@ -44,8 +44,9 @@ the check in the engine simulator and then in a real browser; both agreed.
 | Space Invaders: create, play, immediate R restart (`RUNNING`, `SCORE 0`, `SHIPS 3`, `INVADERS 24`) | **passed** | 91.1 s |
 | Asteroid Field: create, HUD, A/W/E inputs, restart (`SCORE 0`, `SHIPS 3`, `ROCKS 6`) | **passed** | 117.1 s |
 | Asteroid Field editor tuning → Play (turn speed 220 → 0, ship stays pointed up) | **passed** | 127.8 s |
-| Space Invaders: play + console-clean assertion | **partial** — console extraction timed out; one `favicon.ico` 404, no gameplay error claimed | 270.9 s |
-| Space Shooter: loss then R restart | restart proven by screenshot and `SCORE 0`; final checkpoint contradicted the screenshot, so no clean pass | 352.2 s |
+| Space Invaders: console and network sweep on the play page | **passed** — 0 console errors, 0 page exceptions, 0 HTTP 4xx; the old `/favicon.ico` 404 no longer reproduces (CDP sweep, not a Kane verdict) | 6 s per page |
+| Space Invaders: play and restart | Kane returned `passed` but its HUD readouts contradicted each other (`SHIPS 0` at start, `2` after restart, both against the expected 3), so no clean readout pass; a later attempt stalled in Kane's planner after three steps with no action | 420.1 s |
+| Space Shooter: loss then R restart | **passed** — hull `0 of 3`, status `LOST`, `SCORE 0`; R returned it to `PLAYING` with `SCORE 0` and a full hull bar | 352.5 s |
 
 No browser-only Space Shooter score proof was obtained: those attempts expired on step limits or
 observed `LOST` before firing could be attributed to Kane, and none are counted as scoring passes.
