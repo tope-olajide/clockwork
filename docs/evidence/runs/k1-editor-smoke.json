@@ -1,0 +1,16 @@
+{
+  "objective": "k1-editor-smoke",
+  "status": "passed",
+  "ranAt": "2026-11-17T15:50:44.861Z",
+  "wallClockSeconds": 366,
+  "cliVersion": "0.10.5",
+  "sessionId": "010fb663-9351-4a66-8036-cc8d8197b386",
+  "summary": "Opened the existing Neon Runner project and skipped the introductory editor prompt.\nOpened the Inspector from the View menu, selected the Player sprite in the Scene hierarchy, and confirmed its position controls were displayed.\nRecorded the Player’s X position as 160, moved it right twice, then undid both moves; its X position returned to 160.\nReloaded the editor and confirmed Neon Runner remained open with Player visible and its X position still 160.",
+  "oneLiner": "restored the Player position in the Neon Runner editor on Clockwork",
+  "finalState": {
+    "url": "http://localhost:5173/project/prj_Ua7tSUltk7/scene/scn_-rhIkHqA2Z",
+    "object_x": "160",
+    "player_visible": "true",
+    "editor_open": "true"
+  }
+}

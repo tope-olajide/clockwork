@@ -1,0 +1,21 @@
+{
+  "objective": "space-shooter-restart",
+  "status": "passed",
+  "ranAt": "2026-11-26T12:53:16.097Z",
+  "wallClockSeconds": 477,
+  "cliVersion": "0.10.6",
+  "sessionId": "e866a518-f80e-4ecc-93b2-b9d69a379144",
+  "summary": "Started the game and read the HUD: SCORE 0, HULL 0, and TIME 9.\nWaited for the game to end; it reported LOST with a score of 0.\nPressed R once to restart the game. It returned to PLAYING with SCORE 0 and a full hull bar.",
+  "oneLiner": "Restarted the game after it reported a loss on localhost.",
+  "finalState": {
+    "url": "http://localhost:5173/play/prj_qplXNf0Ca0",
+    "hud_score": "0",
+    "hud_hull": "0",
+    "hud_time": "9",
+    "loss_status": "LOST",
+    "loss_score": "0",
+    "restart_status": "PLAYING",
+    "restart_score": "0",
+    "hull_bar_full_after_restart": "true"
+  }
+}

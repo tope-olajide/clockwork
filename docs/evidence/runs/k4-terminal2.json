@@ -1,0 +1,18 @@
+{
+  "objective": "k4-terminal2",
+  "status": "passed",
+  "ranAt": "2026-11-18T03:29:31.438Z",
+  "wallClockSeconds": 257,
+  "cliVersion": "0.10.5",
+  "sessionId": "e2dc4dc0-2121-43b6-8326-35e51770c037",
+  "summary": "Opened the Neon Runner demo project and asked the agent to verify in a real browser that the level loads and the player can collect a coin.\nWaited for the verification to finish; it passed after 12 steps and displayed a duration and an Open evidence link.\nThe agent’s reply also referenced the Kane run result.",
+  "oneLiner": "verified coin collection in the Neon Runner demo project on localhost",
+  "finalState": {
+    "url": "http://localhost:5173/project/prj_4PnNIE_j-8/scene/scn_M0RtAjlcPx",
+    "verification_verdict": "PASSED",
+    "executed_steps": "12",
+    "duration_shown": "true",
+    "evidence_link_shown": "true",
+    "agent_reply_references_Kane": "true"
+  }
+}

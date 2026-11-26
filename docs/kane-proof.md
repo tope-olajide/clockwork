@@ -125,6 +125,7 @@ pnpm kane:engine-e2e
 
 ## Where the rest lives
 
+- [`docs/evidence/`](evidence/README.md) — sanitized, committable summaries of the runs cited here (run id, verdict, duration, final state). Raw NDJSON and `.evidence` packs stay untracked; regenerate the summaries with `node scripts/kane/export-evidence.mjs`.
 - `docs/FEATURE_VERIFICATION.md` — per-feature verification table.
 - `docs/demo-readiness-evidence.md` — phase-route and panel evidence with byte-level artifacts.
 - `docs/kane-setup.md`, `docs/kane-cli-usage.md` — install, flags and operating notes.

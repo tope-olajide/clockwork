@@ -129,7 +129,6 @@ dist
 .data/
 .testmuai/runs/
 .testmuai/evidence/
-docs/evidence/
 *.ndjson
 
 # pnpm

@@ -1,0 +1,17 @@
+{
+  "objective": "engine-template-e2e",
+  "status": "passed",
+  "ranAt": "2026-11-26T11:05:38.236Z",
+  "durationSeconds": 164,
+  "wallClockSeconds": 222,
+  "cliVersion": "0.10.6",
+  "sessionId": "55efd401-a035-40a5-ad1a-8b41bef47982",
+  "summary": "",
+  "finalState": {},
+  "steps": {
+    "passed": 1,
+    "total": 1,
+    "replayed": 1,
+    "authored": 0
+  }
+}

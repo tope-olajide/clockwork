@@ -1,0 +1,84 @@
+{
+  "objective": "negative-control-attempt1",
+  "status": "failed",
+  "sessionId": "b050f47c-9117-48e4-9e92-baa23f0b1ae9",
+  "resultCode": 740,
+  "reasonCode": "After the required click and waits, STATUS remains PLAYING rather than WON while coins are 1 and last error is none.",
+  "summary": "The game's win condition did not activate after the required MOVE RIGHT action. The run collected the coin, but the status never changed from PLAYING to WON.\nInspect the Dusk Run completion rule and status update triggered by moving right with seed 1234. Ensure that collecting the required coin and reaching the completion point changes STATUS to WON.\nevidence: objective_contradiction: After the required click and waits, STATUS remains PLAYING rather than WON while coins are 1 and last error is none.",
+  "finalState": {},
+  "steps": [
+    {
+      "step": 2,
+      "status": "running",
+      "remark": "Step 1"
+    },
+    {
+      "step": 2,
+      "status": "done",
+      "remark": "navigate: Navigate to http://localhost:5173/s/hq9WRJxZBIgZ9w?ai=1&seed=1234"
+    },
+    {
+      "step": 3,
+      "status": "running",
+      "remark": "Step 2"
+    },
+    {
+      "step": 3,
+      "status": "done",
+      "remark": "click: Clicking MOVE RIGHT OFF once"
+    },
+    {
+      "step": 4,
+      "status": "running",
+      "remark": "Step 3"
+    },
+    {
+      "step": 4,
+      "status": "done",
+      "remark": "wait: PRIMARY: Wait 3 seconds"
+    },
+    {
+      "step": 5,
+      "status": "running",
+      "remark": "Step 4"
+    },
+    {
+      "step": 5,
+      "status": "done",
+      "remark": "analyze: ANALYZE(textual_visual, 'The LAST ERROR value from the AI state panel is stored "
+    },
+    {
+      "step": 6,
+      "status": "running",
+      "remark": "Step 5"
+    },
+    {
+      "step": 6,
+      "status": "done",
+      "remark": "wait: PRIMARY: wait 1000 ms for the active scene to settle"
+    },
+    {
+      "step": 7,
+      "status": "running",
+      "remark": "Step 6"
+    },
+    {
+      "step": 7,
+      "status": "done",
+      "remark": "wait: PRIMARY: wait 1000 ms for the active scene to finish"
+    },
+    {
+      "step": 8,
+      "status": "running",
+      "remark": "Step 7"
+    },
+    {
+      "step": 8,
+      "status": "failed",
+      "remark": "wait: Waiting without further interaction"
+    }
+  ],
+  "runtimeErrors": [
+    "wait: Waiting without further interaction"
+  ]
+}

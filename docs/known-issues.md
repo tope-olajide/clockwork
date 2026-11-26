@@ -1,6 +1,6 @@
 # Clockwork Known Issues and Limitations
 
-Coverage boundaries, unmeasured claims and design constraints, each stated with what would close it. Entries are removed only when the issue is fixed and verified. Real Kane runs are listed in [`kane-proof.md`](kane-proof.md).
+Coverage boundaries, unmeasured claims and design constraints, each stated with what would close it. Entries are removed only when the issue is fixed and verified. Real Kane runs are listed in [`kane-proof.md`](kane-proof.md), with sanitized per-run summaries in [`evidence/`](evidence/README.md).
 
 **Last updated:** 2026-11-26
 

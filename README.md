@@ -159,6 +159,7 @@ The document model, command registry, renderer, runtime and persistence are sepa
 - [`docs/FEATURE_VERIFICATION.md`](docs/FEATURE_VERIFICATION.md) — claim-to-source verification ledger.
 - [`docs/HACKATHON_SUBMISSION_DESCRIPTION.md`](docs/HACKATHON_SUBMISSION_DESCRIPTION.md) — submission-ready project description.
 - [`docs/kane-cli-usage.md`](docs/kane-cli-usage.md) — how Kane is used for engine and game testing.
+- [`docs/evidence/`](docs/evidence/README.md) — sanitized summaries of the Kane runs cited in the docs, with run ids and verdicts.
 - [`docs/known-issues.md`](docs/known-issues.md) — limitations and risks.
 - [`docs/implementation-log.md`](docs/implementation-log.md) — build log, ending with the 2026-11-25 final status.
 - [`docs/clockwork-implementation-plan.md`](docs/clockwork-implementation-plan.md) — the original brief.

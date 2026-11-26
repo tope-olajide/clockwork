@@ -1,0 +1,87 @@
+{
+  "objective": "negative-control-attempt2",
+  "status": "passed",
+  "sessionId": "52baa697-74e6-49f7-bebe-b77009517aee",
+  "resultCode": 100,
+  "reasonCode": "Objective completed",
+  "summary": "Ran the scene from its initial state, selected “MOVE RIGHT” once, and waited 3 seconds.\nThe final state showed a win, with 1 coin collected and no reported error.",
+  "finalState": {
+    "url": "http://localhost:5173/s/0Gpg-oslQx3lTw?ai=1&seed=1234",
+    "status": "WON",
+    "coins": "1",
+    "last_error": "none"
+  },
+  "steps": [
+    {
+      "step": 2,
+      "status": "running",
+      "remark": "Step 1"
+    },
+    {
+      "step": 2,
+      "status": "done",
+      "remark": "navigate: Navigate to http://localhost:5173/s/0Gpg-oslQx3lTw?ai=1&seed=1234"
+    },
+    {
+      "step": 3,
+      "status": "running",
+      "remark": "Step 2"
+    },
+    {
+      "step": 3,
+      "status": "done",
+      "remark": "wait: PRIMARY: run the scene once from its start state"
+    },
+    {
+      "step": 4,
+      "status": "running",
+      "remark": "Step 3"
+    },
+    {
+      "step": 4,
+      "status": "done",
+      "remark": "click: Clicking MOVE RIGHT OFF button once"
+    },
+    {
+      "step": 5,
+      "status": "running",
+      "remark": "Step 4"
+    },
+    {
+      "step": 5,
+      "status": "done",
+      "remark": "wait: PRIMARY: Wait 3 seconds"
+    },
+    {
+      "step": 6,
+      "status": "running",
+      "remark": "Step 5"
+    },
+    {
+      "step": 6,
+      "status": "done",
+      "remark": "analyze: ANALYZE(textual_visual, 'The LAST ERROR value from the AI state panel is saved a"
+    },
+    {
+      "step": 7,
+      "status": "running",
+      "remark": "Step 6"
+    },
+    {
+      "step": 7,
+      "status": "done",
+      "remark": "analyze: The stored {{last_error}} is \"none\"."
+    },
+    {
+      "step": 8,
+      "status": "running",
+      "remark": "Step 7"
+    },
+    {
+      "step": 8,
+      "status": "done",
+      "remark": "assert: The stored {{status}} is \"WON\", the stored {{coins}} is \"1\" and the stored {{las"
+    }
+  ],
+  "runtimeErrors": []
+}

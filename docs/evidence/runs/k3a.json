@@ -1,0 +1,16 @@
+{
+  "objective": "k3a",
+  "status": "passed",
+  "ranAt": "2026-11-17T23:54:49.901Z",
+  "wallClockSeconds": 340,
+  "cliVersion": "0.10.5",
+  "sessionId": "9ea3f7b6-11cb-4873-9f53-3e2dcf8c448d",
+  "summary": "Opened the Neon Runner demo project and switched the agent to Build mode.\nSent the requested instruction to inspect the unreachable coin and move it to a reachable location; the change was applied.\nStarted Play mode, guided the player across the stage, and collected all coins until the win message appeared.\nThe final COINS counter was 3, and Play mode was stopped.",
+  "oneLiner": "fixed and collected coins in Neon Runner on the demo project",
+  "finalState": {
+    "url": "http://localhost:5173/project/prj_4Dmg2ZzOCL",
+    "coin_counter": "3",
+    "stage_loaded": "true",
+    "command_rejected": "false"
+  }
+}

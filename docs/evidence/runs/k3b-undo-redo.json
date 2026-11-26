@@ -1,0 +1,19 @@
+{
+  "objective": "k3b-undo-redo",
+  "status": "passed",
+  "ranAt": "2026-11-18T04:38:11.925Z",
+  "wallClockSeconds": 280,
+  "cliVersion": "0.10.5",
+  "sessionId": "5c0fb318-e15b-4d3a-8d6f-fe6bd944fb96",
+  "summary": "Opened the Neon Runner demo project, switched the agent panel to Build mode, and sent the requested instruction: “Move the player object down by 40 units.”\nThe change was applied successfully. The editor showed 1 undo entry and 0 redo entries.\nAfter Undo was pressed once, the editor showed 0 undo entries and 1 redo entry.\nAfter Redo was pressed once, the editor returned to 1 undo entry and 0 redo entries.",
+  "oneLiner": "moved the player object down by 40 units on the Neon Runner demo project",
+  "finalState": {
+    "url": "http://localhost:5173/project/prj_pdGfSkWqGo/scene/scn_wXpMKaXaaN?demoReset=1",
+    "applied_undo_counter": "1",
+    "applied_redo_counter": "0",
+    "undo_action_undo_counter": "0",
+    "undo_action_redo_counter": "1",
+    "redo_action_undo_counter": "1",
+    "redo_action_redo_counter": "0"
+  }
+}

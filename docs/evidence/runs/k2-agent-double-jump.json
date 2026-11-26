@@ -1,0 +1,15 @@
+{
+  "objective": "k2-agent-double-jump",
+  "status": "passed",
+  "ranAt": "2026-11-26T11:47:30.676Z",
+  "wallClockSeconds": 463,
+  "cliVersion": "0.10.6",
+  "sessionId": "bded0577-6f82-46f6-97c9-ab6123194531",
+  "summary": "Opened the Neon Runner demo project and selected the player object.\nOpened the agent panel, switched it to Build mode, and sent: “Give the player a double jump.”\nThe chat confirmed that the change was applied, and the player’s Air jumps setting changed from 0 to 1.\nTested the change in Play mode: after two Space presses while airborne, the player performed a second jump.\nStopped Play mode and used Undo once; Air jumps returned to 0.",
+  "oneLiner": "tested and reverted a player double-jump change on the Neon Runner project",
+  "finalState": {
+    "url": "http://localhost:5173/project/prj_FKwdZnQhjq/scene/scn_Go7ixaCmN7",
+    "Air jumps after change": "1",
+    "Air jumps after undo": "0"
+  }
+}
