@@ -214,7 +214,6 @@ Every change to a project, from a mouse drag, an Inspector field or the AI co-wo
 
 ## Documentation
 
-- [Feature verification](docs/FEATURE_VERIFICATION.md): every feature and how it is verified.
 - [Model setup](docs/model-setup.md): AI providers and configuration.
 - [Kane setup](docs/kane-setup.md) and [Kane CLI usage](docs/kane-cli-usage.md): installing and operating Kane CLI.
 - [AI Play](docs/ai-play.md): how AI Play and its repair loop work.
