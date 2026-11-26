@@ -117,12 +117,28 @@ class Cdp {
   }
 
   evaluate(expression: string, awaitPromise = false): Promise<any> {
-    return this.send("Runtime.evaluate", {
+    const run = () => this.send("Runtime.evaluate", {
       expression, awaitPromise, returnByValue: true,
     }).then((r) => {
       if (r?.exceptionDetails) throw new Error(`evaluate threw: ${JSON.stringify(r.exceptionDetails).slice(0, 300)}`);
       return r?.result?.value;
     });
+    // A route change or reload can swap the renderer while an evaluate is in flight;
+    // Chrome answers "Inspected target navigated or closed" instead of the result.
+    // That is a harness race, not a page failure, so retry on the next tick.
+    const attempt = async (left: number): Promise<any> => {
+      try {
+        return await run();
+      } catch (e) {
+        const navigationRace = /navigated or closed|Execution context was destroyed|Cannot find context/i.test(
+          e instanceof Error ? e.message : String(e),
+        );
+        if (!navigationRace || left <= 1) throw e;
+        await sleep(200);
+        return attempt(left - 1);
+      }
+    };
+    return attempt(5);
   }
 
   async waitFor(jsCondition: string, timeoutMs: number, label: string) {
