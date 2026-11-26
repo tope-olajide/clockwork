@@ -172,7 +172,7 @@ The document model, command registry, renderer, runtime and persistence are sepa
 - Single-user and local-first: no accounts, cloud sync, multiplayer, arbitrary user scripting, 3D, skeletal animation, or mobile editor layout below 1024 px. Shared and exported players work on mobile.
 - Kane checks gameplay readouts and inputs. The only automatic repair is the deterministic embedded-collectible policy used by AI Play.
 - Phase results and idempotency state on the server are held in memory and are cleared when the server restarts.
-- Phase replay from a saved test is wired in (`POST /api/kane/phase` accepts `replayTestKey`), but no phase replay speedup has been measured yet. The engine E2E replayed 1/1 steps in 89 s.
+- Phase replay from a saved test is wired in (`POST /api/kane/phase` accepts `replayTestKey`), but no phase replay speedup has been measured yet. The engine E2E replayed 1/1 steps in 89 s, re-confirmed on 2026-11-26 in 164 s.
 
 ## Test status
 

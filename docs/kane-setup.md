@@ -210,6 +210,7 @@ A row only claims what `run_end.status === "passed"` plus stored `final_state` a
 |---|---|---|
 | K1 editor smoke | The inspector could not be collapsed; hierarchy rows had unsafe interactive semantics | Both UI/accessibility defects fixed before K1 passed |
 | K2 double jump | Build/Plan accepted a request while the panel said "No model", then failed as a bare fetch error | Env-provider detection, a pre-flight block with actionable guidance, and Settings-pointing errors |
+| K2 undo after Play | The Undo button was disabled after stopping Play, so the agent's change could not be reverted | `EditorPage` only reloads a project when the open project changes, so the undo stack survives the Play round-trip |
 | K3d repair | The Build agent's `apply_commands` was rejected and nothing was saved | `list_commands` + `command-reference` signatures from the zod schemas, and rejected-command hints (`PROMPT_VERSION` 3) |
 | K4 terminal | The in-app verification card showed verdict, steps and evidence but **no duration**, so the checkpoint could not pass | `durationMs` forwarded in `useAgentSession.ts`, rendered as `kane-run-duration` |
 

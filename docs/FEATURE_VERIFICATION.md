@@ -168,7 +168,7 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 - **Prompt presets.** Implemented; no real-model golden run recorded.
 - **Provider settings.** Key persistence across restart and custom-provider chat have no recorded run.
 - **From-brief project creation.** No recorded real-model brief run.
-- **Kane coverage of every starter.** Platform Jumper (saved engine E2E), Asteroid Field (play/restart, editor tuning) and Space Invaders (creation, HUD, fast restart) have passing runs, and Space Shooter has approved phase passes. Most starters have no Kane run.
+- **Kane coverage of every starter.** Platform Jumper (saved engine E2E), Asteroid Field (play/restart, editor tuning) and Space Invaders (creation, HUD, fast restart) have passing runs, and Space Shooter has approved phase passes plus a clean loss → R restart pass (2026-11-26). Space Invaders has no single run that reads every HUD value consistently, and console cleanliness is verified by a CDP sweep rather than by Kane. Most starters have no Kane run.
 - **Visual regression.** Kane runs with `--assertion-mode dom`; there is no screenshot or pixel judging.
 - **Repair scope.** The AI Play repair is a deterministic policy for one defect class, an embedded collectible.
 - **Replay UI.** `Runtime.replay()` exists with no Play control.

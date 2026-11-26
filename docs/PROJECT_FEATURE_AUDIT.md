@@ -355,7 +355,7 @@ Project lifecycle, editor viewport and transforms, undo/redo, assets pipeline, t
 - Prompt presets, headless playtest parity.
 - Provider vault persistence across restart, custom provider chat, key-absence audit.
 - Ship/export acceptance run (zip served offline, share link input/restart).
-- Kane coverage of the 14 starters: Space Invaders, Asteroid Field, Space Shooter and Platform Jumper were attempted. Platform Jumper's saved engine E2E passed, Asteroid Field's play/restart and editor-tuning runs passed, and Space Shooter has three approved-phase passes. Most other starters have no Kane run.
+- Kane coverage of the 14 starters: Space Invaders, Asteroid Field, Space Shooter and Platform Jumper were attempted. Platform Jumper's saved engine E2E passed, Asteroid Field's play/restart and editor-tuning runs passed, and Space Shooter has three approved-phase passes plus a clean loss → R restart pass (2026-11-26). Space Invaders' play/restart run returned contradictory HUD readouts and its console cleanliness rests on a CDP sweep. Most other starters have no Kane run.
 - The one-command dev wrapper's tear-down under every failure mode; the cold-start, readiness and reuse paths were exercised, but a mid-run crash was not.
 
 ### Experimental / constrained
