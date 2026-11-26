@@ -64,7 +64,7 @@ to be a stronger test than real-time play: every frame is accounted for.
 
 ## What a real run looks like
 
-The first passing Space Shooter phase, driven by the in-app agent (run `b967bbdd`, 79.7 s, ≈ 25 credits). It is a different run from the two phases approved through the review panel (`98e21783`, 94.7 s, and `ea1bb3b3`, 78.1 s). All three are real passes with the same observations (shots-fired 3, projectiles 3, accepted inputs 1, 45 frames):
+The first passing Space Shooter phase, driven by the in-app agent (run `b967bbdd`, 79.7 s). It is a different run from the two phases approved through the review panel (`98e21783`, 94.7 s, and `ea1bb3b3`, 78.1 s). All three are real passes with the same observations (shots-fired 3, projectiles 3, accepted inputs 1, 45 frames):
 
 1. Navigate to the snapshot URL (`ai=1&testMode=step&seed=1234&maxAdvance=45…`).
 2. Toggle `SHOOT` on.
@@ -134,7 +134,7 @@ One caveat: the user had to send a follow-up message before Kane ran, because th
 
 ## By the numbers (run `b967bbdd`)
 
-- 8 Kane steps, 79.7 seconds, ≈ 25 credits
+- 8 Kane steps, 79.7 seconds
 - 1 accepted input, 45 frames advanced
 - 3 shots fired, 3 live projectiles, 0 runtime errors
 - 2/2 assertions passed, evidence + Test Manager links attached

@@ -216,14 +216,14 @@ A row only claims what `run_end.status === "passed"` plus stored `final_state` a
 
 ### Proved — passing runs, all single-flow
 
-| Objective | Duration | Credits | `final_state` |
-|---|---|---|---|
-| K3 steer probe | 199.4 s | 33.1 | `player_moved: true`, `coins_counter: 2` |
-| K3a repair + win (`k3a-repair-win.txt`) | 282.1 s | 60.1 | `coin_counter: 3`, `stage_loaded: true`, `command_rejected: false` |
-| K3b undo/redo (`k3b-undo-redo.txt`) | 218.9 s | 59.29 | undo/redo `1/0` → `0/1` → `1/0` |
-| K4 in-app `verify_with_kane` | 65.2 s | not recorded in the result | card `PASSED · 12 steps · 65.2s` + evidence link, run `8ea17992…` |
-| K4 terminal handshake | 206.7 s | 38.06 | `verification_verdict: PASSED`, `executed_steps: 12`, duration/evidence/reference flags `true` |
-| K5 AI Play attempt 2 | 81.1 s | 23.54 | `status: WON`, `coins: 3`, `last_error: none` |
+| Objective | Duration | `final_state` |
+|---|---|---|
+| K3 steer probe | 199.4 s | `player_moved: true`, `coins_counter: 2` |
+| K3a repair + win (`k3a-repair-win.txt`) | 282.1 s | `coin_counter: 3`, `stage_loaded: true`, `command_rejected: false` |
+| K3b undo/redo (`k3b-undo-redo.txt`) | 218.9 s | undo/redo `1/0` → `0/1` → `1/0` |
+| K4 in-app `verify_with_kane` | 65.2 s | card `PASSED · 12 steps · 65.2s` + evidence link, run `8ea17992…` |
+| K4 terminal handshake | 206.7 s | `verification_verdict: PASSED`, `executed_steps: 12`, duration/evidence/reference flags `true` |
+| K5 AI Play attempt 2 | 81.1 s | `status: WON`, `coins: 3`, `last_error: none` |
 
 ### Not credited to the product
 

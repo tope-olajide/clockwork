@@ -122,10 +122,10 @@ Verified scope (from `docs/kane-proof.md` and the objective text):
 
 | Run | What Kane actually did | Result |
 |---|---|---|
-| K1 editor smoke | Opened the projects page, opened "Neon Runner", skipped the coach tour, opened the Inspector via the View menu, selected the Player hierarchy row, read Object X, pressed ArrowRight twice, Ctrl+Z twice, reloaded and re-checked Object X | **passed** (303.6 s, 62.79 credits) |
+| K1 editor smoke | Opened the projects page, opened "Neon Runner", skipped the coach tour, opened the Inspector via the View menu, selected the Player hierarchy row, read Object X, pressed ArrowRight twice, Ctrl+Z twice, reloaded and re-checked Object X | **passed** (303.6 s) |
 | K2 agent double jump | Sent a Build request while the panel said "No model"; captured a raw fetch failure. Later: demo reset, asked the Build agent for a double jump, checked Air jumps, played two Space presses, stopped Play and pressed Undo | **caught two real defects** (no-model request path; undo history cleared after Play); **passed after both fixes** (`bded0577`, 372.9 s, Air jumps `0 → 1 → 0`) |
-| K3a repair + win | Opened the seeded demo, switched the agent to Build, sent a repair prompt, waited for the applied change, played, click-steered to 3 coins and the win message | **passed** (282.1 s, 60.1 credits) |
-| K3b undo/redo | Agent edit, Undo, Redo in one flow, asserted the counters | **passed** (218.9 s, 59.29 credits) |
+| K3a repair + win | Opened the seeded demo, switched the agent to Build, sent a repair prompt, waited for the applied change, played, click-steered to 3 coins and the win message | **passed** (282.1 s) |
+| K3b undo/redo | Agent edit, Undo, Redo in one flow, asserted the counters | **passed** (218.9 s) |
 | K4 handshake | Drove the in-app `verify_with_kane` card through the agent and asserted verdict, steps, duration and evidence link | **passed** (65.2 s in-app; 206.7 s terminal rerun) |
 | K5 AI Play | Full fail → auto-fix → same-seed replay through the product UI | **passed on attempt 2** (81.1 s) |
 

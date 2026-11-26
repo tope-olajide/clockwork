@@ -39,7 +39,6 @@ record.
   - `projectiles-increased`: expected increase ≥ 1, actual `3` → passed
 - **Runtime errors:** none
 - **Duration:** 79.7 s
-- **Credits consumed:** ≈ 25.03
 - **Evidence:** `/api/kane/runs/b967bbdd-0eec-4899-9190-77adfeb9a78e/evidence`
 - **Test Manager:** `https://test-manager.lambdatest.com/projects/01M7MPYYBFW18QG18M67X700CD/test-cases/01M7YP572T046EZPZAACGJTTR7/dashboard/share/US_ACIW3XQEOIN7GLU438RIYWFPLYNU1PG01PQZ0PLT5ZRNJU64A94KK9QCO8UTBM5I?type=summary&agentView=true&fqdn=summary-page`
 - **Agent follow-up:** the same conversation cites the verdict, accepted inputs, frames, both assertion values, run id and evidence URL against the original goal, clause by clause. No pass was claimed before the typed result arrived.
@@ -80,14 +79,14 @@ every attempt ran through the agent path (draft → approval →
   8 then burned the rest on waits. No observation of an effect — correctly
   recorded as failure, never as a pass.
 - **Attempt 3 — `e367aea0` (Kane `passed`, verdict inconclusive/observation,
-  96 s, ≈ 28.9 credits).** The kill chain works in-game: 12 shots fired,
+  96 s).** The kill chain works in-game: 12 shots fired,
   1 target destroyed, score 100, hull untouched at 3, 150 frames, evidence +
   Test Manager links. But Kane saved `shots_fired` (underscore) instead of
   the exact id `shots-fired` (hyphen), so one required check went `missing`
   and the pipeline refused the pass. This is the verdict pipeline proving a
   near-miss with the same rigor as a pass.
 - **Attempt 4 — `ef3a47a9` (Kane `failed`, verdict inconclusive/observation,
-  95.8 s, ≈ 28.4 credits).** Kane used a `wait` step despite the plan
+  95.8 s).** Kane used a `wait` step despite the plan
   forbidding it, burned the 8-step budget, recorded nothing. Correctly
   classified, evidence attached.
 
@@ -186,7 +185,7 @@ Total live-run spend for Phase 6: 4 paid Kane runs (1 timeout probe + A + B + C)
 
 **Replay-chase follow-up (post-merge, on `main`):** balance 7430.03 → 7378.56.
 `--push` tried live through the phase route (run `431d81eb`,
-`inconclusive`/`infrastructure`, 5.8 s, 0 credits — lock-API auth wall) and
+`inconclusive`/`infrastructure`, 5.8 s — lock-API auth wall) and
 reverted; two `run --name` tape-generation attempts failed on Kane step
 discipline (RESET keyboard trap; control-overlap click), ~51.5cr, no tapes
 kept. `replay_decisions > 0` remains unobserved; the unblock paths are in

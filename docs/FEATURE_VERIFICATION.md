@@ -134,10 +134,10 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 
 | Claim | Implementation | Proof | Status |
 |---|---|---|---|
-| Scripted objectives drive the real editor | `scripts/kane/objectives/*.txt`, `scripts/kane/run-objective.sh` | K1, K3a, K3b, K4 records with durations/credits | Verified |
-| K1 editor smoke | objective text: projects page, coach skip, View menu, hierarchy select, inspector, ArrowRight ×2, Ctrl+Z ×2, reload | Passed 303.6 s / 62.79 credits | Verified |
-| K3a repair + play win | agent Build prompt, applied change, Play, click-to-steer | Passed 282.1 s / 60.1 credits | Verified |
-| K3b undo/redo | agent edit + counters | Passed 218.9 s / 59.29 credits | Verified |
+| Scripted objectives drive the real editor | `scripts/kane/objectives/*.txt`, `scripts/kane/run-objective.sh` | K1, K3a, K3b, K4 records with durations | Verified |
+| K1 editor smoke | objective text: projects page, coach skip, View menu, hierarchy select, inspector, ArrowRight ×2, Ctrl+Z ×2, reload | Passed 303.6 s | Verified |
+| K3a repair + play win | agent Build prompt, applied change, Play, click-to-steer | Passed 282.1 s | Verified |
+| K3b undo/redo | agent edit + counters | Passed 218.9 s | Verified |
 | K4 in-app verification card | `verify_with_kane` tool + result card | Passed 65.2 s in-app; 206.7 s terminal rerun | Verified |
 | K2 defect discovery + agent double jump | Build with no model; agent edit, Play, Undo | Both defects fixed; run `bded0577` passed (Air jumps `0 → 1 → 0`) | Verified, real Kane pass |
 | Chat agent closed loop (agent → Kane → agent) | `verify_with_kane` in the agent loop; Meadow Sandbox starter | Run `a20a4b28-5387-4849-a978-a5ca5aa499c3` (2026-11-25): the user asked the in-app agent to add coins tagged `coin`, +1 score per coin and a SCORE HUD, then verify with Kane. The agent applied 6 coins, a score variable and a Score HUD widget, ran a headless preflight, then called `verify_with_kane`. The check ran in the engine simulator, then once in a real browser. **PASSED** at project revision 9: SCORE 0 → 1, COIN COUNT 6 → 5, COLLECTED 0 → 1, PLAYER X 240 → 473.67 after holding MOVE RIGHT for 45 frames. Simulator and browser agreed on every readout. Evidence: `/api/kane/runs/a20a4b28-5387-4849-a978-a5ca5aa499c3/evidence` (local server). The user had to send a follow-up message before Kane ran because the agent used its 8-step budget. The budget is now 12 steps with the last 3 reserved for a requested Kane check, and the agent sees HUD widgets | Verified |
