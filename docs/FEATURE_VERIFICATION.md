@@ -200,5 +200,5 @@ A claim is only "verified" when at least one of *Tested* or *Observed* applies. 
 
 - No application source, configuration or dependency was modified for this audit. The saved engine E2E was executed during the audit; the rest of the evidence is committed tests, typecheck, and recorded browser/Kane runs.
 - Static reading can miss dead code paths. Where a feature is only reachable through a flag or environment variable, the ledger says so.
-- Counts are point-in-time against the working tree, which contains uncommitted changes to AI provider files; those changes do not alter the feature inventory.
+- Counts are point-in-time against the working tree. The tree was re-checked on 2026-11-26: `pnpm test` (176 tests), `pnpm typecheck` and `pnpm check:repo` all pass, and the working tree is clean.
 - The Kane evidence is the project's own recording. It was cross-checked against objective text and runner code. The latest engine E2E result and 3.3 MB evidence pack were inspected locally; older raw bundles under `.data/` are gitignored and were not re-opened line by line.

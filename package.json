@@ -2,6 +2,8 @@
   "name": "clockwork",
   "private": true,
   "version": "0.1.0",
+  "description": "Browser-native 2D game engine with an AI co-worker and Kane CLI verification",
+  "license": "MIT",
   "type": "module",
   "pnpm": {
     "onlyBuiltDependencies": [

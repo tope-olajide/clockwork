@@ -1,5 +1,10 @@
 # Demo readiness evidence
 
+> **Dated evidence log.** Each phase below describes the run made on that date, including the
+> automation failures hit while the flow was being built. They are kept for audit, not as current
+> status. Current status and open boundaries live in [`known-issues.md`](known-issues.md) and
+> [`kane-proof.md`](kane-proof.md).
+
 Tracked, portable record of the live Kane runs behind `docs/demo-readiness.md`.
 Paths are repo-relative; no local absolute paths. Raw run artifacts live under
 `.data/ai-play/<runId>/` (gitignored); the typed results below are the reviewable

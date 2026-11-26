@@ -347,7 +347,7 @@ A phase verdict is strict (`server/kane/phase.ts`): `passed` requires Kane's pas
 
 ### Verified as working (with recorded evidence)
 
-Project lifecycle, editor viewport and transforms, undo/redo, assets pipeline, tilemaps, rules/variables, prefabs, runtime and manual Play, AI chat with real-model tool calls and command application, static export code path, snapshots, AI Play loop, `verify_with_kane`, engine-QA K1/K3a/K3b/K4, the approved-phase AI Testing flow (runs `98e21783` and `ea1bb3b3`), and the saved engine E2E plus one-command cold-start run (2026-11-24).
+Project lifecycle, editor viewport and transforms, undo/redo, assets pipeline, tilemaps, rules/variables, prefabs, runtime and manual Play, AI chat with real-model tool calls and command application, static export code path, snapshots, AI Play loop, `verify_with_kane`, engine QA K1–K5 (K2 and the Space Shooter loss → R restart both passed on 2026-11-26), the approved-phase AI Testing flow (runs `98e21783` and `ea1bb3b3`), and the saved engine E2E plus the one-command cold-start run (2026-11-24, re-confirmed replayed 1/1 on 2026-11-26).
 
 ### Implemented but not fully verified
 

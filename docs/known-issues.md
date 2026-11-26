@@ -1,6 +1,6 @@
 # Clockwork Known Issues and Limitations
 
-An honest record of what is not covered, not measured or constrained by design. Entries are removed only when the issue is fixed and verified. Real Kane runs are listed in [`kane-proof.md`](kane-proof.md).
+Coverage boundaries, unmeasured claims and design constraints, each stated with what would close it. Entries are removed only when the issue is fixed and verified. Real Kane runs are listed in [`kane-proof.md`](kane-proof.md).
 
 **Last updated:** 2026-11-26
 
@@ -60,7 +60,7 @@ An honest record of what is not covered, not measured or constrained by design. 
 - **No-model states have no browser evidence.** This covers the manual create, edit, save, reopen, play, share and export pass with `AI_ENABLED=0`, and the hidden or disabled no-model AI Play state.
 - **Fixture-driven AI Play UI artifact.** The failed → fix → passed panel flow has no stored artifact. Real runs of the same loop are recorded in `kane-proof.md`.
 - **AI HUD keyboard parity** (`?ai=1`) is unverified in a browser.
-- **Coach tour and `?demoReset=1`** are unverified in a real browser. Confirm the reset does not remove other projects.
+- **Coach tour and `?demoReset=1`** are only partly exercised in a real browser: the 2026-11-26 K2 run recreated the demo from `?demoReset=1` and the run passed, but side effects on other projects were not asserted, and the tour has only been skipped, never walked through.
 - **Accessibility** (focus order, contrast, keyboard paths) was not audited.
 - **The visual target** was checked at 1366×768 only.
 

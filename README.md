@@ -176,4 +176,4 @@ The document model, command registry, renderer, runtime and persistence are sepa
 
 ## Test status
 
-176 tests across 27 test files pass (`pnpm test`), `pnpm typecheck` passes, and `pnpm check:repo` passes. Kane runs are recorded evidence, not CI; what is not covered is listed in [`docs/known-issues.md`](docs/known-issues.md).
+176 tests across 27 test files pass (`pnpm test`), `pnpm typecheck`, `pnpm build` and `pnpm check:repo` pass, and `pnpm test:hud` passes 108/108 HUD layouts. `pnpm smoke:phase` passes against a running app. Kane runs are recorded evidence, not CI; coverage boundaries are listed in [`docs/known-issues.md`](docs/known-issues.md).
